@@ -1,0 +1,2014 @@
+import { Injectable, BadRequestException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, In } from 'typeorm';
+import * as fs from 'fs';
+import * as path from 'path';
+import { RedisCacheService } from 'src/redis/redid-cache.service';
+
+import { RequestEntity } from './entities/request.entity';
+import {
+  RequestChemicalHazard,
+  RequestConfined,
+  RequestElectrical,
+  RequestEnergisingElectrical,
+  RequestEnergisingMechanical,
+  RequestExcavation,
+  RequestExtraMisc,
+  RequestFireHotwork,
+  RequestGeneral,
+  RequestHeight,
+  RequestLifting,
+  RequestPpe,
+  RequestPressureTesting
+} from './entities/request-subtables.entity';
+import { RamsFile, RequestNote, UploadImage, RequestLog, RequestLogData, CompleteLog } from './entities/supporting.entity';
+
+import { Building } from '../building/entities/building.entity';
+import { Floor } from '../floor/entities/floor.entity';
+import { Zone } from '../zones/entities/zone.entity';
+import { Room } from '../room/entities/room.entity';
+import { Subcontractor } from '../subcontractor/entities/subcontractor.entity';
+import { Activity } from '../activities/entities/activity.entity';
+
+import { CreateRequestDto } from './dtos/create-request.dto';
+import { UpdateRequestDto } from './dtos/update-request.dto';
+import { SearchRequestDto } from './dtos/search-request.dto';
+
+@Injectable()
+export class RequestsService {
+  constructor(
+    @InjectRepository(RequestEntity) private readonly requestRepo: Repository<RequestEntity>,
+    @InjectRepository(RequestChemicalHazard) private readonly chemicalRepo: Repository<RequestChemicalHazard>,
+    @InjectRepository(RequestConfined) private readonly confinedRepo: Repository<RequestConfined>,
+    @InjectRepository(RequestElectrical) private readonly electricalRepo: Repository<RequestElectrical>,
+    @InjectRepository(RequestEnergisingElectrical) private readonly energisingElecRepo: Repository<RequestEnergisingElectrical>,
+    @InjectRepository(RequestEnergisingMechanical) private readonly energisingMechRepo: Repository<RequestEnergisingMechanical>,
+    @InjectRepository(RequestExcavation) private readonly excavationRepo: Repository<RequestExcavation>,
+    @InjectRepository(RequestExtraMisc) private readonly extraMiscRepo: Repository<RequestExtraMisc>,
+    @InjectRepository(RequestFireHotwork) private readonly fireHotworkRepo: Repository<RequestFireHotwork>,
+    @InjectRepository(RequestGeneral) private readonly generalRepo: Repository<RequestGeneral>,
+    @InjectRepository(RequestHeight) private readonly heightRepo: Repository<RequestHeight>,
+    @InjectRepository(RequestLifting) private readonly liftingRepo: Repository<RequestLifting>,
+    @InjectRepository(RequestPpe) private readonly ppeRepo: Repository<RequestPpe>,
+    @InjectRepository(RequestPressureTesting) private readonly pressureTestingRepo: Repository<RequestPressureTesting>,
+
+    @InjectRepository(RamsFile) private readonly ramsFileRepo: Repository<RamsFile>,
+    @InjectRepository(RequestNote) private readonly noteRepo: Repository<RequestNote>,
+    @InjectRepository(UploadImage) private readonly uploadImageRepo: Repository<UploadImage>,
+    @InjectRepository(RequestLog) private readonly logRepo: Repository<RequestLog>,
+    @InjectRepository(RequestLogData) private readonly logDataRepo: Repository<RequestLogData>,
+    @InjectRepository(CompleteLog) private readonly completeLogRepo: Repository<CompleteLog>,
+
+    @InjectRepository(Building) private readonly buildingRepo: Repository<Building>,
+    @InjectRepository(Floor) private readonly floorRepo: Repository<Floor>,
+    @InjectRepository(Zone) private readonly zoneRepo: Repository<Zone>,
+    @InjectRepository(Room) private readonly roomRepo: Repository<Room>,
+    @InjectRepository(Subcontractor) private readonly subcontractorRepo: Repository<Subcontractor>,
+    @InjectRepository(Activity) private readonly activityRepo: Repository<Activity>,
+    private readonly redisCacheService: RedisCacheService,
+  ) {}
+
+  // Generate unique PermitNo
+  private async generatePermitNo(): Promise<string> {
+    let permitNo = '';
+    let exists = true;
+    while (exists) {
+      const prefix = Math.floor(10000000000 + Math.random() * 90000000000).toString();
+      permitNo = prefix + new Date().getFullYear().toString();
+      const existing = await this.requestRepo.findOne({ where: { permitNo } });
+      if (!existing) {
+        exists = false;
+      }
+    }
+    return permitNo;
+  }
+
+  // Helper to log changes
+  async createLogs(
+    requestId: number,
+    userId: number,
+    requestStatus: string,
+    createdTime: Date,
+    fieldChanges: Array<{ field_name: string; previous: string; present: string }> = [],
+    system = 0
+  ): Promise<RequestLog> {
+    const request = await this.requestRepo.findOne({ where: { id: requestId } });
+    const permitNo = request?.permitNo || '';
+
+    const logEntry = this.logRepo.create({
+      requestId,
+      userId,
+      requestType: requestStatus,
+      createdTime,
+      permitNo,
+      system,
+    });
+    const savedLog = await this.logRepo.save(logEntry);
+
+    if (fieldChanges && fieldChanges.length > 0) {
+      for (const change of fieldChanges) {
+        await this.logDataRepo.save(
+          this.logDataRepo.create({
+            logId: savedLog.id,
+            fieldName: change.field_name,
+            previous: change.previous,
+            present: change.present,
+            createdTime,
+          })
+        );
+      }
+    }
+
+    return savedLog;
+  }
+
+  // Create Request
+  async create(dto: CreateRequestDto, files?: any[]): Promise<any> {
+    // 1. Validate zone status and set permit_under dynamically
+    await this.checkZoneStatusAndAssignPermitUnder(dto);
+
+    // 2. Validate mandatory fields (non-draft)
+    this.validateMandatoryFields(dto);
+
+    const permitNo = await this.generatePermitNo();
+
+    // 1. Save Request
+    const requestObj = this.requestRepo.create({
+      userId: dto.userId,
+      companyName: dto.Company_Name,
+      permitNo: permitNo,
+      subContractorId: dto.Sub_Contractor_Id,
+      foreman: dto.Foreman,
+      foremanPhoneNumber: dto.Foreman_Phone_Number,
+      activity: dto.Activity,
+      typeOfActivityId: dto.Type_Of_Activity_Id,
+      requestDate: dto.Request_Date,
+      workingDate: dto.Working_Date,
+      startTime: dto.Start_Time,
+      endTime: dto.End_Time,
+      assignStartTime: dto.Assign_Start_Time,
+      assignEndTime: dto.Assign_End_Time,
+      assignStartDate: dto.Assign_Start_Date,
+      assignEndDate: dto.Assign_End_Date,
+      buildingId: dto.Building_Id,
+      floorId: dto.Floor_Id,
+      plansId: dto.Plans_Id,
+      zoneId: dto.Zone_Id,
+      roomNos: dto.Room_Nos,
+      roomType: dto.Room_Type,
+      numberOfWorkers: dto.Number_Of_Workers,
+      badgeNumbers: dto.Badge_Numbers,
+      teamId: dto.teamId,
+      notes: dto.Notes,
+      requestStatus: dto.Request_status || 'Pending',
+      status: dto.status !== undefined ? dto.status : 1,
+      createdTime: dto.createdTime ? new Date(dto.createdTime) : new Date(),
+      siteId: dto.Site_Id !== undefined ? dto.Site_Id : 5,
+      permitType: dto.permit_type,
+      permitUnder: dto.permit_under || 'Construction',
+      newDate: dto.new_date,
+      newEndTime: dto.new_end_time,
+      nightShift: dto.night_shift,
+      safetyPrecautions: dto.Safety_Precautions,
+    });
+
+    const savedRequest = await this.requestRepo.save(requestObj);
+    const requestId = savedRequest.id;
+
+    // 2. Insert into all 13 sub-tables
+    await this.chemicalRepo.save(this.chemicalRepo.create({
+      requestId,
+      workingHazardiousSubsten: dto.working_hazardious_substen || 0,
+      relevantMal: dto.relevant_mal || 0,
+      msds: dto.msds || 0,
+      equipmentTakenAccount: dto.equipment_taken_account || 0,
+      ventilation: dto.ventilation || 0,
+      hazardousSubstances: dto.hazardous_substances || 0,
+      storageAndDisposal: dto.storage_and_disposal || 0,
+      reachableCase: dto.reachable_case || 0,
+      checicalRiskAssessment: dto.checical_risk_assessment || 0,
+    }));
+
+    await this.confinedRepo.save(this.confinedRepo.create({
+      requestId,
+      workingConfinedSpaces: dto.working_confined_spaces || 0,
+      vapoursGases: dto.vapours_gases || 0,
+      lelMeasurement: dto.lel_measurement || 0,
+      allEquipment: dto.all_equipment || 0,
+      exitConditions: dto.exit_conditions || 0,
+      communicationEmergency: dto.communication_emergency || 0,
+      rescueEquipments: dto.rescue_equipments || 0,
+      spaceVentilation: dto.space_ventilation || 0,
+      oxygenMeter: dto.oxygen_meter || 0,
+    }));
+
+    await this.electricalRepo.save(this.electricalRepo.create({
+      requestId,
+      workingOnElectricalSystem: dto.working_on_electrical_system || 0,
+      responsibleForTheInformed: dto.responsible_for_the_informed || 0,
+      deEnergized: dto.de_energized || 0,
+      ifNotLoto: dto.if_not_loto || 0,
+      doRiskAssessment: dto.do_risk_assessment || 0,
+      electricityHaveIsulation: dto.electricity_have_isulation || 0,
+    }));
+
+    await this.energisingElecRepo.save(this.energisingElecRepo.create({
+      requestId,
+      powerOn: dto.power_on || 0,
+      energisingEquipment: dto.energising_equipment || 0,
+      isolatingLive: dto.isolating_live || 0,
+      workingNearLive: dto.working_near_live || 0,
+      responsibleForTheArea: dto.responsible_for_the_area || '',
+      riskAssessmentDone: dto.risk_assessment_done || 0,
+      barriersSignage: dto.barriers_signage || 0,
+      arcFlash: dto.arc_flash || 0,
+      energizedBeenTested: dto.energized_been_tested || 0,
+      punchesBeenClosed: dto.punches_been_closed || 0,
+      toctChecklist: dto.toct_checklist || 0,
+      informedAligned: dto.informed_aligned || 0,
+      isolatingResponsible: dto.isolating_responsible !== undefined ? dto.isolating_responsible : (dto.isolating_resposible || 0),
+      isolatingRiskAssessment: dto.isolating_risk_assessment || 0,
+      cqInformed: dto.cq_informed || 0,
+      cqProvided: dto.cq_provided || 0,
+      deEnergisationRequest: dto.de_energisation_request || 0,
+      ppePrepared: dto.ppe_prepared || 0,
+      absenceOfVoltage: dto.absence_of_voltage || 0,
+      storedEnergy: dto.stored_energy || 0,
+      backupPower: dto.backup_power || 0,
+      unavoidable: dto.unavoidable || 0,
+      reasonablyPracticable: dto.reasonably_practicable || 0,
+      workAuthorised: dto.work_authorised || 0,
+      workingRiskAssessment: dto.working_risk_assessment || 0,
+      workingArcBoundary: dto.working_arc_boundary || 0,
+      workingBarriers: dto.working_barriers || 0,
+      insulatedTools: dto.insulated_tools || 0,
+      eventOfEmergency: dto.event_of_emergency || 0,
+    }));
+
+    await this.energisingMechRepo.save(this.energisingMechRepo.create({
+      requestId,
+      pressurization: dto.pressurization || 0,
+      performedApproved: dto.performed_approved || 0,
+      flushingApproved: dto.flushing_approved || 0,
+      mcApproved: dto.mc_approved || 0,
+      visualInspection: dto.visual_inspection || 0,
+      lotoPlanApproved: dto.loto_plan_approved || 0,
+      followMediaCode: dto.follow_media_code || 0,
+      cqSafetySigns: dto.cq_safety_signs || 0,
+      mcNumberText: dto.mc_number_text || '',
+    }));
+
+    await this.excavationRepo.save(this.excavationRepo.create({
+      requestId,
+      excavationShoring: dto.excavation_shoring || 0,
+      excavationSegregated: dto.excavation_segregated || 0,
+      nnStandards: dto.nn_standards || 0,
+      danishRegulation: dto.danish_regulation || 0,
+      safeAccessAndEgress: dto.safe_access_and_egress || 0,
+      correctlySloped: dto.correctly_sloped || 0,
+      inspectionDates: dto.inspection_dates || 0,
+      markedDrawings: dto.marked_drawings || 0,
+      undergroundAreasCleared: dto.underground_areas_cleared || 0,
+      excavationWorks: dto.excavation_works || 0,
+    }));
+
+    await this.extraMiscRepo.save(this.extraMiscRepo.create({
+      requestId,
+      tools: dto.Tools || dto.tools || '',
+      machinery: dto.Machinery || dto.machinery || '',
+      descriptionOfActivity: dto.description_of_activity || '',
+      mechanicalWorks: dto.mechanical_works || '',
+      electricalWorks: dto.electrical_works || '',
+      conMInitials: dto.ConM_initials || '',
+      conMInitials1: dto.ConM_initials1 || '',
+      coMMInitials: dto.CoMM_initials || '',
+      rejectReason: dto.reject_reason || '',
+      cancelReason: dto.cancel_reason || '',
+      closeNote: dto.close_note || '',
+      newSubContractor: dto.new_sub_contractor || '',
+      workType: dto.work_type || '',
+    }));
+
+    await this.fireHotworkRepo.save(this.fireHotworkRepo.create({
+      requestId,
+      hotWork: dto.Hot_work || 0,
+      fireWatchEstablish: dto.fire_watch_establish || 0,
+      combustibleMaterial: dto.combustible_material || 0,
+      safetyMeasures: dto.safety_measures || 0,
+      extinguishersAndFireBlanket: dto.extinguishers_and_fire_blanket || 0,
+      weldingActivity: dto.welding_activity !== undefined ? dto.welding_activity : (dto.welding_activitiy || 0),
+      heatTreatment: dto.heat_treatment || 0,
+      airExtractionBeEstablished: dto.air_extraction_be_established || 0,
+      nameOfTheFireWatcher: dto.name_of_the_fire_watcher || '',
+      phoneNumberOfTheFireWatcher: dto.phone_number_of_the_fire_watcher || '',
+      fireGuardPresent: dto.fire_guard_present || '',
+      lowRiskHotwork: dto.low_risk_hotwork || '',
+      highRiskHotwork: dto.high_risk_hotwork || '',
+      hotWorkChecklistFilled: dto.hot_work_checklist_filled || '',
+      hHeatSource: dto.h_heat_source || '',
+      hWorkplaceCheck: dto.h_workplace_check || '',
+      hFireDetectors: dto.h_fire_detectors || '',
+      hStartTime: dto.h_start_time || '',
+      hEndTime: dto.h_end_time || '',
+      fireImage: dto.fire_image || '',
+      tasksInProgressInTheArea: dto.tasks_in_progress_in_the_area || 0,
+      accountDuringTheWork: dto.account_during_the_work || 0,
+      lightingSufficiently: dto.lighting_sufficiently || 0,
+      specificRisksBasedOnTask: dto.specific_risks_based_on_task || 0,
+      workEnvironmentSafetyEnsured: dto.work_environment_safety_ensured || 0,
+      courseOfActionInEmergencies: dto.course_of_action_in_emergencies || 0,
+    }));
+
+    await this.generalRepo.save(this.generalRepo.create({
+      requestId,
+      affectingOtherContractors: dto.affecting_other_contractors || 0,
+      otherConditions: dto.other_conditions || 0,
+      otherConditionsInput: dto.other_conditions_input || '',
+      lightingBeginWork: dto.lighting_begin_work || 0,
+      specificRisks: dto.specific_risks || 0,
+      environmentEnsured: dto.environment_ensured || 0,
+      courseOfActions: dto.course_of_actions !== undefined ? dto.course_of_actions : (dto.course_of_action || 0),
+    }));
+
+    await this.heightRepo.save(this.heightRepo.create({
+      requestId,
+      workingAtHeight: dto.working_at_height || 0,
+      segragatedDemarkated: dto.segragated_demarkated || 0,
+      lanyardAttachments: dto.lanyard_attachments || 0,
+      rescuePlan: dto.rescue_plan || 0,
+      avoidHazards: dto.avoid_hazards || 0,
+      heightEquipments: dto.height_equipments || 0,
+      supervision: dto.supervision || 0,
+      shockAbsorbing: dto.shock_absorbing || 0,
+      verticalLife: dto.vertical_life || 0,
+      securedFalling: dto.secured_falling || 0,
+      droppedObjects: dto.dropped_objects || 0,
+      safeAcces: dto.safe_acces || 0,
+      weatherAcceptable: dto.weather_acceptable || 0,
+    }));
+
+    await this.liftingRepo.save(this.liftingRepo.create({
+      requestId,
+      usingCranesOrLifting: dto.using_cranes_or_lifting || 0,
+      appointedPerson: dto.appointed_person || 0,
+      vendorSupplies: dto.vendor_supplies || 0,
+      liftPlan: dto.lift_plan || 0,
+      suppliedAndInspected: dto.supplied_and_inspected || 0,
+      legalRequiredCertificates: dto.legal_required_certificates || 0,
+      praparedLifting: dto.prapared_lifting || 0,
+      liftingTaskFenced: dto.lifting_task_fenced || 0,
+      overheadRisks: dto.overhead_risks || 0,
+    }));
+
+    await this.ppeRepo.save(this.ppeRepo.create({
+      requestId,
+      specificGloves: dto.specific_gloves || 0,
+      eyeProtection: dto.eye_protection || 0,
+      fallProtection: dto.fall_protection || 0,
+      hearingProtection: dto.hearing_protection || 0,
+      respiratoryProtection: dto.respiratory_protection || 0,
+      otherPpe: dto.other_ppe || '',
+    }));
+
+    await this.pressureTestingRepo.save(this.pressureTestingRepo.create({
+      requestId,
+      pressureTestingOfEquipment: dto.pressure_testing_of_equipment || 0,
+      lineWalk: dto.line_walk || 0,
+      pressureTestCoordinated: dto.pressure_test_coordinated || 0,
+      pipeworkMic: dto.pipework_mic || 0,
+      lotoPlanAttached: dto.loto_plan_attached || 0,
+      exclusionZoneCalculated: dto.exclusion_zone_calculated || 0,
+      pnematicHydrostatic: dto.pnematic_hydrostatic || 0,
+      pressureOfTheTest: dto.pressure_of_the_test || '',
+      safetyValvesCalibrated: dto.safety_valves_calibrated || 0,
+      pressurePneumatic: dto.pressure_pneumatic || '',
+      pressureHydrostatic: dto.pressure_hydrostatic || '',
+    }));
+
+    // 3. Save files
+    if (files && files.length > 0) {
+      for (const file of files) {
+        await this.ramsFileRepo.save(
+          this.ramsFileRepo.create({
+            requestId,
+            ramsFile: file.path.replace(/\\/g, '/'),
+            status: 1,
+            createdAt: new Date(),
+            userId: dto.userId || 0,
+          })
+        );
+      }
+    }
+
+    // 4. Create logs
+    await this.createLogs(
+      requestId,
+      dto.userId || 0,
+      dto.Request_status || 'Pending',
+      new Date(),
+      [],
+      0
+    );
+
+    await this.redisCacheService.deleteByPattern('requests:*');
+
+    return {
+      status: 200,
+      message: 'Request created successfully',
+      request_id: requestId,
+      PermitNo: permitNo,
+      username: dto.Foreman || 'System',
+    };
+  }
+
+  // Update Request
+  async update(id: number, dto: UpdateRequestDto, files?: any[]): Promise<any> {
+    const existing = await this.requestRepo.findOne({ where: { id } });
+    if (!existing) {
+      throw new BadRequestException('Request not found');
+    }
+
+    const chem = await this.chemicalRepo.findOne({ where: { requestId: id } });
+    const conf = await this.confinedRepo.findOne({ where: { requestId: id } });
+    const elec = await this.electricalRepo.findOne({ where: { requestId: id } });
+    const energElec = await this.energisingElecRepo.findOne({ where: { requestId: id } });
+    const energMech = await this.energisingMechRepo.findOne({ where: { requestId: id } });
+    const exc = await this.excavationRepo.findOne({ where: { requestId: id } });
+    const ext = await this.extraMiscRepo.findOne({ where: { requestId: id } });
+    const fire = await this.fireHotworkRepo.findOne({ where: { requestId: id } });
+    const gen = await this.generalRepo.findOne({ where: { requestId: id } });
+    const hgt = await this.heightRepo.findOne({ where: { requestId: id } });
+    const lift = await this.liftingRepo.findOne({ where: { requestId: id } });
+    const ppe = await this.ppeRepo.findOne({ where: { requestId: id } });
+    const press = await this.pressureTestingRepo.findOne({ where: { requestId: id } });
+
+    // 1. Validate zone status and set permit_under dynamically
+    await this.checkZoneStatusAndAssignPermitUnder(dto, existing.zoneId);
+
+    // 2. Validate mandatory fields (non-draft)
+    this.validateMandatoryFields(dto, existing, {
+      chem,
+      conf,
+      elec,
+      energElec,
+      energMech,
+      exc,
+      ext,
+      fire,
+      gen,
+      hgt,
+      lift,
+      ppe,
+      press,
+    });
+
+    // Validate status transition
+    const currentStatus = (existing.requestStatus || '').toLowerCase().trim();
+    let newStatus = '';
+    if (dto.Request_status !== undefined && dto.Request_status !== '') {
+      newStatus = dto.Request_status.toLowerCase().trim();
+    } else if (dto.status !== undefined) {
+      newStatus = dto.status === 1 ? 'pending' : 'cancelled'; // map basic integer status if needed
+    }
+
+    const allowedTransitions = {
+      pending: ['hold', 'pre-approved', 'approved', 'opened', 'closed', 'cancelled', 'rejected'],
+      draft: ['hold', 'pre-approved', 'approved', 'opened', 'closed', 'cancelled', 'rejected'],
+      hold: ['pre-approved', 'approved', 'opened', 'closed', 'cancelled', 'rejected'],
+      'pre-approved': ['approved', 'opened', 'closed', 'cancelled', 'rejected'],
+      approved: ['opened', 'closed', 'cancelled', 'rejected'],
+      opened: ['closed', 'cancelled', 'rejected'],
+      closed: [],
+      cancelled: [],
+      rejected: [],
+    };
+
+    if (newStatus !== '' && newStatus !== currentStatus) {
+      const allowed = allowedTransitions[currentStatus] || [];
+      if (!allowed.includes(newStatus)) {
+        throw new BadRequestException(
+          `Status cannot be changed from '${existing.requestStatus}' to '${dto.Request_status}'`
+        );
+      }
+    }
+
+    // Compare and build fieldChanges
+    const fieldChanges: Array<{ field_name: string; previous: string; present: string }> = [];
+    const compare = (name: string, prev: any, pres: any) => {
+      if (pres !== undefined && pres !== prev) {
+        fieldChanges.push({
+          field_name: name,
+          previous: prev === null || prev === undefined ? '' : String(prev),
+          present: pres === null || pres === undefined ? '' : String(pres),
+        });
+      }
+    };
+
+    // Compares for requests table
+    compare('Company_Name', existing.companyName, dto.Company_Name);
+    compare('Sub_Contractor_Id', existing.subContractorId, dto.Sub_Contractor_Id);
+    compare('Foreman', existing.foreman, dto.Foreman);
+    compare('Foreman_Phone_Number', existing.foremanPhoneNumber, dto.Foreman_Phone_Number);
+    compare('Activity', existing.activity, dto.Activity);
+    compare('Type_Of_Activity_Id', existing.typeOfActivityId, dto.Type_Of_Activity_Id);
+    compare('Request_Date', existing.requestDate, dto.Request_Date);
+    compare('Working_Date', existing.workingDate, dto.Working_Date);
+    compare('Start_Time', existing.startTime, dto.Start_Time);
+    compare('End_Time', existing.endTime, dto.End_Time);
+    compare('Assign_Start_Time', existing.assignStartTime, dto.Assign_Start_Time);
+    compare('Assign_End_Time', existing.assignEndTime, dto.Assign_End_Time);
+    compare('Assign_Start_Date', existing.assignStartDate, dto.Assign_Start_Date);
+    compare('Assign_End_Date', existing.assignEndDate, dto.Assign_End_Date);
+    compare('Building_Id', existing.buildingId, dto.Building_Id);
+    compare('Floor_Id', existing.floorId, dto.Floor_Id);
+    compare('Plans_Id', existing.plansId, dto.Plans_Id);
+    compare('Zone_Id', existing.zoneId, dto.Zone_Id);
+    compare('Room_Nos', existing.roomNos, dto.Room_Nos);
+    compare('Room_Type', existing.roomType, dto.Room_Type);
+    compare('Number_Of_Workers', existing.numberOfWorkers, dto.Number_Of_Workers);
+    compare('Badge_Numbers', existing.badgeNumbers, dto.Badge_Numbers);
+    compare('teamId', existing.teamId, dto.teamId);
+    compare('Notes', existing.notes, dto.Notes);
+    compare('Request_status', existing.requestStatus, dto.Request_status);
+    compare('permit_type', existing.permitType, dto.permit_type);
+    compare('permit_under', existing.permitUnder, dto.permit_under);
+    compare('new_date', existing.newDate, dto.new_date);
+    compare('new_end_time', existing.newEndTime, dto.new_end_time);
+    compare('night_shift', existing.nightShift, dto.night_shift);
+    compare('Safety_Precautions', existing.safetyPrecautions, dto.Safety_Precautions);
+
+    // Compares for sub-tables
+    if (chem) {
+      compare('working_hazardious_substen', chem.workingHazardiousSubsten, dto.working_hazardious_substen);
+      compare('relevant_mal', chem.relevantMal, dto.relevant_mal);
+      compare('msds', chem.msds, dto.msds);
+      compare('equipment_taken_account', chem.equipmentTakenAccount, dto.equipment_taken_account);
+      compare('ventilation', chem.ventilation, dto.ventilation);
+      compare('hazardous_substances', chem.hazardousSubstances, dto.hazardous_substances);
+      compare('storage_and_disposal', chem.storageAndDisposal, dto.storage_and_disposal);
+      compare('reachable_case', chem.reachableCase, dto.reachable_case);
+      compare('checical_risk_assessment', chem.checicalRiskAssessment, dto.checical_risk_assessment);
+    }
+    if (conf) {
+      compare('working_confined_spaces', conf.workingConfinedSpaces, dto.working_confined_spaces);
+      compare('vapours_gases', conf.vapoursGases, dto.vapours_gases);
+      compare('lel_measurement', conf.lelMeasurement, dto.lel_measurement);
+      compare('all_equipment', conf.allEquipment, dto.all_equipment);
+      compare('exit_conditions', conf.exitConditions, dto.exit_conditions);
+      compare('communication_emergency', conf.communicationEmergency, dto.communication_emergency);
+      compare('rescue_equipments', conf.rescueEquipments, dto.rescue_equipments);
+      compare('space_ventilation', conf.spaceVentilation, dto.space_ventilation);
+      compare('oxygen_meter', conf.oxygenMeter, dto.oxygen_meter);
+    }
+    if (elec) {
+      compare('working_on_electrical_system', elec.workingOnElectricalSystem, dto.working_on_electrical_system);
+      compare('responsible_for_the_informed', elec.responsibleForTheInformed, dto.responsible_for_the_informed);
+      compare('de_energized', elec.deEnergized, dto.de_energized);
+      compare('if_not_loto', elec.ifNotLoto, dto.if_not_loto);
+      compare('do_risk_assessment', elec.doRiskAssessment, dto.do_risk_assessment);
+      compare('electricity_have_isulation', elec.electricityHaveIsulation, dto.electricity_have_isulation);
+    }
+    if (energElec) {
+      compare('power_on', energElec.powerOn, dto.power_on);
+      compare('energising_equipment', energElec.energisingEquipment, dto.energising_equipment);
+      compare('isolating_live', energElec.isolatingLive, dto.isolating_live);
+      compare('working_near_live', energElec.workingNearLive, dto.working_near_live);
+      compare('responsible_for_the_area', energElec.responsibleForTheArea, dto.responsible_for_the_area);
+      compare('risk_assessment_done', energElec.riskAssessmentDone, dto.risk_assessment_done);
+      compare('barriers_signage', energElec.barriersSignage, dto.barriers_signage);
+      compare('arc_flash', energElec.arcFlash, dto.arc_flash);
+      compare('energized_been_tested', energElec.energizedBeenTested, dto.energized_been_tested);
+      compare('punches_been_closed', energElec.punchesBeenClosed, dto.punches_been_closed);
+      compare('toct_checklist', energElec.toctChecklist, dto.toct_checklist);
+      compare('informed_aligned', energElec.informedAligned, dto.informed_aligned);
+      compare(
+        'isolating_responsible',
+        energElec.isolatingResponsible,
+        dto.isolating_responsible !== undefined ? dto.isolating_responsible : dto.isolating_resposible,
+      );
+      compare('isolating_risk_assessment', energElec.isolatingRiskAssessment, dto.isolating_risk_assessment);
+      compare('cq_informed', energElec.cqInformed, dto.cq_informed);
+      compare('cq_provided', energElec.cqProvided, dto.cq_provided);
+      compare('de_energisation_request', energElec.deEnergisationRequest, dto.de_energisation_request);
+      compare('ppe_prepared', energElec.ppePrepared, dto.ppe_prepared);
+      compare('absence_of_voltage', energElec.absenceOfVoltage, dto.absence_of_voltage);
+      compare('stored_energy', energElec.storedEnergy, dto.stored_energy);
+      compare('backup_power', energElec.backupPower, dto.backup_power);
+      compare('unavoidable', energElec.unavoidable, dto.unavoidable);
+      compare('reasonably_practicable', energElec.reasonablyPracticable, dto.reasonably_practicable);
+      compare('work_authorised', energElec.workAuthorised, dto.work_authorised);
+      compare('working_risk_assessment', energElec.workingRiskAssessment, dto.working_risk_assessment);
+      compare('working_arc_boundary', energElec.workingArcBoundary, dto.working_arc_boundary);
+      compare('working_barriers', energElec.workingBarriers, dto.working_barriers);
+      compare('insulated_tools', energElec.insulatedTools, dto.insulated_tools);
+      compare('event_of_emergency', energElec.eventOfEmergency, dto.event_of_emergency);
+    }
+    if (energMech) {
+      compare('pressurization', energMech.pressurization, dto.pressurization);
+      compare('performed_approved', energMech.performedApproved, dto.performed_approved);
+      compare('flushing_approved', energMech.flushingApproved, dto.flushing_approved);
+      compare('mc_approved', energMech.mcApproved, dto.mc_approved);
+      compare('visual_inspection', energMech.visualInspection, dto.visual_inspection);
+      compare('loto_plan_approved', energMech.lotoPlanApproved, dto.loto_plan_approved);
+      compare('follow_media_code', energMech.followMediaCode, dto.follow_media_code);
+      compare('cq_safety_signs', energMech.cqSafetySigns, dto.cq_safety_signs);
+      compare('mc_number_text', energMech.mcNumberText, dto.mc_number_text);
+    }
+    if (exc) {
+      compare('excavation_shoring', exc.excavationShoring, dto.excavation_shoring);
+      compare('excavation_segregated', exc.excavationSegregated, dto.excavation_segregated);
+      compare('nn_standards', exc.nnStandards, dto.nn_standards);
+      compare('danish_regulation', exc.danishRegulation, dto.danish_regulation);
+      compare('safe_access_and_egress', exc.safeAccessAndEgress, dto.safe_access_and_egress);
+      compare('correctly_sloped', exc.correctlySloped, dto.correctly_sloped);
+      compare('inspection_dates', exc.inspectionDates, dto.inspection_dates);
+      compare('marked_drawings', exc.markedDrawings, dto.marked_drawings);
+      compare('underground_areas_cleared', exc.undergroundAreasCleared, dto.underground_areas_cleared);
+      compare('excavation_works', exc.excavationWorks, dto.excavation_works);
+    }
+    if (ext) {
+      compare('Tools', ext.tools, dto.Tools !== undefined ? dto.Tools : dto.tools);
+      compare('Machinery', ext.machinery, dto.Machinery !== undefined ? dto.Machinery : dto.machinery);
+      compare('description_of_activity', ext.descriptionOfActivity, dto.description_of_activity);
+      compare('mechanical_works', ext.mechanicalWorks, dto.mechanical_works);
+      compare('electrical_works', ext.electricalWorks, dto.electrical_works);
+      compare('ConM_initials', ext.conMInitials, dto.ConM_initials);
+      compare('ConM_initials1', ext.conMInitials1, dto.ConM_initials1);
+      compare('CoMM_initials', ext.coMMInitials, dto.CoMM_initials);
+      compare('reject_reason', ext.rejectReason, dto.reject_reason);
+      compare('cancel_reason', ext.cancelReason, dto.cancel_reason);
+      compare('close_note', ext.closeNote, dto.close_note);
+      compare('new_sub_contractor', ext.newSubContractor, dto.new_sub_contractor);
+      compare('work_type', ext.workType, dto.work_type);
+    }
+    if (fire) {
+      compare('Hot_work', fire.hotWork, dto.Hot_work);
+      compare('fire_watch_establish', fire.fireWatchEstablish, dto.fire_watch_establish);
+      compare('combustible_material', fire.combustibleMaterial, dto.combustible_material);
+      compare('safety_measures', fire.safetyMeasures, dto.safety_measures);
+      compare('extinguishers_and_fire_blanket', fire.extinguishersAndFireBlanket, dto.extinguishers_and_fire_blanket);
+      compare('welding_activity', fire.weldingActivity, dto.welding_activity !== undefined ? dto.welding_activity : dto.welding_activitiy);
+      compare('heat_treatment', fire.heatTreatment, dto.heat_treatment);
+      compare('air_extraction_be_established', fire.airExtractionBeEstablished, dto.air_extraction_be_established);
+      compare('name_of_the_fire_watcher', fire.nameOfTheFireWatcher, dto.name_of_the_fire_watcher);
+      compare('phone_number_of_the_fire_watcher', fire.phoneNumberOfTheFireWatcher, dto.phone_number_of_the_fire_watcher);
+      compare('fire_guard_present', fire.fireGuardPresent, dto.fire_guard_present);
+      compare('low_risk_hotwork', fire.lowRiskHotwork, dto.low_risk_hotwork);
+      compare('high_risk_hotwork', fire.highRiskHotwork, dto.high_risk_hotwork);
+      compare('hot_work_checklist_filled', fire.hotWorkChecklistFilled, dto.hot_work_checklist_filled);
+      compare('h_heat_source', fire.hHeatSource, dto.h_heat_source);
+      compare('h_workplace_check', fire.hWorkplaceCheck, dto.h_workplace_check);
+      compare('h_fire_detectors', fire.hFireDetectors, dto.h_fire_detectors);
+      compare('h_start_time', fire.hStartTime, dto.h_start_time);
+      compare('h_end_time', fire.hEndTime, dto.h_end_time);
+      compare('fire_image', fire.fireImage, dto.fire_image);
+      compare('tasks_in_progress_in_the_area', fire.tasksInProgressInTheArea, dto.tasks_in_progress_in_the_area);
+      compare('account_during_the_work', fire.accountDuringTheWork, dto.account_during_the_work);
+      compare('lighting_sufficiently', fire.lightingSufficiently, dto.lighting_sufficiently);
+      compare('specific_risks_based_on_task', fire.specificRisksBasedOnTask, dto.specific_risks_based_on_task);
+      compare('work_environment_safety_ensured', fire.workEnvironmentSafetyEnsured, dto.work_environment_safety_ensured);
+      compare('course_of_action_in_emergencies', fire.courseOfActionInEmergencies, dto.course_of_action_in_emergencies);
+    }
+    if (gen) {
+      compare('affecting_other_contractors', gen.affectingOtherContractors, dto.affecting_other_contractors);
+      compare('other_conditions', gen.otherConditions, dto.other_conditions);
+      compare('other_conditions_input', gen.otherConditionsInput, dto.other_conditions_input);
+      compare('lighting_begin_work', gen.lightingBeginWork, dto.lighting_begin_work);
+      compare('specific_risks', gen.specificRisks, dto.specific_risks);
+      compare('environment_ensured', gen.environmentEnsured, dto.environment_ensured);
+      compare('course_of_actions', gen.courseOfActions, dto.course_of_actions !== undefined ? dto.course_of_actions : dto.course_of_action);
+    }
+    if (hgt) {
+      compare('working_at_height', hgt.workingAtHeight, dto.working_at_height);
+      compare('segragated_demarkated', hgt.segragatedDemarkated, dto.segragated_demarkated);
+      compare('lanyard_attachments', hgt.lanyardAttachments, dto.lanyard_attachments);
+      compare('rescue_plan', hgt.rescuePlan, dto.rescue_plan);
+      compare('avoid_hazards', hgt.avoidHazards, dto.avoid_hazards);
+      compare('height_equipments', hgt.heightEquipments, dto.height_equipments);
+      compare('supervision', hgt.supervision, dto.supervision);
+      compare('shock_absorbing', hgt.shockAbsorbing, dto.shock_absorbing);
+      compare('vertical_life', hgt.verticalLife, dto.vertical_life);
+      compare('secured_falling', hgt.securedFalling, dto.secured_falling);
+      compare('dropped_objects', hgt.droppedObjects, dto.dropped_objects);
+      compare('safe_acces', hgt.safeAcces, dto.safe_acces);
+      compare('weather_acceptable', hgt.weatherAcceptable, dto.weather_acceptable);
+    }
+    if (lift) {
+      compare('using_cranes_or_lifting', lift.usingCranesOrLifting, dto.using_cranes_or_lifting);
+      compare('appointed_person', lift.appointedPerson, dto.appointed_person);
+      compare('vendor_supplies', lift.vendorSupplies, dto.vendor_supplies !== undefined ? dto.vendor_supplies : dto.vendor_supplier);
+      compare('lift_plan', lift.liftPlan, dto.lift_plan);
+      compare('supplied_and_inspected', lift.suppliedAndInspected, dto.supplied_and_inspected);
+      compare('legal_required_certificates', lift.legalRequiredCertificates, dto.legal_required_certificates);
+      compare('prapared_lifting', lift.praparedLifting, dto.prapared_lifting);
+      compare('lifting_task_fenced', lift.liftingTaskFenced, dto.lifting_task_fenced);
+      compare('overhead_risks', lift.overheadRisks, dto.overhead_risks);
+    }
+    if (ppe) {
+      compare('specific_gloves', ppe.specificGloves, dto.specific_gloves);
+      compare('eye_protection', ppe.eyeProtection, dto.eye_protection);
+      compare('fall_protection', ppe.fallProtection, dto.fall_protection);
+      compare('hearing_protection', ppe.hearingProtection, dto.hearing_protection);
+      compare('respiratory_protection', ppe.respiratoryProtection, dto.respiratory_protection);
+      compare('other_ppe', ppe.otherPpe, dto.other_ppe);
+    }
+    if (press) {
+      compare('pressure_testing_of_equipment', press.pressureTestingOfEquipment, dto.pressure_testing_of_equipment);
+      compare('line_walk', press.lineWalk, dto.line_walk);
+      compare('pressure_test_coordinated', press.pressureTestCoordinated, dto.pressure_test_coordinated);
+      compare('pipework_mic', press.pipeworkMic, dto.pipework_mic);
+      compare('loto_plan_attached', press.lotoPlanAttached, dto.loto_plan_attached);
+      compare('exclusion_zone_calculated', press.exclusionZoneCalculated, dto.exclusion_zone_calculated);
+      compare('pnematic_hydrostatic', press.pnematicHydrostatic, dto.pnematic_hydrostatic !== undefined ? dto.pnematic_hydrostatic : dto.pneumatic_hydrostatic);
+      compare('pressure_of_the_test', press.pressureOfTheTest, dto.pressure_of_the_test);
+      compare('safety_valves_calibrated', press.safetyValvesCalibrated, dto.safety_valves_calibrated);
+      compare('pressure_pneumatic', press.pressurePneumatic, dto.pressure_pneumatic);
+      compare('pressure_hydrostatic', press.pressureHydrostatic, dto.pressure_hydrostatic);
+    }
+
+    // 1. Update main Requests table
+    const toUpdate: Partial<RequestEntity> = {};
+    if (dto.userId !== undefined) toUpdate.userId = dto.userId;
+    if (dto.Company_Name !== undefined) toUpdate.companyName = dto.Company_Name;
+    if (dto.Sub_Contractor_Id !== undefined) toUpdate.subContractorId = dto.Sub_Contractor_Id;
+    if (dto.Foreman !== undefined) toUpdate.foreman = dto.Foreman;
+    if (dto.Foreman_Phone_Number !== undefined) toUpdate.foremanPhoneNumber = dto.Foreman_Phone_Number;
+    if (dto.Activity !== undefined) toUpdate.activity = dto.Activity;
+    if (dto.Type_Of_Activity_Id !== undefined) toUpdate.typeOfActivityId = dto.Type_Of_Activity_Id;
+    if (dto.Request_Date !== undefined) toUpdate.requestDate = dto.Request_Date;
+    if (dto.Working_Date !== undefined) toUpdate.workingDate = dto.Working_Date;
+    if (dto.Start_Time !== undefined) toUpdate.startTime = dto.Start_Time;
+    if (dto.End_Time !== undefined) toUpdate.endTime = dto.End_Time;
+    if (dto.Assign_Start_Time !== undefined) toUpdate.assignStartTime = dto.Assign_Start_Time;
+    if (dto.Assign_End_Time !== undefined) toUpdate.assignEndTime = dto.Assign_End_Time;
+    if (dto.Assign_Start_Date !== undefined) toUpdate.assignStartDate = dto.Assign_Start_Date;
+    if (dto.Assign_End_Date !== undefined) toUpdate.assignEndDate = dto.Assign_End_Date;
+    if (dto.Building_Id !== undefined) toUpdate.buildingId = dto.Building_Id;
+    if (dto.Floor_Id !== undefined) toUpdate.floorId = dto.Floor_Id;
+    if (dto.Plans_Id !== undefined) toUpdate.plansId = dto.Plans_Id;
+    if (dto.Zone_Id !== undefined) toUpdate.zoneId = dto.Zone_Id;
+    if (dto.Room_Nos !== undefined) toUpdate.roomNos = dto.Room_Nos;
+    if (dto.Room_Type !== undefined) toUpdate.roomType = dto.Room_Type;
+    if (dto.Number_Of_Workers !== undefined) toUpdate.numberOfWorkers = dto.Number_Of_Workers;
+    if (dto.Badge_Numbers !== undefined) toUpdate.badgeNumbers = dto.Badge_Numbers;
+    if (dto.teamId !== undefined) toUpdate.teamId = dto.teamId;
+    if (dto.Notes !== undefined) toUpdate.notes = dto.Notes;
+    if (dto.Request_status !== undefined) toUpdate.requestStatus = dto.Request_status;
+    if (dto.status !== undefined) toUpdate.status = dto.status;
+    if (dto.permit_type !== undefined) toUpdate.permitType = dto.permit_type;
+    if (dto.permit_under !== undefined) toUpdate.permitUnder = dto.permit_under;
+    if (dto.new_date !== undefined) toUpdate.newDate = dto.new_date;
+    if (dto.new_end_time !== undefined) toUpdate.newEndTime = dto.new_end_time;
+    if (dto.night_shift !== undefined) toUpdate.nightShift = dto.night_shift;
+    if (dto.Safety_Precautions !== undefined) toUpdate.safetyPrecautions = dto.Safety_Precautions;
+
+    if (Object.keys(toUpdate).length > 0) {
+      await this.requestRepo.update(id, toUpdate);
+    }
+
+    // 2. Update sub-tables
+    const updateSubTable = async (repo: Repository<any>, fields: any) => {
+      const filteredFields: any = {};
+      for (const key in fields) {
+        if (fields[key] !== undefined) {
+          filteredFields[key] = fields[key];
+        }
+      }
+      if (Object.keys(filteredFields).length > 0) {
+        await repo.update({ requestId: id }, filteredFields);
+      }
+    };
+
+    await updateSubTable(this.chemicalRepo, {
+      workingHazardiousSubsten: dto.working_hazardious_substen,
+      relevantMal: dto.relevant_mal,
+      msds: dto.msds,
+      equipmentTakenAccount: dto.equipment_taken_account,
+      ventilation: dto.ventilation,
+      hazardousSubstances: dto.hazardous_substances,
+      storageAndDisposal: dto.storage_and_disposal,
+      reachableCase: dto.reachable_case,
+      checicalRiskAssessment: dto.checical_risk_assessment,
+    });
+
+    await updateSubTable(this.confinedRepo, {
+      workingConfinedSpaces: dto.working_confined_spaces,
+      vapoursGases: dto.vapours_gases,
+      lelMeasurement: dto.lel_measurement,
+      allEquipment: dto.all_equipment,
+      exitConditions: dto.exit_conditions,
+      communicationEmergency: dto.communication_emergency,
+      rescueEquipments: dto.rescue_equipments,
+      spaceVentilation: dto.space_ventilation,
+      oxygenMeter: dto.oxygen_meter,
+    });
+
+    await updateSubTable(this.electricalRepo, {
+      workingOnElectricalSystem: dto.working_on_electrical_system,
+      responsibleForTheInformed: dto.responsible_for_the_informed,
+      deEnergized: dto.de_energized,
+      ifNotLoto: dto.if_not_loto,
+      doRiskAssessment: dto.do_risk_assessment,
+      electricityHaveIsulation: dto.electricity_have_isulation,
+    });
+
+    await updateSubTable(this.energisingElecRepo, {
+      powerOn: dto.power_on,
+      energisingEquipment: dto.energising_equipment,
+      isolatingLive: dto.isolating_live,
+      workingNearLive: dto.working_near_live,
+      responsibleForTheArea: dto.responsible_for_the_area,
+      riskAssessmentDone: dto.risk_assessment_done,
+      barriersSignage: dto.barriers_signage,
+      arcFlash: dto.arc_flash,
+      energizedBeenTested: dto.energized_been_tested,
+      punchesBeenClosed: dto.punches_been_closed,
+      toctChecklist: dto.toct_checklist,
+      informedAligned: dto.informed_aligned,
+      isolatingResponsible: dto.isolating_responsible !== undefined ? dto.isolating_responsible : dto.isolating_resposible,
+      isolatingRiskAssessment: dto.isolating_risk_assessment,
+      cqInformed: dto.cq_informed,
+      cqProvided: dto.cq_provided,
+      deEnergisationRequest: dto.de_energisation_request,
+      ppePrepared: dto.ppe_prepared,
+      absenceOfVoltage: dto.absence_of_voltage,
+      storedEnergy: dto.stored_energy,
+      backupPower: dto.backup_power,
+      unavoidable: dto.unavoidable,
+      reasonablyPracticable: dto.reasonably_practicable,
+      workAuthorised: dto.work_authorised,
+      workingRiskAssessment: dto.working_risk_assessment,
+      workingArcBoundary: dto.working_arc_boundary,
+      workingBarriers: dto.working_barriers,
+      insulatedTools: dto.insulated_tools,
+      eventOfEmergency: dto.event_of_emergency,
+    });
+
+    await updateSubTable(this.energisingMechRepo, {
+      pressurization: dto.pressurization,
+      performedApproved: dto.performed_approved,
+      flushingApproved: dto.flushing_approved,
+      mcApproved: dto.mc_approved,
+      visualInspection: dto.visual_inspection,
+      lotoPlanApproved: dto.loto_plan_approved,
+      followMediaCode: dto.follow_media_code,
+      cqSafetySigns: dto.cq_safety_signs,
+      mcNumberText: dto.mc_number_text,
+    });
+
+    await updateSubTable(this.excavationRepo, {
+      excavationShoring: dto.excavation_shoring,
+      excavationSegregated: dto.excavation_segregated,
+      nnStandards: dto.nn_standards,
+      danishRegulation: dto.danish_regulation,
+      safeAccessAndEgress: dto.safe_access_and_egress,
+      correctlySloped: dto.correctly_sloped,
+      inspectionDates: dto.inspection_dates,
+      markedDrawings: dto.marked_drawings,
+      undergroundAreasCleared: dto.underground_areas_cleared,
+      excavationWorks: dto.excavation_works,
+    });
+
+    await updateSubTable(this.extraMiscRepo, {
+      tools: dto.Tools !== undefined ? dto.Tools : dto.tools,
+      machinery: dto.Machinery !== undefined ? dto.Machinery : dto.machinery,
+      descriptionOfActivity: dto.description_of_activity,
+      mechanicalWorks: dto.mechanical_works,
+      electricalWorks: dto.electrical_works,
+      conMInitials: dto.ConM_initials,
+      conMInitials1: dto.ConM_initials1,
+      coMMInitials: dto.CoMM_initials,
+      rejectReason: dto.reject_reason,
+      cancelReason: dto.cancel_reason,
+      closeNote: dto.close_note,
+      newSubContractor: dto.new_sub_contractor,
+      workType: dto.work_type,
+    });
+
+    await updateSubTable(this.fireHotworkRepo, {
+      hotWork: dto.Hot_work,
+      fireWatchEstablish: dto.fire_watch_establish,
+      combustibleMaterial: dto.combustible_material,
+      safetyMeasures: dto.safety_measures,
+      extinguishersAndFireBlanket: dto.extinguishers_and_fire_blanket,
+      weldingActivity: dto.welding_activity !== undefined ? dto.welding_activity : dto.welding_activitiy,
+      heatTreatment: dto.heat_treatment,
+      airExtractionBeEstablished: dto.air_extraction_be_established,
+      nameOfTheFireWatcher: dto.name_of_the_fire_watcher,
+      phoneNumberOfTheFireWatcher: dto.phone_number_of_the_fire_watcher,
+      fireGuardPresent: dto.fire_guard_present,
+      lowRiskHotwork: dto.low_risk_hotwork,
+      highRiskHotwork: dto.high_risk_hotwork,
+      hotWorkChecklistFilled: dto.hot_work_checklist_filled,
+      hHeatSource: dto.h_heat_source,
+      hWorkplaceCheck: dto.h_workplace_check,
+      hFireDetectors: dto.h_fire_detectors,
+      hStartTime: dto.h_start_time,
+      hEndTime: dto.h_end_time,
+      fireImage: dto.fire_image,
+      tasksInProgressInTheArea: dto.tasks_in_progress_in_the_area,
+      accountDuringTheWork: dto.account_during_the_work,
+      lightingSufficiently: dto.lighting_sufficiently,
+      specificRisksBasedOnTask: dto.specific_risks_based_on_task,
+      workEnvironmentSafetyEnsured: dto.work_environment_safety_ensured,
+      courseOfActionInEmergencies: dto.course_of_action_in_emergencies,
+    });
+
+    await updateSubTable(this.generalRepo, {
+      affectingOtherContractors: dto.affecting_other_contractors,
+      otherConditions: dto.other_conditions,
+      otherConditionsInput: dto.other_conditions_input,
+      lightingBeginWork: dto.lighting_begin_work,
+      specificRisks: dto.specific_risks,
+      environmentEnsured: dto.environment_ensured,
+      courseOfActions: dto.course_of_actions !== undefined ? dto.course_of_actions : dto.course_of_action,
+    });
+
+    await updateSubTable(this.heightRepo, {
+      workingAtHeight: dto.working_at_height,
+      segragatedDemarkated: dto.segragated_demarkated,
+      lanyardAttachments: dto.lanyard_attachments,
+      rescuePlan: dto.rescue_plan,
+      avoidHazards: dto.avoid_hazards,
+      heightEquipments: dto.height_equipments,
+      supervision: dto.supervision,
+      shockAbsorbing: dto.shock_absorbing,
+      verticalLife: dto.vertical_life,
+      securedFalling: dto.secured_falling,
+      droppedObjects: dto.dropped_objects,
+      safeAcces: dto.safe_acces,
+      weatherAcceptable: dto.weather_acceptable,
+    });
+
+    await updateSubTable(this.liftingRepo, {
+      usingCranesOrLifting: dto.using_cranes_or_lifting,
+      appointedPerson: dto.appointed_person,
+      vendorSupplies: dto.vendor_supplies !== undefined ? dto.vendor_supplies : dto.vendor_supplier,
+      liftPlan: dto.lift_plan,
+      suppliedAndInspected: dto.supplied_and_inspected,
+      legalRequiredCertificates: dto.legal_required_certificates,
+      praparedLifting: dto.prapared_lifting,
+      liftingTaskFenced: dto.lifting_task_fenced,
+      overheadRisks: dto.overhead_risks,
+    });
+
+    await updateSubTable(this.ppeRepo, {
+      specificGloves: dto.specific_gloves,
+      eyeProtection: dto.eye_protection,
+      fallProtection: dto.fall_protection,
+      hearingProtection: dto.hearing_protection,
+      respiratoryProtection: dto.respiratory_protection,
+      otherPpe: dto.other_ppe,
+    });
+
+    await updateSubTable(this.pressureTestingRepo, {
+      pressureTestingOfEquipment: dto.pressure_testing_of_equipment,
+      lineWalk: dto.line_walk,
+      pressureTestCoordinated: dto.pressure_test_coordinated,
+      pipeworkMic: dto.pipework_mic,
+      lotoPlanAttached: dto.loto_plan_attached,
+      exclusionZoneCalculated: dto.exclusion_zone_calculated,
+      pnematicHydrostatic: dto.pnematic_hydrostatic !== undefined ? dto.pnematic_hydrostatic : dto.pneumatic_hydrostatic,
+      pressureOfTheTest: dto.pressure_of_the_test,
+      safetyValvesCalibrated: dto.safety_valves_calibrated,
+      pressurePneumatic: dto.pressure_pneumatic,
+      pressureHydrostatic: dto.pressure_hydrostatic,
+    });
+
+    // 3. Save uploaded files
+    if (files && files.length > 0) {
+      for (const file of files) {
+        await this.ramsFileRepo.save(
+          this.ramsFileRepo.create({
+            requestId: id,
+            ramsFile: file.path.replace(/\\/g, '/'),
+            status: 1,
+            createdAt: new Date(),
+            userId: dto.userId || existing.userId || 0,
+          })
+        );
+      }
+    }
+
+    // Save base64 image if passed
+    if (dto.Image1) {
+      const encodedString = dto.Image1.split(',');
+      const base64Data = encodedString[1] || encodedString[0];
+      if (base64Data) {
+        const buffer = Buffer.from(base64Data, 'base64');
+        const filename = `${Date.now()}_${Math.round(Math.random() * 1e9)}.png`;
+        const uploadDir = './uploads/requests';
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const filePath = path.join(uploadDir, filename);
+        fs.writeFileSync(filePath, buffer);
+
+        // insert record into uploadimage table
+        await this.uploadImageRepo.save(
+          this.uploadImageRepo.create({
+            requestId: id,
+            imageName: filePath.replace(/\\/g, '/'),
+            userId: dto.userId || existing.userId || 0,
+          })
+        );
+      }
+    }
+
+    // 4. Log changes
+    const finalChanges = dto.fields ? (Array.isArray(dto.fields) ? dto.fields : []) : fieldChanges;
+    await this.createLogs(
+      id,
+      dto.userId || existing.userId || 0,
+      dto.Request_status || existing.requestStatus || 'Updated',
+      new Date(),
+      finalChanges,
+      0
+    );
+
+    await this.redisCacheService.deleteByPattern('requests:*');
+
+    return {
+      success: true,
+      message: 'Request updated successfully.',
+    };
+  }
+
+  // Bulk Status Update
+  async updateStatus(body: { id: string; Request_status?: string; status?: number; userId?: number }): Promise<any> {
+    const { id, Request_status, status, userId } = body;
+    if (!id) {
+      throw new BadRequestException('Missing required field: id');
+    }
+
+    const idsArray = id.split(',').map((val) => Number(val.trim())).filter((val) => !isNaN(val));
+
+    for (const singleId of idsArray) {
+      const existing = await this.requestRepo.findOne({ where: { id: singleId } });
+      if (!existing) continue;
+
+      const updateData: Partial<RequestEntity> = {};
+      if (Request_status !== undefined) updateData.requestStatus = Request_status;
+      if (status !== undefined) updateData.status = status;
+
+      await this.requestRepo.update(singleId, updateData);
+
+      // Create log
+      await this.createLogs(
+        singleId,
+        userId || 0,
+        Request_status || (status === 1 ? 'Pending' : 'Cancelled'),
+        new Date(),
+        [],
+        0
+      );
+    }
+
+    await this.redisCacheService.deleteByPattern('requests:*');
+
+    return {
+      status: 200,
+      message: 'Request Updated',
+    };
+  }
+
+  // Helper to resolve room names from ID string
+  private async resolveRoomNames(roomNos?: string): Promise<string> {
+    if (!roomNos) return '';
+    const ids = roomNos.split(',').map((s) => s.trim());
+    const allNumeric = ids.every((id) => /^\d+$/.test(id));
+    if (allNumeric && ids.length > 0) {
+      const roomIds = ids.map((id) => Number(id));
+      const rooms = await this.roomRepo.find({
+        where: { room_id: In(roomIds) },
+      });
+      return rooms.map((r) => r.room_name).join(', ');
+    }
+    return roomNos; // Return raw value if not numeric
+  }
+
+  /**
+   * Resolves a Floor_Id search term (numeric ID or floor name) to an array of floor IDs.
+   * Returns null when the input is empty/falsy (meaning no filter should be applied).
+   */
+  private async resolveFloorIds(floorIdOrName?: string): Promise<number[] | null> {
+    if (!floorIdOrName || floorIdOrName.trim() === '' || floorIdOrName.trim() === '0') return null;
+    const term = floorIdOrName.trim();
+    if (/^\d+$/.test(term)) {
+      // Pure numeric – treat as floor ID directly
+      return [Number(term)];
+    }
+    // Non-numeric – search floors table by name
+    const floors = await this.floorRepo
+      .createQueryBuilder('f')
+      .where('f.floor_name LIKE :name', { name: `%${term}%` })
+      .getMany();
+    return floors.length > 0 ? floors.map((f) => f.fl_id) : [];
+  }
+
+  /**
+   * Resolves a Room_Nos search term (numeric room ID or room name) to a list of
+   * LIKE-match terms suitable for querying the comma-separated Room_Nos text column.
+   * Returns null when the input is empty/falsy (meaning no filter should be applied).
+   */
+  private async resolveRoomSearchTerms(roomIdOrName?: string): Promise<string[] | null> {
+    if (!roomIdOrName || roomIdOrName.trim() === '' || roomIdOrName.trim() === '0') return null;
+    const term = roomIdOrName.trim();
+    const terms: Set<string> = new Set([term]); // Always include the raw value as a search term
+
+    if (/^\d+$/.test(term)) {
+      // Numeric input – look up the room name so we can also match by name
+      const room = await this.roomRepo.findOne({ where: { room_id: Number(term) } });
+      if (room) terms.add(room.room_name);
+    } else {
+      // Name input – look up matching rooms so we can also match stored IDs
+      const rooms = await this.roomRepo
+        .createQueryBuilder('r')
+        .where('r.room_name LIKE :name', { name: `%${term}%` })
+        .getMany();
+      rooms.forEach((r) => terms.add(String(r.room_id)));
+    }
+    return [...terms];
+  }
+
+  // Search/Filter Requests
+  async search(dto: SearchRequestDto): Promise<any> {
+    const key = `requests:search:${JSON.stringify(dto)}`;
+    return this.redisCacheService.getOrSet(
+      key,
+      async () => {
+        const page = dto.Page && Number(dto.Page) >= 1 ? Number(dto.Page) : 1;
+        const limit = dto.End && Number(dto.End) >= 1 ? Number(dto.End) : 10;
+        const skip = (page - 1) * limit;
+
+        // Build TypeORM Query Builder to support complex safety joins and filters
+        const qb = this.requestRepo.createQueryBuilder('requests')
+          // Left join sub-tables
+          .leftJoinAndMapOne('requests.chemical', RequestChemicalHazard, 'chemical', 'requests.id = chemical.request_id')
+          .leftJoinAndMapOne('requests.confined', RequestConfined, 'confined', 'requests.id = confined.request_id')
+          .leftJoinAndMapOne('requests.electrical', RequestElectrical, 'electrical', 'requests.id = electrical.request_id')
+          .leftJoinAndMapOne('requests.energisingElectrical', RequestEnergisingElectrical, 'energisingElectrical', 'requests.id = energisingElectrical.request_id')
+          .leftJoinAndMapOne('requests.energisingMechanical', RequestEnergisingMechanical, 'energisingMechanical', 'requests.id = energisingMechanical.request_id')
+          .leftJoinAndMapOne('requests.excavation', RequestExcavation, 'excavation', 'requests.id = excavation.request_id')
+          .leftJoinAndMapOne('requests.extraMisc', RequestExtraMisc, 'extraMisc', 'requests.id = extraMisc.request_id')
+          .leftJoinAndMapOne('requests.fireHotwork', RequestFireHotwork, 'fireHotwork', 'requests.id = fireHotwork.request_id')
+          .leftJoinAndMapOne('requests.general', RequestGeneral, 'general', 'requests.id = general.request_id')
+          .leftJoinAndMapOne('requests.height', RequestHeight, 'height', 'requests.id = height.request_id')
+          .leftJoinAndMapOne('requests.lifting', RequestLifting, 'lifting', 'requests.id = lifting.request_id')
+          .leftJoinAndMapOne('requests.ppe', RequestPpe, 'ppe', 'requests.id = ppe.request_id')
+          .leftJoinAndMapOne('requests.pressureTesting', RequestPressureTesting, 'pressureTesting', 'requests.id = pressureTesting.request_id')
+          
+          // Left join Location tables
+          .leftJoinAndMapOne('requests.building', Building, 'building', 'requests.Building_Id = building.build_id')
+          .leftJoinAndMapOne('requests.floor', Floor, 'floor', 'requests.Floor_Id = floor.fl_id')
+          .leftJoinAndMapOne('requests.zone', Zone, 'zone', 'requests.Zone_Id = zone.id')
+          .leftJoinAndMapOne('requests.subcontractor', Subcontractor, 'subcontractor', 'requests.Sub_Contractor_Id = subcontractor.id')
+          .leftJoinAndMapOne('requests.activityRelation', Activity, 'activityRelation', 'requests.Type_Of_Activity_Id = activityRelation.id');
+
+        // Add filters
+        if (dto.PermitNo) {
+          qb.andWhere('requests.PermitNo LIKE :permitNo', { permitNo: `%${dto.PermitNo}%` });
+        }
+        if (dto.fromDate && dto.toDate) {
+          qb.andWhere('requests.Working_Date BETWEEN :fromDate AND :toDate', {
+            fromDate: dto.fromDate,
+            toDate: dto.toDate,
+          });
+        } else if (dto.fromDate) {
+          qb.andWhere('requests.Working_Date >= :fromDate', { fromDate: dto.fromDate });
+        } else if (dto.toDate) {
+          qb.andWhere('requests.Working_Date <= :toDate', { toDate: dto.toDate });
+        }
+
+        if (dto.Activity) {
+          qb.andWhere('requests.Activity LIKE :activityName', { activityName: `%${dto.Activity}%` });
+        }
+        if (dto.Request_status) {
+          qb.andWhere('requests.Request_status = :requestStatus', { requestStatus: dto.Request_status });
+        }
+        if (dto.Site_Id !== undefined && dto.Site_Id !== null && Number(dto.Site_Id) !== 0) {
+          qb.andWhere('requests.Site_Id = :siteId', { siteId: dto.Site_Id });
+        }
+        if (dto.Building_Id !== undefined && dto.Building_Id !== null && Number(dto.Building_Id) !== 0) {
+          qb.andWhere('requests.Building_Id = :buildingId', { buildingId: dto.Building_Id });
+        }
+
+        // Floor_Id: support both numeric ID and floor name string
+        if (dto.Floor_Id !== undefined && dto.Floor_Id !== null && String(dto.Floor_Id).trim() !== '' && String(dto.Floor_Id).trim() !== '0') {
+          const floorIds = await this.resolveFloorIds(String(dto.Floor_Id));
+          if (floorIds !== null) {
+            if (floorIds.length > 0) {
+              qb.andWhere('requests.Floor_Id IN (:...floorIds)', { floorIds });
+            } else {
+              // No floors matched the name – return no results for this filter
+              qb.andWhere('1 = 0');
+            }
+          }
+        }
+
+        if (dto.Zone_Id !== undefined && dto.Zone_Id !== null && Number(dto.Zone_Id) !== 0) {
+          qb.andWhere('requests.Zone_Id = :zoneId', { zoneId: dto.Zone_Id });
+        }
+
+        // Room_Nos: support both numeric room ID and room name string
+        // Because Room_Nos is a comma-separated text column we use LIKE conditions.
+        // We resolve the search term to all possible IDs + names then OR them together.
+        if (dto.Room_Nos !== undefined && dto.Room_Nos !== null && String(dto.Room_Nos).trim() !== '' && String(dto.Room_Nos).trim() !== '0') {
+          const roomTerms = await this.resolveRoomSearchTerms(String(dto.Room_Nos));
+          if (roomTerms !== null) {
+            if (roomTerms.length > 0) {
+              const roomConditions = roomTerms
+                .map((_, idx) => `requests.Room_Nos LIKE :roomTerm${idx}`)
+                .join(' OR ');
+              const roomParams: Record<string, string> = {};
+              roomTerms.forEach((t, idx) => { roomParams[`roomTerm${idx}`] = `%${t}%`; });
+              qb.andWhere(`(${roomConditions})`, roomParams);
+            } else {
+              // No rooms matched – return no results
+              qb.andWhere('1 = 0');
+            }
+          }
+        }
+
+        if (dto.Sub_Contractor_Id !== undefined && dto.Sub_Contractor_Id !== null && Number(dto.Sub_Contractor_Id) !== 0) {
+          qb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId: dto.Sub_Contractor_Id });
+        }
+        if (dto.Type_Of_Activity_Id !== undefined && dto.Type_Of_Activity_Id !== null && Number(dto.Type_Of_Activity_Id) !== 0) {
+          qb.andWhere('requests.Type_Of_Activity_Id = :typeOfActivityId', { typeOfActivityId: dto.Type_Of_Activity_Id });
+        }
+        if (dto.Room_Type) {
+          qb.andWhere('requests.Room_Type = :roomType', { roomType: dto.Room_Type });
+        }
+        if (dto.permit_type) {
+          qb.andWhere('requests.permit_type = :permitType', { permitType: dto.permit_type });
+        }
+        if (dto.permit_under) {
+          qb.andWhere('requests.permit_under = :permitUnder', { permitUnder: dto.permit_under });
+        }
+        if (dto.night_shift) {
+          qb.andWhere('requests.night_shift = :nightShift', { nightShift: dto.night_shift });
+        }
+        if (dto.new_date) {
+          qb.andWhere('requests.new_date = :newDate', { newDate: dto.new_date });
+        }
+        if (dto.new_end_time) {
+          qb.andWhere('requests.new_end_time = :newEndTime', { newEndTime: dto.new_end_time });
+        }
+        if (dto.Start_Time) {
+          qb.andWhere('requests.Start_Time = :startTime', { startTime: dto.Start_Time });
+        }
+        if (dto.End_Time) {
+          qb.andWhere('requests.End_Time = :endTime', { endTime: dto.End_Time });
+        }
+
+        // Role filters (from PHP)
+        if (dto.LoginType === 'Subcontractor' && dto.user_id) {
+          qb.andWhere('requests.userId = :userIdFilter', { userIdFilter: dto.user_id });
+        }
+
+        // Safety Flag Filters (requires joining sub-tables) - only filter when explicitly set to 1
+        if (dto.Hot_work !== undefined && dto.Hot_work !== null && Number(dto.Hot_work) === 1) {
+          qb.andWhere('fireHotwork.Hot_work = :hotWork', { hotWork: dto.Hot_work });
+        }
+        if (dto.working_on_electrical_system !== undefined && dto.working_on_electrical_system !== null && Number(dto.working_on_electrical_system) === 1) {
+          qb.andWhere('electrical.working_on_electrical_system = :workElec', { workElec: dto.working_on_electrical_system });
+        }
+        if (dto.working_hazardious_substen !== undefined && dto.working_hazardious_substen !== null && Number(dto.working_hazardious_substen) === 1) {
+          qb.andWhere('chemical.working_hazardious_substen = :workHaz', { workHaz: dto.working_hazardious_substen });
+        }
+        if (dto.using_cranes_or_lifting !== undefined && dto.using_cranes_or_lifting !== null && Number(dto.using_cranes_or_lifting) === 1) {
+          qb.andWhere('lifting.using_cranes_or_lifting = :useCrane', { useCrane: dto.using_cranes_or_lifting });
+        }
+        if (dto.pressure_tesing_of_equipment !== undefined && dto.pressure_tesing_of_equipment !== null && Number(dto.pressure_tesing_of_equipment) === 1) {
+          qb.andWhere('pressureTesting.pressure_testing_of_equipment = :pressTest', { pressTest: dto.pressure_tesing_of_equipment });
+        }
+        if (dto.working_at_height !== undefined && dto.working_at_height !== null && Number(dto.working_at_height) === 1) {
+          qb.andWhere('height.working_at_height = :workHeight', { workHeight: dto.working_at_height });
+        }
+        if (dto.working_confined_spaces !== undefined && dto.working_confined_spaces !== null && Number(dto.working_confined_spaces) === 1) {
+          qb.andWhere('confined.working_confined_spaces = :workConf', { workConf: dto.working_confined_spaces });
+        }
+        if (dto.specific_gloves !== undefined && dto.specific_gloves !== null && Number(dto.specific_gloves) === 1) {
+          qb.andWhere('ppe.specific_gloves = :specGloves', { specGloves: dto.specific_gloves });
+        }
+        if (dto.eye_protection !== undefined && dto.eye_protection !== null && Number(dto.eye_protection) === 1) {
+          qb.andWhere('ppe.eye_protection = :eyeProt', { eyeProt: dto.eye_protection });
+        }
+        if (dto.fall_protection !== undefined && dto.fall_protection !== null && Number(dto.fall_protection) === 1) {
+          qb.andWhere('ppe.fall_protection = :fallProt', { fallProt: dto.fall_protection });
+        }
+        if (dto.hearing_protection !== undefined && dto.hearing_protection !== null && Number(dto.hearing_protection) === 1) {
+          qb.andWhere('ppe.hearing_protection = :hearProt', { hearProt: dto.hearing_protection });
+        }
+        if (dto.respiratory_protection !== undefined && dto.respiratory_protection !== null && Number(dto.respiratory_protection) === 1) {
+          qb.andWhere('ppe.respiratory_protection = :respProt', { respProt: dto.respiratory_protection });
+        }
+        if (dto.power_on !== undefined && dto.power_on !== null && Number(dto.power_on) === 1) {
+          qb.andWhere('energisingElectrical.power_on = :powerOn', { powerOn: dto.power_on });
+        }
+        if (dto.pressurization !== undefined && dto.pressurization !== null && Number(dto.pressurization) === 1) {
+          qb.andWhere('energisingMechanical.pressurization = :pressur', { pressur: dto.pressurization });
+        }
+
+        // Sorting and Pagination
+        qb.orderBy('requests.id', 'DESC')
+          .skip(skip)
+          .take(limit);
+
+        const [rawRequests, totalCount] = await qb.getManyAndCount();
+
+        // Map responses to match legacy format and resolve Room, Building, Level and Zone names
+        const dataList: any[] = [];
+        for (const req of rawRequests) {
+          // Resolve room names
+          const resolvedRooms = await this.resolveRoomNames(req.roomNos);
+
+          // Join safety fields back into flat properties to match legacy output
+          const flatObj: any = {
+            id: req.id,
+            userId: req.userId || '',
+            Company_Name: req.companyName || '',
+            PermitNo: req.permitNo || '',
+            Sub_Contractor_Id: req.subContractorId || '',
+            subContractorName: (req as any).subcontractor?.subContractorName || '',
+            Foreman: req.foreman || '',
+            Foreman_Phone_Number: req.foremanPhoneNumber || '',
+            Activity: req.activity || '',
+            activityName: (req as any).activityRelation?.activityName || '',
+            Type_Of_Activity_Id: req.typeOfActivityId || '',
+            Request_Date: req.requestDate || '',
+            Working_Date: req.workingDate || '',
+            Start_Time: req.startTime || '',
+            End_Time: req.endTime || '',
+            Assign_Start_Time: req.assignStartTime || '',
+            Assign_End_Time: req.assignEndTime || '',
+            Assign_Start_Date: req.assignStartDate || '',
+            Assign_End_Date: req.assignEndDate || '',
+            Building_Id: req.buildingId || '',
+            building_name: (req as any).building?.building_name || '',
+            Floor_Id: req.floorId || '',
+            floor_name: (req as any).floor?.floor_name || '',
+            Plans_Id: req.plansId || '',
+            Zone_Id: req.zoneId || '',
+            zone_name: (req as any).zone?.zone || '',
+            Room_Nos: req.roomNos || '',
+            room_names: resolvedRooms,
+            Room_Type: req.roomType || '',
+            Number_Of_Workers: req.numberOfWorkers || '',
+            Badge_Numbers: req.badgeNumbers || '',
+            teamId: req.teamId || '',
+            Notes: req.notes || '',
+            Request_status: req.requestStatus || '',
+            status: req.status,
+            createdTime: req.createdTime || '',
+            Site_Id: req.siteId,
+            permit_type: req.permitType || '',
+            permit_under: req.permitUnder || 'Construction',
+            new_date: req.newDate || '',
+            new_end_time: req.newEndTime || '',
+            night_shift: req.nightShift || '',
+            Safety_Precautions: req.safetyPrecautions || '',
+          };
+
+          // Pull flat fields from sub-tables using database column names as keys
+          const mergeSub = (sub: any, repo: Repository<any>) => {
+            if (!sub) return;
+            for (const column of repo.metadata.columns) {
+              if (column.propertyName !== 'requestId') {
+                const val = sub[column.propertyName];
+                flatObj[column.databaseName] = val !== undefined && val !== null ? val : '';
+              }
+            }
+          };
+
+          mergeSub((req as any).chemical, this.chemicalRepo);
+          mergeSub((req as any).confined, this.confinedRepo);
+          mergeSub((req as any).electrical, this.electricalRepo);
+          mergeSub((req as any).energisingElectrical, this.energisingElecRepo);
+          mergeSub((req as any).energisingMechanical, this.energisingMechRepo);
+          mergeSub((req as any).excavation, this.excavationRepo);
+          mergeSub((req as any).extraMisc, this.extraMiscRepo);
+          mergeSub((req as any).fireHotwork, this.fireHotworkRepo);
+          mergeSub((req as any).general, this.generalRepo);
+          mergeSub((req as any).height, this.heightRepo);
+          mergeSub((req as any).lifting, this.liftingRepo);
+          mergeSub((req as any).ppe, this.ppeRepo);
+          mergeSub((req as any).pressureTesting, this.pressureTestingRepo);
+
+          // Fetch files & notes
+          const files = await this.ramsFileRepo.find({ where: { requestId: req.id, status: 1 } });
+          const notes = await this.noteRepo.find({ where: { requestId: req.id }, order: { createdTime: 'DESC' } });
+
+          flatObj.files = files;
+          flatObj.note = notes;
+
+          dataList.push(flatObj);
+        }
+
+        // Subcontractors and Activities lists
+        const subcontractors = await this.subcontractorRepo.find({ order: { subContractorName: 'ASC' } });
+        const activities = await this.activityRepo.find({ order: { activityName: 'ASC' } });
+
+        // Legacy response format
+        return [
+          { data: dataList },
+          { count: totalCount },
+          { subcontractors },
+          { activities },
+        ];
+      },
+      1000 * 60 * 5,
+    );
+  }
+
+  // 1. Soft delete single request
+  async softDelete(id: number): Promise<any> {
+    await this.requestRepo.update(id, { status: 0 });
+    await this.redisCacheService.deleteByPattern('requests:*');
+    return { message: 'Role deleted' };
+  }
+
+  // 2. Soft delete multiple requests (bulk)
+  async softDeleteMultiple(ids: number[]): Promise<any> {
+    await this.requestRepo.update({ id: In(ids) }, { status: 0 });
+    await this.redisCacheService.deleteByPattern('requests:*');
+    return { status: true, message: 'Records deleted successfully' };
+  }
+
+  // 3. Selected status updates (deleteSelected.php)
+  async deleteSelected(idStr: string, statusStr: string): Promise<any> {
+    const ids = idStr.split(',').map(id => Number(id.trim())).filter(id => !isNaN(id));
+    if (ids.length > 0) {
+      await this.requestRepo.update({ id: In(ids) }, { requestStatus: statusStr });
+      await this.redisCacheService.deleteByPattern('requests:*');
+      return { status: 200, message: 'Request Updated' };
+    }
+    return { status: 202, message: 'Request not updated' };
+  }
+
+  // 4. Soft delete RAMS file attachment
+  async softDeleteRamsFile(ramsFileId: number): Promise<any> {
+    await this.ramsFileRepo.update(ramsFileId, { status: 0 });
+    await this.redisCacheService.deleteByPattern('requests:*');
+    return { message: 'Rams File deleted' };
+  }
+
+  // 5. Add notes (bulk)
+  async addNotes(body: { request_id: string; permit_no: string; user_id?: number; username?: string; note?: string; createdTime?: string }): Promise<any> {
+    const requestIds = (body.request_id || '').split(',');
+    const permitNos = (body.permit_no || '').split(',');
+    if (requestIds.length !== permitNos.length) {
+      return { status: 400, message: 'request_id and permit_no count mismatch' };
+    }
+    let successCount = 0;
+    for (let i = 0; i < requestIds.length; i++) {
+      const noteObj = this.noteRepo.create({
+        requestId: Number(requestIds[i].trim()),
+        permitNo: permitNos[i].trim(),
+        userId: body.user_id || 0,
+        username: body.username || 'System',
+        note: body.note || '',
+        createdTime: body.createdTime ? new Date(body.createdTime) : new Date(),
+      });
+      await this.noteRepo.save(noteObj);
+      successCount++;
+    }
+    await this.redisCacheService.deleteByPattern('requests:*');
+    return {
+      status: 200,
+      message: 'Notes created successfully',
+      total_inserted: successCount,
+    };
+  }
+
+  // 6. Fetch logs for a specific user
+  async readLogs(userId: number): Promise<any> {
+    const logs = await this.logRepo.find({
+      where: { userId },
+      order: { createdTime: 'DESC' },
+    });
+    const data = logs.map(l => ({
+      id: l.id,
+      requestId: l.requestId,
+      requestType: l.requestType || '',
+      createdTime: l.createdTime,
+      userId: l.userId,
+      username: '',
+    }));
+    return { data };
+  }
+
+  // 7. Complete logs insertion
+  async createCompleteLog(body: { id: number; PermitNo: string; status: string; module: string }): Promise<any> {
+    const logObj = this.completeLogRepo.create({
+      id: Number(body.id),
+      permitNo: body.PermitNo,
+      status: body.status,
+      module: body.module,
+      createdTime: new Date(),
+    });
+    await this.completeLogRepo.save(logObj);
+    return { status: 200, message: 'Log Created' };
+  }
+
+
+
+  // 10. Cron Expiration Check
+  async triggerCron(): Promise<any> {
+    const now = new Date();
+    const query = `
+      SELECT id FROM requests
+      WHERE Request_status = 'Approved'
+      AND (
+        (
+          night_shift = '0'
+          AND Working_Date = CURDATE()
+          AND TIMESTAMP(Working_Date, Start_Time) - INTERVAL 5 HOUR <= NOW()
+        )
+        OR
+        (
+          night_shift = '1'
+          AND Working_Date < CURDATE()
+          AND TIMESTAMP(DATE_ADD(Working_Date, INTERVAL 1 DAY), Start_Time) + INTERVAL 4 HOUR >= NOW()
+        )
+      )
+    `;
+    const toCancel = await this.requestRepo.query(query);
+    const ids = toCancel.map(r => Number(r.id));
+    let affected = 0;
+    if (ids.length > 0) {
+      await this.requestRepo.update({ id: In(ids) }, {
+        requestStatus: 'Cancelled',
+        notes: 'Permit not opened so system cancelled automatically'
+      });
+      affected = ids.length;
+
+      for (const id of ids) {
+        const log = this.logRepo.create({
+          requestId: id,
+          userId: 0,
+          requestType: 'Cancelled',
+          createdTime: now,
+          system: 1
+        });
+        await this.logRepo.save(log);
+      }
+      await this.redisCacheService.deleteByPattern('requests:*');
+    }
+    return { status: 'success', cancelledCount: affected };
+  }
+
+  // 11. Read counts (readCounts.php)
+  async readCounts(): Promise<any> {
+    return this.redisCacheService.getOrSet(
+      'requests:counts',
+      async () => {
+        const counts = await this.requestRepo.createQueryBuilder('requests')
+          .select("COUNT(*)", "totalCount")
+          .addSelect("SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)", "approveCount")
+          .addSelect("SUM(CASE WHEN requests.requestStatus = 'Rejected' THEN 1 ELSE 0 END)", "rejectCount")
+          .addSelect("SUM(CASE WHEN requests.requestStatus = 'Hold' THEN 1 ELSE 0 END)", "holdCount")
+          .addSelect("SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)", "closeCount")
+          .addSelect("SUM(CASE WHEN requests.requestStatus = 'Draft' THEN 1 ELSE 0 END)", "draftCount")
+          .where("requests.status = 1")
+          .getRawOne();
+
+        const total = Number(counts.totalCount || 0);
+        const draft = Number(counts.draftCount || 0);
+        const approve = Number(counts.approveCount || 0);
+        const reject = Number(counts.rejectCount || 0);
+        const hold = Number(counts.holdCount || 0);
+        const close = Number(counts.closeCount || 0);
+
+        return {
+          data: [{
+            totalCount: total - draft,
+            approveCount: approve,
+            rejectCount: reject,
+            holdCount: hold,
+            closeCount: close
+          }]
+        };
+      },
+      1000 * 60 * 5,
+    );
+  }
+
+  // 12. Read single status count (readRequestCount.php)
+  async readRequestCount(status: string): Promise<any> {
+    return this.redisCacheService.getOrSet(
+      `requests:counts:${status}`,
+      async () => {
+        const count = await this.requestRepo.count({ where: { requestStatus: status, status: 1 } });
+        return {
+          data: [{
+            requestCount: count
+          }]
+        };
+      },
+      1000 * 60 * 5,
+    );
+  }
+
+  // 13. Read Graph counts per day (readGraph.php)
+  async readGraph(WeekFirstday: string, WeekLastday: string): Promise<any> {
+    const first = new Date(WeekFirstday.replace(' GMT+0530 (India Standard Time)', ''));
+    const last = new Date(WeekLastday.replace(' GMT+0530 (India Standard Time)', ''));
+    
+    const datesList: string[] = [];
+    const curr = new Date(first);
+    while (curr <= last) {
+      datesList.push(curr.toISOString().split('T')[0]);
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    const data: any[] = [];
+    for (const d of datesList) {
+      const counts = await this.requestRepo.createQueryBuilder('requests')
+        .select("SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)", "approveCount")
+        .addSelect("SUM(CASE WHEN requests.requestStatus = 'Rejected' THEN 1 ELSE 0 END)", "rejectCount")
+        .addSelect("SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)", "openCount")
+        .addSelect("SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)", "closeCount")
+        .where("requests.status = 1 AND requests.workingDate = :date", { date: d })
+        .getRawOne();
+
+      const dateObj = new Date(d);
+      const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const dayName = dayNames[dateObj.getDay()];
+      const formattedDate = ` ${dayName} ${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${String(dateObj.getFullYear()).slice(-2)}`;
+
+      data.push({
+        date: formattedDate,
+        approveCount: Number(counts.approveCount || 0),
+        rejectCount: Number(counts.rejectCount || 0),
+        openCount: Number(counts.openCount || 0),
+        closeCount: Number(counts.closeCount || 0)
+      });
+    }
+    return { data };
+  }
+
+  // 14. Read Graph Counts summary today vs week (readGraphCounts.php)
+  async readGraphCounts(): Promise<any> {
+    const todayCounts = await this.requestRepo.createQueryBuilder('requests')
+      .select("COUNT(*)", "totalCount")
+      .addSelect("SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)", "approveCount")
+      .addSelect("SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)", "openCount")
+      .addSelect("SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)", "closeCount")
+      .where("requests.status = 1 AND requests.createdTime >= CURDATE()")
+      .getRawOne();
+
+    const lastWeekCounts = await this.requestRepo.createQueryBuilder('requests')
+      .select("COUNT(*)", "totalCount")
+      .addSelect("SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)", "approveCount")
+      .addSelect("SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)", "openCount")
+      .addSelect("SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)", "closeCount")
+      .where("requests.status = 1 AND requests.createdTime >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)")
+      .getRawOne();
+
+    return {
+      data: {
+        day: [{
+          totalCount: Number(todayCounts.totalCount || 0),
+          approveCount: Number(todayCounts.approveCount || 0),
+          openCount: Number(todayCounts.openCount || 0),
+          closeCount: Number(todayCounts.closeCount || 0)
+        }],
+        week: [{
+          totalCount: Number(lastWeekCounts.totalCount || 0),
+          approveCount: Number(lastWeekCounts.approveCount || 0),
+          openCount: Number(lastWeekCounts.openCount || 0),
+          closeCount: Number(lastWeekCounts.closeCount || 0)
+        }]
+      }
+    };
+  }
+
+  private async checkZoneStatusAndAssignPermitUnder(dto: CreateRequestDto | UpdateRequestDto, existingZoneId?: number) {
+    let zoneIds: number[] = [];
+    const zoneIdVal = dto.Zone_Id !== undefined ? dto.Zone_Id : existingZoneId;
+    if (zoneIdVal !== undefined && zoneIdVal !== null) {
+      if (Array.isArray(zoneIdVal)) {
+        zoneIds = zoneIdVal.map(id => Number(id)).filter(id => !isNaN(id));
+      } else if (typeof zoneIdVal === 'string') {
+        zoneIds = String(zoneIdVal).split(',').map(id => Number(id.trim())).filter(id => !isNaN(id));
+      } else if (typeof zoneIdVal === 'number') {
+        zoneIds = [zoneIdVal];
+      }
+    }
+
+    if (zoneIds.length > 0) {
+      const zones = await this.zoneRepo.find({
+        where: { id: In(zoneIds) }
+      });
+      if (zones.length === 0) {
+        throw new BadRequestException('Selected zones not found');
+      }
+      const statuses = zones.map(z => (z.status || '').toUpperCase().trim());
+      if (statuses.includes('HO')) {
+        throw new BadRequestException("Cannot create a permit if zone status is HO");
+      }
+      const uniqueStatuses = Array.from(new Set(statuses));
+      if (uniqueStatuses.length > 1) {
+        throw new BadRequestException("All selected zones must belong to the same status");
+      }
+      const commonStatus = uniqueStatuses[0];
+      if (commonStatus === 'UC') {
+        dto.permit_under = 'Construction';
+      } else if (commonStatus === 'C') {
+        dto.permit_under = 'Commissioning';
+      }
+      dto.Zone_Id = zoneIds[0];
+    }
+  }
+
+  private validateMandatoryFields(dto: CreateRequestDto | UpdateRequestDto, existing?: RequestEntity, subTables?: any) {
+    const requestStatusVal = dto.Request_status !== undefined ? dto.Request_status : existing?.requestStatus;
+    const isDraft = String(requestStatusVal || '').toLowerCase().trim() === 'draft';
+    if (isDraft) {
+      return;
+    }
+
+    const errors: string[] = [];
+
+    const getValue = (dtoKey: string, dbField?: any) => {
+      if (dto && dto[dtoKey] !== undefined && dto[dtoKey] !== null) {
+        return dto[dtoKey];
+      }
+      return dbField;
+    };
+
+    const getMultiValue = (dtoKeys: string[], dbField?: any) => {
+      for (const key of dtoKeys) {
+        if (dto && dto[key] !== undefined && dto[key] !== null) {
+          return dto[key];
+        }
+      }
+      return dbField;
+    };
+
+    const checkRequired = (key: string, dbField: any) => {
+      const val = getValue(key, dbField);
+      if (val === undefined || val === null || val === '') {
+        errors.push(`${key} is required`);
+        return false;
+      }
+      return true;
+    };
+
+    const checkRequiredMulti = (keys: string[], dbField: any) => {
+      const val = getMultiValue(keys, dbField);
+      if (val === undefined || val === null || val === '') {
+        errors.push(`${keys[0]} is required`);
+        return false;
+      }
+      return true;
+    };
+
+    const checkCheckbox = (key: string, dbField: any) => {
+      const val = getValue(key, dbField);
+      if (Number(val) !== 1) {
+        errors.push(`${key} must be checked`);
+        return false;
+      }
+      return true;
+    };
+
+    // 1. Subcontractor logic
+    const subContractorId = getValue('Sub_Contractor_Id', existing?.subContractorId);
+    const newSubContractor = getValue('new_sub_contractor', subTables?.ext?.newSubContractor);
+    if (!subContractorId && !newSubContractor) {
+      errors.push('Either Sub_Contractor_Id or new_sub_contractor must be provided');
+    }
+
+    // 2. Base fields
+    checkRequired('Company_Name', existing?.companyName);
+    checkRequired('Foreman', existing?.foreman);
+    checkRequired('Foreman_Phone_Number', existing?.foremanPhoneNumber);
+    checkRequired('Activity', existing?.activity);
+    checkRequired('Type_Of_Activity_Id', existing?.typeOfActivityId);
+    checkRequired('Working_Date', existing?.workingDate);
+    checkRequired('Start_Time', existing?.startTime);
+    checkRequired('End_Time', existing?.endTime);
+    checkRequired('Building_Id', existing?.buildingId);
+    checkRequired('Floor_Id', existing?.floorId);
+    checkRequired('Plans_Id', existing?.plansId);
+    checkRequired('Room_Nos', existing?.roomNos);
+    checkRequired('Room_Type', existing?.roomType);
+    checkRequired('Zone_Id', existing?.zoneId);
+    checkRequired('Number_Of_Workers', existing?.numberOfWorkers);
+    checkRequired('Request_status', existing?.requestStatus);
+    checkRequired('Site_Id', existing?.siteId);
+    checkRequired('permit_type', existing?.permitType);
+    checkRequired('permit_under', existing?.permitUnder);
+
+    // 3. Conditional validations based on parent keys
+    const workingHazardous = getValue('working_hazardious_substen', subTables?.chem?.workingHazardiousSubsten);
+    if (Number(workingHazardous) === 1) {
+      checkCheckbox('relevant_mal', subTables?.chem?.relevantMal);
+      checkCheckbox('msds', subTables?.chem?.msds);
+      checkCheckbox('equipment_taken_account', subTables?.chem?.equipmentTakenAccount);
+      checkCheckbox('ventilation', subTables?.chem?.ventilation);
+      checkCheckbox('hazardous_substances', subTables?.chem?.hazardousSubstances);
+      checkCheckbox('storage_and_disposal', subTables?.chem?.storageAndDisposal);
+      checkCheckbox('reachable_case', subTables?.chem?.reachableCase);
+      checkCheckbox('checical_risk_assessment', subTables?.chem?.checicalRiskAssessment);
+    }
+
+    const workingConfined = getValue('working_confined_spaces', subTables?.conf?.workingConfinedSpaces);
+    if (Number(workingConfined) === 1) {
+      checkCheckbox('vapours_gases', subTables?.conf?.vapoursGases);
+      checkCheckbox('lel_measurement', subTables?.conf?.lelMeasurement);
+      checkCheckbox('all_equipment', subTables?.conf?.allEquipment);
+      checkCheckbox('exit_conditions', subTables?.conf?.exitConditions);
+      checkCheckbox('communication_emergency', subTables?.conf?.communicationEmergency);
+      checkCheckbox('rescue_equipments', subTables?.conf?.rescueEquipments);
+      checkCheckbox('space_ventilation', subTables?.conf?.spaceVentilation);
+      checkCheckbox('oxygen_meter', subTables?.conf?.oxygenMeter);
+    }
+
+    const workingElectrical = getValue('working_on_electrical_system', subTables?.elec?.workingOnElectricalSystem);
+    if (Number(workingElectrical) === 1) {
+      checkCheckbox('responsible_for_the_informed', subTables?.elec?.responsibleForTheInformed);
+      checkCheckbox('de_energized', subTables?.elec?.deEnergized);
+      checkCheckbox('if_not_loto', subTables?.elec?.ifNotLoto);
+      checkCheckbox('do_risk_assessment', subTables?.elec?.doRiskAssessment);
+      checkCheckbox('electricity_have_isulation', subTables?.elec?.electricityHaveIsulation);
+    }
+
+    // Only check Commissioning permit validations for power_on, pressurization, pressure_testing_of_equipment
+    const permitType = String(getValue('permit_type', existing?.permitType) || '').toLowerCase().trim();
+    const isCommissioning = permitType === 'commissioning';
+
+    if (isCommissioning) {
+      const powerOn = getValue('power_on', subTables?.energElec?.powerOn);
+      if (Number(powerOn) === 1) {
+        const energisingEquipment = getValue('energising_equipment', subTables?.energElec?.energisingEquipment);
+        if (Number(energisingEquipment) === 1) {
+          checkRequired('responsible_for_the_area', subTables?.energElec?.responsibleForTheArea);
+          checkCheckbox('risk_assessment_done', subTables?.energElec?.riskAssessmentDone);
+          checkCheckbox('barriers_signage', subTables?.energElec?.barriersSignage);
+          checkCheckbox('arc_flash', subTables?.energElec?.arcFlash);
+          checkCheckbox('energized_been_tested', subTables?.energElec?.energizedBeenTested);
+          checkCheckbox('punches_been_closed', subTables?.energElec?.punchesBeenClosed);
+          checkCheckbox('toct_checklist', subTables?.energElec?.toctChecklist);
+          checkCheckbox('informed_aligned', subTables?.energElec?.informedAligned);
+        }
+
+        const isolatingLive = getValue('isolating_live', subTables?.energElec?.isolatingLive);
+        if (Number(isolatingLive) === 1) {
+          const isolatingResponsibleVal = getMultiValue(['isolating_responsible', 'isolating_resposible'], subTables?.energElec?.isolatingResponsible);
+          if (Number(isolatingResponsibleVal) !== 1) {
+            errors.push('isolating_responsible must be checked');
+          }
+          checkCheckbox('isolating_risk_assessment', subTables?.energElec?.isolatingRiskAssessment);
+          checkCheckbox('cq_informed', subTables?.energElec?.cqInformed);
+          checkCheckbox('cq_provided', subTables?.energElec?.cqProvided);
+          checkCheckbox('de_energisation_request', subTables?.energElec?.deEnergisationRequest);
+          checkCheckbox('ppe_prepared', subTables?.energElec?.ppePrepared);
+          checkCheckbox('absence_of_voltage', subTables?.energElec?.absenceOfVoltage);
+          checkCheckbox('stored_energy', subTables?.energElec?.storedEnergy);
+          checkCheckbox('backup_power', subTables?.energElec?.backupPower);
+        }
+
+        const workingNearLive = getValue('working_near_live', subTables?.energElec?.workingNearLive);
+        if (Number(workingNearLive) === 1) {
+          checkCheckbox('unavoidable', subTables?.energElec?.unavoidable);
+          checkCheckbox('reasonably_practicable', subTables?.energElec?.reasonablyPracticable);
+          checkCheckbox('work_authorised', subTables?.energElec?.workAuthorised);
+          checkCheckbox('working_risk_assessment', subTables?.energElec?.workingRiskAssessment);
+          checkCheckbox('working_arc_boundary', subTables?.energElec?.workingArcBoundary);
+          checkCheckbox('working_barriers', subTables?.energElec?.workingBarriers);
+          checkCheckbox('insulated_tools', subTables?.energElec?.insulatedTools);
+          checkCheckbox('event_of_emergency', subTables?.energElec?.eventOfEmergency);
+        }
+      }
+
+      const pressurization = getValue('pressurization', subTables?.energMech?.pressurization);
+      if (Number(pressurization) === 1) {
+        checkCheckbox('performed_approved', subTables?.energMech?.performedApproved);
+        checkCheckbox('flushing_approved', subTables?.energMech?.flushingApproved);
+        const mcApproved = checkCheckbox('mc_approved', subTables?.energMech?.mcApproved);
+        if (mcApproved) {
+          checkRequired('mc_number_text', subTables?.energMech?.mcNumberText);
+        }
+        checkCheckbox('visual_inspection', subTables?.energMech?.visualInspection);
+        checkCheckbox('loto_plan_approved', subTables?.energMech?.lotoPlanApproved);
+        checkCheckbox('follow_media_code', subTables?.energMech?.followMediaCode);
+        checkCheckbox('cq_safety_signs', subTables?.energMech?.cqSafetySigns);
+      }
+
+      const pressureTestingOfEquipment = getValue('pressure_testing_of_equipment', subTables?.press?.pressureTestingOfEquipment);
+      if (Number(pressureTestingOfEquipment) === 1) {
+        checkCheckbox('line_walk', subTables?.press?.lineWalk);
+        checkCheckbox('pressure_test_coordinated', subTables?.press?.pressureTestCoordinated);
+        checkCheckbox('pipework_mic', subTables?.press?.pipeworkMic);
+        checkCheckbox('loto_plan_attached', subTables?.press?.lotoPlanAttached);
+        checkCheckbox('exclusion_zone_calculated', subTables?.press?.exclusionZoneCalculated);
+        const pneumaticHydrostatic = getMultiValue(['pneumatic_hydrostatic', 'pnematic_hydrostatic'], subTables?.press?.pnematicHydrostatic);
+        if (Number(pneumaticHydrostatic) !== 1) {
+          errors.push('pneumatic_hydrostatic must be checked');
+        } else {
+          checkRequired('pressure_pneumatic', subTables?.press?.pressurePneumatic);
+        }
+        const pressureOfTheTest = getValue('pressure_of_the_test', subTables?.press?.pressureOfTheTest);
+        if (pressureOfTheTest === undefined || pressureOfTheTest === null || pressureOfTheTest === '') {
+          errors.push('pressure_of_the_test is required');
+        } else if (Number(pressureOfTheTest) === 1 || pressureOfTheTest === '1') {
+          checkRequired('pressure_hydrostatic', subTables?.press?.pressureHydrostatic);
+        }
+        checkCheckbox('safety_valves_calibrated', subTables?.press?.safetyValvesCalibrated);
+      }
+    }
+
+    const excavationWorks = getValue('excavation_works', subTables?.exc?.excavationWorks);
+    if (Number(excavationWorks) === 1) {
+      checkCheckbox('excavation_segregated', subTables?.exc?.excavationSegregated);
+      checkCheckbox('nn_standards', subTables?.exc?.nnStandards);
+      checkCheckbox('excavation_shoring', subTables?.exc?.excavationShoring);
+      checkCheckbox('danish_regulation', subTables?.exc?.danishRegulation);
+      checkCheckbox('safe_access_and_egress', subTables?.exc?.safeAccessAndEgress);
+      checkCheckbox('correctly_sloped', subTables?.exc?.correctlySloped);
+      checkCheckbox('inspection_dates', subTables?.exc?.inspectionDates);
+      checkCheckbox('marked_drawings', subTables?.exc?.markedDrawings);
+      checkCheckbox('underground_areas_cleared', subTables?.exc?.undergroundAreasCleared);
+    }
+
+    const hotWork = getValue('Hot_work', subTables?.fire?.hotWork);
+    if (Number(hotWork) === 1) {
+      checkCheckbox('tasks_in_progress_in_the_area', subTables?.fire?.tasksInProgressInTheArea);
+      checkCheckbox('lighting_sufficiently', subTables?.fire?.lightingSufficiently);
+      checkCheckbox('specific_risks_based_on_task', subTables?.fire?.specificRisksBasedOnTask);
+      checkCheckbox('work_environment_safety_ensured', subTables?.fire?.workEnvironmentSafetyEnsured);
+      checkCheckbox('course_of_action_in_emergencies', subTables?.fire?.courseOfActionInEmergencies);
+      checkCheckbox('fire_watch_establish', subTables?.fire?.fireWatchEstablish);
+      checkCheckbox('combustible_material', subTables?.fire?.combustibleMaterial);
+      checkCheckbox('safety_measures', subTables?.fire?.safetyMeasures);
+      checkCheckbox('extinguishers_and_fire_blanket', subTables?.fire?.extinguishersAndFireBlanket);
+      const weldingActivity = getMultiValue(['welding_activity', 'welding_activitiy'], subTables?.fire?.weldingActivity);
+      if (Number(weldingActivity) !== 1) {
+        errors.push('welding_activity must be checked');
+      } else {
+        checkCheckbox('heat_treatment', subTables?.fire?.heatTreatment);
+        checkCheckbox('air_extraction_be_established', subTables?.fire?.airExtractionBeEstablished);
+      }
+    }
+
+    const workingAtHeight = getValue('working_at_height', subTables?.hgt?.workingAtHeight);
+    if (Number(workingAtHeight) === 1) {
+      checkCheckbox('segragated_demarkated', subTables?.hgt?.segragatedDemarkated);
+      checkCheckbox('lanyard_attachments', subTables?.hgt?.lanyardAttachments);
+      checkCheckbox('rescue_plan', subTables?.hgt?.rescuePlan);
+      checkCheckbox('avoid_hazards', subTables?.hgt?.avoidHazards);
+      checkCheckbox('height_training', undefined);
+      checkCheckbox('supervision', subTables?.hgt?.supervision);
+      checkCheckbox('shock_absorbing', subTables?.hgt?.shockAbsorbing);
+      checkCheckbox('height_equipments', subTables?.hgt?.heightEquipments);
+      checkCheckbox('vertical_life', subTables?.hgt?.verticalLife);
+      checkCheckbox('secured_falling', subTables?.hgt?.securedFalling);
+      checkCheckbox('dropped_objects', subTables?.hgt?.droppedObjects);
+      checkCheckbox('safe_acces', subTables?.hgt?.safeAcces);
+      checkCheckbox('weather_acceptable', subTables?.hgt?.weatherAcceptable);
+    }
+
+    const usingCranesOrLifting = getValue('using_cranes_or_lifting', subTables?.lift?.usingCranesOrLifting);
+    if (Number(usingCranesOrLifting) === 1) {
+      checkCheckbox('appointed_person', subTables?.lift?.appointedPerson);
+      const vendorSupplier = getMultiValue(['vendor_supplier', 'vendor_supplies'], subTables?.lift?.vendorSupplies);
+      if (Number(vendorSupplier) !== 1) {
+        errors.push('vendor_supplier must be checked');
+      }
+      checkCheckbox('lift_plan', subTables?.lift?.liftPlan);
+      checkCheckbox('supplied_and_inspected', subTables?.lift?.suppliedAndInspected);
+      checkCheckbox('legal_required_certificates', subTables?.lift?.legalRequiredCertificates);
+      checkCheckbox('prapared_lifting', subTables?.lift?.praparedLifting);
+      checkCheckbox('lifting_task_fenced', subTables?.lift?.liftingTaskFenced);
+      checkCheckbox('overhead_risks', subTables?.lift?.overheadRisks);
+    }
+
+    // 4. Other fields
+    checkRequiredMulti(['Tools', 'tools'], subTables?.ext?.tools);
+    checkRequiredMulti(['Machinery', 'machinery'], subTables?.ext?.machinery);
+    checkRequired('description_of_activity', subTables?.ext?.descriptionOfActivity);
+    checkRequired('mechanical_works', subTables?.ext?.mechanicalWorks);
+    checkRequired('electrical_works', subTables?.ext?.electricalWorks);
+    checkRequired('work_type', subTables?.ext?.workType);
+    const otherConditions = getValue('other_conditions', subTables?.gen?.otherConditions);
+    if (Number(otherConditions) === 1) {
+      checkRequired('other_conditions_input', subTables?.gen?.otherConditionsInput);
+    }
+    checkCheckbox('lighting_begin_work', subTables?.gen?.lightingBeginWork);
+    checkCheckbox('specific_risks', subTables?.gen?.specificRisks);
+    checkCheckbox('environment_ensured', subTables?.gen?.environmentEnsured);
+    const courseOfAction = getMultiValue(['course_of_action', 'course_of_actions'], subTables?.gen?.courseOfActions);
+    if (Number(courseOfAction) !== 1) {
+      errors.push('course_of_action must be checked');
+    }
+    checkRequired('other_ppe', subTables?.ppe?.otherPpe);
+
+    if (errors.length > 0) {
+      throw new BadRequestException(`Validation failed: ${errors.join(', ')}`);
+    }
+  }
+}
+
