@@ -28,6 +28,9 @@ import { Zone } from '../zones/entities/zone.entity';
 import { Room } from '../room/entities/room.entity';
 import { Subcontractor } from '../subcontractor/entities/subcontractor.entity';
 import { Activity } from '../activities/entities/activity.entity';
+import { User } from '../users/entities/user.entity';
+import { Employee } from '../employees/entities/employee.entity';
+import { Department } from '../department/entities/department.entity';
 
 @Module({
   imports: [
@@ -60,6 +63,9 @@ import { Activity } from '../activities/entities/activity.entity';
       Room,
       Subcontractor,
       Activity,
+      User,
+      Employee,
+      Department,
     ]),
   ],
   controllers: [RequestsController],

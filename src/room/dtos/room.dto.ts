@@ -10,15 +10,19 @@ export class CreateRoomDto {
 
   @IsString()
   @IsOptional()
-  room_status?: string;
-
-  @IsString()
-  @IsOptional()
   room_image?: string;
 
   @IsInt()
   @IsNotEmpty()
   fl_id: number;
+
+  @IsInt()
+  @IsOptional()
+  building_id?: number;
+
+  @IsInt()
+  @IsOptional()
+  zone_id?: number;
 }
 
 export class UpdateRoomDto {
@@ -29,15 +33,19 @@ export class UpdateRoomDto {
 
   @IsString()
   @IsOptional()
-  room_status?: string;
-
-  @IsString()
-  @IsOptional()
   room_image?: string;
 
   @IsInt()
   @IsOptional()
   fl_id?: number;
+
+  @IsInt()
+  @IsOptional()
+  building_id?: number;
+
+  @IsInt()
+  @IsOptional()
+  zone_id?: number;
 }
 
 export class RoomQueryDto extends PaginationQueryDto {

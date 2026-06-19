@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { User } from './users/entities/user.entity';
 import { Department } from './department/entities/department.entity';
 import { Subcontractor } from './subcontractor/entities/subcontractor.entity';
@@ -53,6 +54,7 @@ import { RamsFile, RequestNote, UploadImage, RequestLog, RequestLogData } from '
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
     }),

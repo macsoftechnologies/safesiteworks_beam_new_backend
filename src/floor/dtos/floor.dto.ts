@@ -10,10 +10,6 @@ export class CreateFloorDto {
 
   @IsString()
   @IsOptional()
-  floor_status?: string;
-
-  @IsString()
-  @IsOptional()
   floor_image?: string;
 
   @IsInt()
@@ -26,10 +22,6 @@ export class UpdateFloorDto {
   @IsOptional()
   @MinLength(1, { message: 'Floor name must not be empty' })
   floor_name?: string;
-
-  @IsString()
-  @IsOptional()
-  floor_status?: string;
 
   @IsString()
   @IsOptional()

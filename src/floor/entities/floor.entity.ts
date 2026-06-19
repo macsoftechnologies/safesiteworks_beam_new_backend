@@ -8,9 +8,6 @@ export class Floor {
   @Column({ name: 'floor_name', type: 'varchar', length: 255, nullable: false })
   floor_name: string;
 
-  @Column({ name: 'floor_status', type: 'varchar', length: 255, nullable: true })
-  floor_status?: string;
-
   @Column({ name: 'floor_image', type: 'varchar', length: 500, nullable: true })
   floor_image?: string;
 

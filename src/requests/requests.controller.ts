@@ -11,16 +11,21 @@ import {
   UploadedFiles,
   HttpStatus,
   HttpCode,
+  Res,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import * as fs from 'fs';
+import { Response } from 'express';
 
 import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dtos/create-request.dto';
 import { UpdateRequestDto } from './dtos/update-request.dto';
 import { SearchRequestDto } from './dtos/search-request.dto';
+import { generatePermitHtml } from './utils/permit-html-template';
+import { generateLogsHtml } from './utils/logs-html-template';
+import { buildPermitPdf, buildLogsPdf } from './utils/pdf-generator';
 
 // Ensure directory exists
 const uploadDir = './uploads/requests';
@@ -38,12 +43,14 @@ export const requestMulterOptions = {
     },
   }),
   fileFilter: (req, file, callback) => {
-    // Allowed file types based on legacy mime mappings
-    if (
-      !file.mimetype.match(
-        /\/(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|csv|mp4|webm|ogg|octet-stream|vnd.openxmlformats-officedocument.wordprocessingml.document|vnd.openxmlformats-officedocument.spreadsheetml.sheet|msword|vnd.ms-excel)$/i
-      )
-    ) {
+    // Allowed file types based on legacy mime mappings or file extension
+    const mimeRegex = /\/(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|csv|mp4|webm|ogg|octet-stream|vnd.openxmlformats-officedocument.wordprocessingml.document|vnd.openxmlformats-officedocument.spreadsheetml.sheet|msword|vnd.ms-excel)$/i;
+    const extRegex = /\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|csv|mp4|webm|ogg)$/i;
+
+    const isMimeValid = file.mimetype && mimeRegex.test(file.mimetype);
+    const isExtValid = file.originalname && extRegex.test(file.originalname);
+
+    if (!isMimeValid && !isExtValid) {
       return callback(new Error('Unsupported or corrupt file type'), false);
     }
     callback(null, true);
@@ -52,7 +59,7 @@ export const requestMulterOptions = {
 
 @Controller('requests')
 export class RequestsController {
-  constructor(private readonly requestsService: RequestsService) {}
+  constructor(private readonly requestsService: RequestsService) { }
 
   // 1. Create Request
   @Post()
@@ -85,8 +92,8 @@ export class RequestsController {
       return result;
     } catch (error) {
       return {
-        success: false,
-        error: error.message || 'Request update failed',
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message || 'Request update failed',
       };
     }
   }
@@ -250,6 +257,74 @@ export class RequestsController {
       return await this.requestsService.readGraphCounts();
     } catch (error) {
       return { message: error.message };
+    }
+  }
+
+  // --- NEWLY ADDED VIEW AND DOWNLOAD ROUTE ENDPOINTS ---
+
+  @Get('permit-design/:permitNo')
+  async servePermitHtml(@Param('permitNo') permitNo: string, @Res() res: any) {
+    try {
+      const data = await this.requestsService.getRequestDetailsByPermitNo(permitNo);
+      if (!data) {
+        return res.status(HttpStatus.NOT_FOUND).send('Permit not found');
+      }
+      const html = generatePermitHtml(data);
+      res.type('html').send(html);
+    } catch (error) {
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).send(error.message);
+    }
+  }
+
+  @Get('permit-design/:permitNo/pdf')
+  async downloadPermitPdf(@Param('permitNo') permitNo: string, @Res() res: any) {
+    try {
+      const data = await this.requestsService.getRequestDetailsByPermitNo(permitNo);
+      if (!data) {
+        return res.status(HttpStatus.NOT_FOUND).send('Permit not found');
+      }
+      const pdfBuffer = await buildPermitPdf(data);
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="Permit_${permitNo}.pdf"`,
+        'Content-Length': pdfBuffer.length,
+      });
+      res.end(pdfBuffer);
+    } catch (error) {
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).send(error.message);
+    }
+  }
+
+  @Get('logs-design/:permitNo')
+  async serveLogsHtml(@Param('permitNo') permitNo: string, @Res() res: any) {
+    try {
+      const details = await this.requestsService.getLogsDetailsByPermitNo(permitNo);
+      if (!details) {
+        return res.status(HttpStatus.NOT_FOUND).send('Permit not found');
+      }
+      const html = generateLogsHtml(details.permitNo, details.logs, details.images);
+      res.type('html').send(html);
+    } catch (error) {
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).send(error.message);
+    }
+  }
+
+  @Get('logs-design/:permitNo/pdf')
+  async downloadLogsPdf(@Param('permitNo') permitNo: string, @Res() res: any) {
+    try {
+      const details = await this.requestsService.getLogsDetailsByPermitNo(permitNo);
+      if (!details) {
+        return res.status(HttpStatus.NOT_FOUND).send('Permit not found');
+      }
+      const pdfBuffer = await buildLogsPdf(details.permitNo, details.logs);
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="Permit_Logs_${permitNo}.pdf"`,
+        'Content-Length': pdfBuffer.length,
+      });
+      res.end(pdfBuffer);
+    } catch (error) {
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).send(error.message);
     }
   }
 }
