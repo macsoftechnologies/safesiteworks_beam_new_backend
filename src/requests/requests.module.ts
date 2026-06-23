@@ -31,6 +31,9 @@ import { Activity } from '../activities/entities/activity.entity';
 import { User } from '../users/entities/user.entity';
 import { Employee } from '../employees/entities/employee.entity';
 import { Department } from '../department/entities/department.entity';
+import { Precaution } from '../precaution/entities/precaution.entity';
+import { MechanicalWork } from '../mechanical/entities/mechanical.entity';
+import { ElectricalWork } from '../electrical/entities/electrical.entity';
 
 @Module({
   imports: [
@@ -66,6 +69,9 @@ import { Department } from '../department/entities/department.entity';
       User,
       Employee,
       Department,
+      Precaution,
+      MechanicalWork,
+      ElectricalWork,
     ]),
   ],
   controllers: [RequestsController],

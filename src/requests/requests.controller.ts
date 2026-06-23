@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, join } from 'path';
 import * as fs from 'fs';
 import { Response } from 'express';
 
@@ -165,6 +165,24 @@ export class RequestsController {
       return await this.requestsService.softDeleteRamsFile(Number(fileId));
     } catch (error) {
       return { message: error.message };
+    }
+  }
+
+  // Get RAMS file attachment (for download/view)
+  @Get('files/:fileId')
+  async getRamsFile(@Param('fileId') fileId: string, @Res() res: any) {
+    try {
+      const file = await this.requestsService.getRamsFile(Number(fileId));
+      if (!file || !file.ramsFile) {
+        return res.status(HttpStatus.NOT_FOUND).send('File not found');
+      }
+      const absolutePath = join(process.cwd(), file.ramsFile);
+      if (!fs.existsSync(absolutePath)) {
+        return res.status(HttpStatus.NOT_FOUND).send('File not found on disk');
+      }
+      res.sendFile(absolutePath);
+    } catch (error) {
+      res.status(HttpStatus.INTERNAL_SERVER_ERROR).send(error.message);
     }
   }
 

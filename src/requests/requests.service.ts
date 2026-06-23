@@ -40,6 +40,9 @@ import { Activity } from '../activities/entities/activity.entity';
 import { User } from '../users/entities/user.entity';
 import { Employee } from '../employees/entities/employee.entity';
 import { Department } from '../department/entities/department.entity';
+import { Precaution } from '../precaution/entities/precaution.entity';
+import { MechanicalWork } from '../mechanical/entities/mechanical.entity';
+import { ElectricalWork } from '../electrical/entities/electrical.entity';
 
 import { CreateRequestDto } from './dtos/create-request.dto';
 import { UpdateRequestDto } from './dtos/update-request.dto';
@@ -105,6 +108,12 @@ export class RequestsService {
     private readonly employeeRepo: Repository<Employee>,
     @InjectRepository(Department)
     private readonly departmentRepo: Repository<Department>,
+    @InjectRepository(Precaution)
+    private readonly precautionRepo: Repository<Precaution>,
+    @InjectRepository(MechanicalWork)
+    private readonly mechanicalWorkRepo: Repository<MechanicalWork>,
+    @InjectRepository(ElectricalWork)
+    private readonly electricalWorkRepo: Repository<ElectricalWork>,
     private readonly redisCacheService: RedisCacheService,
   ) { }
 
@@ -2505,6 +2514,11 @@ export class RequestsService {
     return { message: 'Rams File deleted' };
   }
 
+  // Get RAMS file attachment details
+  async getRamsFile(ramsFileId: number): Promise<RamsFile | null> {
+    return await this.ramsFileRepo.findOne({ where: { ramsFileId } });
+  }
+
   // 5. Add notes (bulk)
   async addNotes(body: {
     request_id: string;
@@ -3648,6 +3662,63 @@ export class RequestsService {
       where: { requestId: req.id },
       order: { createdTime: 'DESC' },
     });
+
+    // Fetch upload images
+    flatObj.images = await this.uploadImageRepo.find({
+      where: { requestId: req.id },
+    });
+
+    // Resolve Safety_Precautions
+    let resolvedPrecautions: string[] = [];
+    if (flatObj.Safety_Precautions) {
+      const ids = flatObj.Safety_Precautions.split(',')
+        .map((id) => parseInt(id.trim(), 10))
+        .filter((id) => !isNaN(id));
+      if (ids.length > 0) {
+        const items = await this.precautionRepo.find({
+          where: { id: In(ids) },
+        });
+        resolvedPrecautions = items.map((item) => item.precaution);
+      }
+    }
+    flatObj.resolvedPrecautions = resolvedPrecautions;
+
+    // Resolve mechanical_works
+    let resolvedMechanicalWorks: string[] = [];
+    if (flatObj.mechanical_works) {
+      const ids = flatObj.mechanical_works.split(',')
+        .map((id) => parseInt(id.trim(), 10))
+        .filter((id) => !isNaN(id));
+      if (ids.length > 0) {
+        const items = await this.mechanicalWorkRepo.find({
+          where: { id: In(ids) },
+        });
+        resolvedMechanicalWorks = items.map((item) => item.mechanical_works);
+      }
+    }
+    flatObj.resolvedMechanicalWorks = resolvedMechanicalWorks;
+
+    // Resolve electrical_works
+    let resolvedPanelNumbers: string[] = [];
+    let resolvedSystemNumbers: string[] = [];
+    if (flatObj.electrical_works) {
+      const ids = flatObj.electrical_works.split(',')
+        .map((id) => parseInt(id.trim(), 10))
+        .filter((id) => !isNaN(id));
+      if (ids.length > 0) {
+        const items = await this.electricalWorkRepo.find({
+          where: { id: In(ids) },
+        });
+        resolvedPanelNumbers = items
+          .filter((item) => item.module === 'Panel Numbers')
+          .map((item) => item.electrical_works);
+        resolvedSystemNumbers = items
+          .filter((item) => item.module === 'System Numbers')
+          .map((item) => item.electrical_works);
+      }
+    }
+    flatObj.resolvedPanelNumbers = resolvedPanelNumbers;
+    flatObj.resolvedSystemNumbers = resolvedSystemNumbers;
 
     if (flatObj.cancel_reason === 'Permit not opened so system cancelled automatically') {
       flatObj.Request_status = 'Auto-Cancelled';
