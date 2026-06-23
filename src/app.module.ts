@@ -35,6 +35,8 @@ import { PrecautionModule } from './precaution/precaution.module';
 
 import { RequestsModule } from './requests/requests.module';
 import { RequestEntity } from './requests/entities/request.entity';
+import { RoleModule } from './role/role.module';
+import { Role } from './role/entities/role.entity';
 import {
   RequestChemicalHazard,
   RequestConfined,
@@ -98,6 +100,7 @@ import { RamsFile, RequestNote, UploadImage, RequestLog, RequestLogData } from '
         UploadImage,
         RequestLog,
         RequestLogData,
+        Role,
       ],
       synchronize: false,
     }),
@@ -116,6 +119,7 @@ import { RamsFile, RequestNote, UploadImage, RequestLog, RequestLogData } from '
     MechanicalModule,
     PrecautionModule,
     RequestsModule,
+    RoleModule,
   ],
   controllers: [HealthController],
 })
