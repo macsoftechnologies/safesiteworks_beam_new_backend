@@ -114,7 +114,10 @@ export class AuthService {
     }
 
     // Check if OTP is valid
-    if (!user.otp || user.otp !== otp) {
+    // DEV ONLY: Allow a static OTP override via environment variable for testing
+    const staticOtp = process.env.DEV_STATIC_OTP;
+    const isStaticOtpMatch = staticOtp && otp === staticOtp;
+    if (!isStaticOtpMatch && (!user.otp || user.otp !== otp)) {
       throw new UnauthorizedException('Invalid OTP');
     }
 
