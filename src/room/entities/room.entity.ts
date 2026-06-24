@@ -12,6 +12,12 @@ export class Room {
   @Column({ name: 'room_image', type: 'varchar', length: 500, nullable: true })
   room_image?: string;
 
+  @Column({ name: 'description', type: 'text', nullable: true })
+  description?: string;
+
+  @Column({ name: 'menu_status', type: 'varchar', length: 255, nullable: false, default: 'Yes' })
+  menu_status: string;
+
   @Column({ name: 'fl_id', type: 'int', nullable: false })
   fl_id: number;
 

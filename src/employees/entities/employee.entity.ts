@@ -11,7 +11,7 @@ export class Employee {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ nullable: true })
+  @Column({ nullable: false })
   roleId: number;
 
   // @Column({ nullable: true })
@@ -32,7 +32,7 @@ export class Employee {
   @Column({ nullable: true })
   badgeId: string;
 
-  @Column({ nullable: true })
+  @Column({ nullable: false })
   employeeName: string;
 
   @Column({ nullable: true })

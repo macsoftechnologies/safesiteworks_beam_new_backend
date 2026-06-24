@@ -81,7 +81,7 @@ export class EmployeesService {
   }
 
   private async syncUserForEmployee(employee: Employee, dto: any, userType?: string) {
-    if (dto.username || dto.password || userType || dto.departId || dto.subContId) {
+    if (dto.username || dto.password || userType || dto.departId || dto.subContId || dto.obserId) {
       let user = await this.userRepo.findOne({ where: { empId: employee.id } });
       if (!user) {
         user = this.userRepo.create({
@@ -94,7 +94,8 @@ export class EmployeesService {
       if (dto.password) user.password = encodePassword(dto.password);
       if (userType) user.userType = userType;
       if (dto.departId) user.typeId = dto.departId;
-      if (dto.subContId) user.typeId = dto.subContId;
+      else if (dto.subContId) user.typeId = dto.subContId;
+      else if (dto.obserId) user.typeId = dto.obserId;
       if (dto.otp) user.otp = dto.otp;
       await this.userRepo.save(user);
     }
@@ -313,11 +314,15 @@ export class EmployeesService {
     await this.employeeRepo.save(employee);
 
     // Sync with User table
-    let inferredUserType = 'Admin';
-    if (dto.subContId) inferredUserType = 'Subcontractor';
-    else if (dto.departId) inferredUserType = 'Department';
+    let userType = dto.userType;
+    if (!userType) {
+      if (dto.subContId) userType = 'Subcontractor';
+      else if (dto.departId) userType = 'Department';
+      else if (dto.obserId) userType = 'Observer';
+      else userType = 'Admin';
+    }
 
-    await this.syncUserForEmployee(employee, dto, inferredUserType);
+    await this.syncUserForEmployee(employee, dto, userType);
 
     await this.invalidateAfterWrite({
       departId: dto.departId,
@@ -410,11 +415,15 @@ export class EmployeesService {
     await this.employeeRepo.save(existing);
 
     // Sync with User table
-    let inferredUserType = 'Admin';
-    if (dto.subContId) inferredUserType = 'Subcontractor';
-    else if (dto.departId) inferredUserType = 'Department';
+    let userType = dto.userType;
+    if (!userType) {
+      if (dto.subContId) userType = 'Subcontractor';
+      else if (dto.departId) userType = 'Department';
+      else if (dto.obserId) userType = 'Observer';
+      else userType = 'Admin';
+    }
 
-    await this.syncUserForEmployee(existing, dto, inferredUserType);
+    await this.syncUserForEmployee(existing, dto, userType);
 
     await this.invalidateAfterWrite({
       employeeId: dto.id,

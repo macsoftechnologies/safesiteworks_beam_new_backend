@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeorm';
 
-@Entity('user_logs')
+@Entity('newuserlogs')
 export class UserLog {
   @PrimaryGeneratedColumn()
   id: number;
@@ -23,9 +23,6 @@ export class UserLog {
   @Column({ nullable: true })
   user: string;
 
-  @Column({ nullable: true })
-  timestamp: string;
-
-  @CreateDateColumn()
-  createdAt: Date;
+  @CreateDateColumn({ name: 'timestamp', type: 'datetime', nullable: true })
+  timestamp: Date;
 }

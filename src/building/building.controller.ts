@@ -12,6 +12,7 @@ export class BuildingController {
       const buildings = await this.buildingService.findAll(query);
       return buildings;
     } catch (error) {
+      console.error('Error retrieving buildings:', error);
       return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Error retrieving buildings' };
     }
   }
@@ -25,6 +26,7 @@ export class BuildingController {
       }
       return building;
     } catch (error) {
+      console.error('Error retrieving building:', error);
       return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Error retrieving building' };
     }
   }
@@ -39,6 +41,7 @@ export class BuildingController {
         data: building,
       };
     } catch (error) {
+      console.error('Error creating building:', error);
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         message: 'Building Not Created',
@@ -65,6 +68,7 @@ export class BuildingController {
         data: building,
       };
     } catch (error) {
+      console.error('Error updating building:', error);
       return {
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         message: 'Building not updated',
@@ -81,6 +85,7 @@ export class BuildingController {
       }
       return { statusCode: HttpStatus.OK, message: 'Building deleted' };
     } catch (error) {
+      console.error('Error removing building:', error);
       return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Building not deleted' };
     }
   }

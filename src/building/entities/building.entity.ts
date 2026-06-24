@@ -8,8 +8,14 @@ export class Building {
   @Column({ name: 'building_name', type: 'varchar', length: 255, nullable: false })
   building_name: string;
 
-  @Column({ name: 'building_status', type: 'varchar', length: 255, nullable: true })
-  building_status?: string;
+  @Column({ name: 'description', type: 'text', nullable: true })
+  description?: string;
+
+  @Column({ name: 'building_status', type: 'varchar', length: 255, nullable: false, default: 'Active' })
+  building_status: string;
+
+  @Column({ name: 'menu_status', type: 'varchar', length: 255, nullable: false, default: 'Yes' })
+  menu_status: string;
 
   @Column({ name: 'building_image', type: 'varchar', length: 500, nullable: true })
   building_image?: string;

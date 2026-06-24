@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
 
 @Entity('departments')
 export class Department {
@@ -7,4 +7,7 @@ export class Department {
 
   @Column({ type: 'varchar', length: 255, nullable: false })
   departmentName: string;
+
+  @CreateDateColumn({ name: 'createdTime' })
+  createdTime: Date;
 }

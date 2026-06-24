@@ -125,7 +125,10 @@ export class CompleteLog {
   @Column({ name: 'module', type: 'varchar', length: 200 })
   module: string;
 
-  @Column({ name: 'createdTime', type: 'datetime', nullable: true })
-  createdTime?: Date;
+  @CreateDateColumn({ name: 'createdTime' })
+  createdTime: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
+  updatedAt: Date;
 }
 

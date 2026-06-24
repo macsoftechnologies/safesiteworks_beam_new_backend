@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
 
 @Entity('subcontractors')
 export class Subcontractor {
@@ -13,5 +13,14 @@ export class Subcontractor {
 
   @Column({ type: 'varchar', length: 500, nullable: true })
   logo?: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  username?: string;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  password?: string;
+
+  @CreateDateColumn({ name: 'createdTime' })
+  createdTime: Date;
 }
 

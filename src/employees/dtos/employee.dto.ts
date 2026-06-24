@@ -14,6 +14,7 @@ export class CreateEmployeeDto {
   @IsOptional() @IsNumber() roleId?: number;
   @IsOptional() @IsNumber() departId?: number;
   @IsOptional() @IsNumber() subContId?: number;
+  @IsOptional() @IsNumber() obserId?: number;
   @IsOptional() @IsString() badgeId?: string;
 
   @IsNotEmpty()
@@ -23,9 +24,12 @@ export class CreateEmployeeDto {
   @IsOptional() @IsString() companyName?: string;
   @IsOptional() @IsString() designation?: string;
   @IsOptional() @IsString() phonenumber?: string;
+  @IsOptional() @IsEmail() email?: string;
   @IsOptional() @IsString() access?: string;
   @IsOptional() @IsString() username?: string;
   @IsOptional() @IsString() password?: string;
+  @IsOptional() @IsString() userType?: string;
+  @IsOptional() @IsString() otp?: string;
 }
 
 // ─── CREATE DEP EMPLOYEE ─────────────────────────────────────────────────────
@@ -95,6 +99,7 @@ export class UpdateEmployeeDto {
   @IsOptional() @IsNumber() roleId?: number;
   @IsOptional() @IsNumber() departId?: number;
   @IsOptional() @IsNumber() subContId?: number;
+  @IsOptional() @IsNumber() obserId?: number;
   @IsOptional() @IsString() badgeId?: string;
   @IsOptional() @IsString() employeeName?: string;
   @IsOptional() @IsString() companyName?: string;
@@ -104,6 +109,8 @@ export class UpdateEmployeeDto {
   @IsOptional() @IsString() access?: string;
   @IsOptional() @IsString() username?: string;
   @IsOptional() @IsString() password?: string;
+  @IsOptional() @IsString() userType?: string;
+  @IsOptional() @IsString() otp?: string;
 }
 
 // ─── UPDATE DEP EMPLOYEE ─────────────────────────────────────────────────────

@@ -23,6 +23,7 @@ import { RequestsService } from './requests.service';
 import { CreateRequestDto } from './dtos/create-request.dto';
 import { UpdateRequestDto } from './dtos/update-request.dto';
 import { SearchRequestDto } from './dtos/search-request.dto';
+import { CreateByCountDto } from './dtos/create-by-count.dto';
 import { generatePermitHtml } from './utils/permit-html-template';
 import { generateLogsHtml } from './utils/logs-html-template';
 import { buildPermitPdf, buildLogsPdf } from './utils/pdf-generator';
@@ -124,6 +125,21 @@ export class RequestsController {
       return {
         status: HttpStatus.INTERNAL_SERVER_ERROR,
         message: error.message || 'Status update failed',
+      };
+    }
+  }
+
+  // 5a. Create by count — copy a permit N times across consecutive days (createbycount.php)
+  @Post('createbycount')
+  @HttpCode(HttpStatus.OK)
+  async createByCount(@Body() dto: CreateByCountDto) {
+    try {
+      return await this.requestsService.createByCount(dto);
+    } catch (error) {
+      const status = typeof error.getStatus === 'function' ? error.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+      return {
+        status,
+        message: error.message || 'Create by count failed',
       };
     }
   }

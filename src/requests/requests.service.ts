@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -47,6 +47,7 @@ import { ElectricalWork } from '../electrical/entities/electrical.entity';
 import { CreateRequestDto } from './dtos/create-request.dto';
 import { UpdateRequestDto } from './dtos/update-request.dto';
 import { SearchRequestDto } from './dtos/search-request.dto';
+import { CreateByCountDto } from './dtos/create-by-count.dto';
 
 @Injectable()
 export class RequestsService {
@@ -3527,6 +3528,305 @@ export class RequestsService {
       checkRequiredSubField('close_note', closeNote);
     }
 
+  }
+
+  // --- CREATE BY COUNT (mirrors createbycount.php) ---
+  async createByCount(dto: CreateByCountDto): Promise<any> {
+    // 0. User permission validation
+    if (!dto.userId) {
+      throw new BadRequestException('userId is required');
+    }
+
+    const user = await this.userRepo.findOne({ where: { id: dto.userId } });
+
+    if (!user) {
+      throw new BadRequestException(`User not found for ID: ${dto.userId}`);
+    }
+
+    const userTypes = (user.userType || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    const allowedUserTypes = [
+      'Admin',
+      'Department1',
+      'Department',
+      'Subcontractor',
+    ];
+
+    const hasAccess = userTypes.some((ut) => allowedUserTypes.includes(ut));
+
+    if (!hasAccess) {
+      throw new ForbiddenException('Role not allowed to perform createbycount');
+    }
+
+    // 1. Basic input validation
+    if (!dto.PermitNo) {
+      throw new BadRequestException('PermitNo is required');
+    }
+
+    const zones: any[] = Array.isArray(dto.zone) ? dto.zone : [];
+    if (zones.length === 0) {
+      throw new BadRequestException('Zone not provided');
+    }
+
+    // 2. Fetch the original permit (source to copy from)
+    const originalRequest = await this.requestRepo.findOne({
+      where: { permitNo: dto.PermitNo, status: 1 },
+    });
+    if (!originalRequest) {
+      throw new BadRequestException('Permit number not found');
+    }
+
+    // 3. Validate zones exist and have consistent status
+    const zoneEntities = await this.zoneRepo.findBy({ zone: In(zones) });
+    if (!zoneEntities || zoneEntities.length === 0) {
+      throw new BadRequestException('Zone not found');
+    }
+
+    const statuses = [...new Set(zoneEntities.map((z) => (z.status || '').toUpperCase().trim()))];
+    if (statuses.length > 1) {
+      throw new BadRequestException('Zones have different status');
+    }
+
+    const zoneStatus = statuses[0];
+
+    // 4. Determine permit type of original
+    const permitType =
+      (originalRequest.permitUnder || '').trim() === ''
+        ? 'Construction'
+        : (originalRequest.permitUnder || '').trim();
+
+    if (zoneStatus === 'UC' && permitType === 'Commissioning') {
+      throw new BadRequestException('Permit not allowed to copy');
+    }
+    if (zoneStatus === 'C' && permitType === 'Construction') {
+      throw new BadRequestException('Permit not allowed to copy');
+    }
+
+    // 5. Fetch all sub-table data from original request
+    const originalId = originalRequest.id;
+    const [
+      origChem, origConf, origElec, origEnergElec, origEnergMech,
+      origExc, origExt, origFire, origGen, origHgt, origLift,
+      origPpe, origPress, origRamsFiles,
+    ] = await Promise.all([
+      this.chemicalRepo.findOne({ where: { requestId: originalId } }),
+      this.confinedRepo.findOne({ where: { requestId: originalId } }),
+      this.electricalRepo.findOne({ where: { requestId: originalId } }),
+      this.energisingElecRepo.findOne({ where: { requestId: originalId } }),
+      this.energisingMechRepo.findOne({ where: { requestId: originalId } }),
+      this.excavationRepo.findOne({ where: { requestId: originalId } }),
+      this.extraMiscRepo.findOne({ where: { requestId: originalId } }),
+      this.fireHotworkRepo.findOne({ where: { requestId: originalId } }),
+      this.generalRepo.findOne({ where: { requestId: originalId } }),
+      this.heightRepo.findOne({ where: { requestId: originalId } }),
+      this.liftingRepo.findOne({ where: { requestId: originalId } }),
+      this.ppeRepo.findOne({ where: { requestId: originalId } }),
+      this.pressureTestingRepo.findOne({ where: { requestId: originalId } }),
+      this.ramsFileRepo.find({ where: { requestId: originalId, status: 1 } }),
+    ]);
+
+    // 6. Resolve loop count and start date
+    const assignStartDate = dto.Assign_Start_Date || new Date().toISOString().split('T')[0];
+    const [sYear, sMonth, sDay] = assignStartDate.split('-').map(Number);
+    let loopCount = dto.count && dto.count > 0 ? dto.count : 1;
+
+    if (dto.Assign_Start_Date && dto.Assign_End_Date) {
+      try {
+        const [eYear, eMonth, eDay] = dto.Assign_End_Date.split('-').map(Number);
+        const startUTC = Date.UTC(sYear, sMonth - 1, sDay);
+        const endUTC = Date.UTC(eYear, eMonth - 1, eDay);
+        const diffTime = endUTC - startUTC;
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays >= 0) {
+          loopCount = diffDays + 1;
+        }
+      } catch (e) {
+        // Fallback to loopCount
+      }
+    }
+
+    const createdTime = dto.createdTime ? new Date(dto.createdTime.replace(',', '')) : new Date();
+
+    // 7. Resolve zone: use first zone id from the array (matching existing entity design)
+    const resolvedZoneId = zones[0];
+
+    const createdIds: number[] = [];
+
+    for (let x = 0; x < loopCount; x++) {
+      // Calculate the date for this iteration using UTC to avoid DST/timezone shifts
+      const baseDate = new Date(Date.UTC(sYear, sMonth - 1, sDay));
+      baseDate.setUTCDate(baseDate.getUTCDate() + x);
+      const iterDate = baseDate.toISOString().split('T')[0];
+
+      // Generate a unique PermitNo for each new request
+      const newPermitNo = await this.generatePermitNo();
+
+      // Build the new request by copying fields from original + overrides from DTO
+      const newRequest = this.requestRepo.create({
+        userId: dto.userId ?? originalRequest.userId,
+        companyName: dto.Company_Name ?? originalRequest.companyName,
+        permitNo: newPermitNo,
+        subContractorId: dto.Sub_Contractor_Id ?? originalRequest.subContractorId,
+        foreman: dto.Foreman ?? originalRequest.foreman,
+        foremanPhoneNumber: dto.Foreman_Phone_Number ?? originalRequest.foremanPhoneNumber,
+        activity: dto.Activity ?? originalRequest.activity,
+        typeOfActivityId: dto.Type_Of_Activity_Id ?? originalRequest.typeOfActivityId,
+        requestDate: dto.Request_Date ?? originalRequest.requestDate,
+        startTime: dto.Start_Time ?? originalRequest.startTime,
+        endTime: dto.End_Time ?? originalRequest.endTime,
+        assignStartTime: dto.Assign_Start_Time ?? originalRequest.assignStartTime,
+        assignEndTime: dto.Assign_End_Time ?? originalRequest.assignEndTime,
+        assignStartDate: iterDate,
+        assignEndDate: dto.Assign_End_Date ?? originalRequest.assignEndDate,
+        workingDate: iterDate,
+        buildingId: dto.Building_Id ?? originalRequest.buildingId,
+        floorId: dto.Floor_Id ?? originalRequest.floorId,
+        zoneId: resolvedZoneId,
+        roomNos: dto.Room_Nos ?? originalRequest.roomNos,
+        roomType: dto.Room_Type ?? originalRequest.roomType,
+        requestStatus: (originalRequest.requestStatus || '').toLowerCase().trim() === 'draft' ? 'Draft' : 'Hold',
+        status: 1,
+        createdTime,
+        siteId: dto.Site_Id ?? originalRequest.siteId ?? 5,
+        permitType: originalRequest.permitType,
+        permitUnder: originalRequest.permitUnder || 'Construction',
+        newEndTime: originalRequest.newEndTime,
+        nightShift: originalRequest.nightShift,
+        safetyPrecautions: originalRequest.safetyPrecautions,
+      });
+
+      const saved = await this.requestRepo.save(newRequest);
+      const requestId = saved.id;
+      createdIds.push(requestId);
+
+      // Copy sub-tables from original
+      if (origChem) {
+        const { requestId: _rid, id: _id, ...chemData } = origChem as any;
+        await this.chemicalRepo.save(this.chemicalRepo.create({ ...chemData, requestId }));
+      } else {
+        await this.chemicalRepo.save(this.chemicalRepo.create({ requestId }));
+      }
+
+      if (origConf) {
+        const { requestId: _rid, id: _id, ...confData } = origConf as any;
+        await this.confinedRepo.save(this.confinedRepo.create({ ...confData, requestId }));
+      } else {
+        await this.confinedRepo.save(this.confinedRepo.create({ requestId }));
+      }
+
+      if (origElec) {
+        const { requestId: _rid, id: _id, ...elecData } = origElec as any;
+        await this.electricalRepo.save(this.electricalRepo.create({ ...elecData, requestId }));
+      } else {
+        await this.electricalRepo.save(this.electricalRepo.create({ requestId }));
+      }
+
+      if (origEnergElec) {
+        const { requestId: _rid, id: _id, ...eelecData } = origEnergElec as any;
+        await this.energisingElecRepo.save(this.energisingElecRepo.create({ ...eelecData, requestId }));
+      } else {
+        await this.energisingElecRepo.save(this.energisingElecRepo.create({ requestId }));
+      }
+
+      if (origEnergMech) {
+        const { requestId: _rid, id: _id, ...emechData } = origEnergMech as any;
+        await this.energisingMechRepo.save(this.energisingMechRepo.create({ ...emechData, requestId }));
+      } else {
+        await this.energisingMechRepo.save(this.energisingMechRepo.create({ requestId }));
+      }
+
+      if (origExc) {
+        const { requestId: _rid, id: _id, ...excData } = origExc as any;
+        await this.excavationRepo.save(this.excavationRepo.create({ ...excData, requestId }));
+      } else {
+        await this.excavationRepo.save(this.excavationRepo.create({ requestId }));
+      }
+
+      if (origExt) {
+        const { requestId: _rid, id: _id, ...extData } = origExt as any;
+        await this.extraMiscRepo.save(this.extraMiscRepo.create({ ...extData, requestId }));
+      } else {
+        await this.extraMiscRepo.save(this.extraMiscRepo.create({ requestId }));
+      }
+
+      if (origFire) {
+        const { requestId: _rid, id: _id, ...fireData } = origFire as any;
+        await this.fireHotworkRepo.save(this.fireHotworkRepo.create({ ...fireData, requestId }));
+      } else {
+        await this.fireHotworkRepo.save(this.fireHotworkRepo.create({ requestId }));
+      }
+
+      if (origGen) {
+        const { requestId: _rid, id: _id, ...genData } = origGen as any;
+        await this.generalRepo.save(this.generalRepo.create({ ...genData, requestId }));
+      } else {
+        await this.generalRepo.save(this.generalRepo.create({ requestId }));
+      }
+
+      if (origHgt) {
+        const { requestId: _rid, id: _id, ...hgtData } = origHgt as any;
+        await this.heightRepo.save(this.heightRepo.create({ ...hgtData, requestId }));
+      } else {
+        await this.heightRepo.save(this.heightRepo.create({ requestId }));
+      }
+
+      if (origLift) {
+        const { requestId: _rid, id: _id, ...liftData } = origLift as any;
+        await this.liftingRepo.save(this.liftingRepo.create({ ...liftData, requestId }));
+      } else {
+        await this.liftingRepo.save(this.liftingRepo.create({ requestId }));
+      }
+
+      if (origPpe) {
+        const { requestId: _rid, id: _id, ...ppeData } = origPpe as any;
+        await this.ppeRepo.save(this.ppeRepo.create({ ...ppeData, requestId }));
+      } else {
+        await this.ppeRepo.save(this.ppeRepo.create({ requestId }));
+      }
+
+      if (origPress) {
+        const { requestId: _rid, id: _id, ...pressData } = origPress as any;
+        await this.pressureTestingRepo.save(this.pressureTestingRepo.create({ ...pressData, requestId }));
+      } else {
+        await this.pressureTestingRepo.save(this.pressureTestingRepo.create({ requestId }));
+      }
+
+      // Create log entry for this new request
+      await this.createLogs(
+        requestId,
+        dto.userId ?? 0,
+        dto.Request_status ?? originalRequest.requestStatus ?? 'Pending',
+        createdTime,
+        [],
+        0,
+      );
+
+      // Copy RAMS files from original
+      if (origRamsFiles && origRamsFiles.length > 0) {
+        for (const file of origRamsFiles) {
+          if (file.ramsFile) {
+            await this.ramsFileRepo.insert({
+              requestId,
+              ramsFile: file.ramsFile,
+              status: 1,
+              createdAt: new Date(),
+              userId: dto.userId ?? 0,
+            });
+          }
+        }
+      }
+    }
+
+    await this.redisCacheService.deleteByPattern('requests:*');
+
+    return {
+      status: 200,
+      message: 'Request Created Successfully',
+      created_ids: createdIds,
+    };
   }
 
   // --- NEW PERMIT AND LOG DATA METHODS ---

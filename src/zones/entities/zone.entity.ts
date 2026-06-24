@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { Floor } from '../../floor/entities/floor.entity';
 
 @Entity('zones')
@@ -20,6 +20,9 @@ export class Zone {
 
   @Column({ name: 'floor_id', type: 'int', nullable: true })
   floor_id?: number;
+
+  @CreateDateColumn({ name: 'createdTime' })
+  createdTime: Date;
 
   @ManyToOne(() => Floor, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'floor_id' })
