@@ -2580,7 +2580,7 @@ export class RequestsService {
       WHERE r.PermitNo = ? OR l.permitno = ?
       ORDER BY l.createdTime ASC
     `;
-    
+
     const logs = await this.logRepo.query(query, [permitNo, permitNo]);
 
     if (logs.length === 0) {
@@ -2729,45 +2729,68 @@ export class RequestsService {
       async () => {
         const counts = await this.requestRepo
           .createQueryBuilder('requests')
+          .leftJoin(
+            'request_extra_misc',
+            'rem',
+            'rem.request_id = requests.id',
+          )
           .select('COUNT(*)', 'totalCount')
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
-            'approveCount',
-          )
-          .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Rejected' THEN 1 ELSE 0 END)",
-            'rejectCount',
+            "SUM(CASE WHEN requests.requestStatus = 'Draft' THEN 1 ELSE 0 END)",
+            'draftCount',
           )
           .addSelect(
             "SUM(CASE WHEN requests.requestStatus = 'Hold' THEN 1 ELSE 0 END)",
             'holdCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
-            'closeCount',
+            "SUM(CASE WHEN requests.requestStatus = 'Pre-Approved' THEN 1 ELSE 0 END)",
+            'preApprovedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Draft' THEN 1 ELSE 0 END)",
-            'draftCount',
+            "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
+            'approvedCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Rejected' THEN 1 ELSE 0 END)",
+            'rejectedCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
+            'openedCount',
+          )
+          .addSelect(
+            `SUM(CASE WHEN requests.requestStatus = 'Cancelled' 
+            AND (rem.cancel_reason IS NULL OR rem.cancel_reason != 'Permit not opened so system cancelled automatically') 
+            THEN 1 ELSE 0 END)`,
+            'cancelledCount',
+          )
+          .addSelect(
+            `SUM(CASE WHEN requests.requestStatus = 'Cancelled' 
+            AND rem.cancel_reason = 'Permit not opened so system cancelled automatically' 
+            THEN 1 ELSE 0 END)`,
+            'autoCancelledCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
+            'closedCount',
           )
           .where('requests.status = 1')
           .getRawOne();
 
-        const total = Number(counts.totalCount || 0);
-        const draft = Number(counts.draftCount || 0);
-        const approve = Number(counts.approveCount || 0);
-        const reject = Number(counts.rejectCount || 0);
-        const hold = Number(counts.holdCount || 0);
-        const close = Number(counts.closeCount || 0);
-
         return {
           data: [
             {
-              totalCount: total - draft,
-              approveCount: approve,
-              rejectCount: reject,
-              holdCount: hold,
-              closeCount: close,
+              totalCount: Number(counts.totalCount || 0) - Number(counts.draftCount || 0),
+              draftCount: Number(counts.draftCount || 0),
+              holdCount: Number(counts.holdCount || 0),
+              preApprovedCount: Number(counts.preApprovedCount || 0),
+              approvedCount: Number(counts.approvedCount || 0),
+              rejectedCount: Number(counts.rejectedCount || 0),
+              openedCount: Number(counts.openedCount || 0),
+              cancelledCount: Number(counts.cancelledCount || 0),
+              autoCancelledCount: Number(counts.autoCancelledCount || 0),
+              closedCount: Number(counts.closedCount || 0),
             },
           ],
         };
