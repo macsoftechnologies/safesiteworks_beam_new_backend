@@ -13,7 +13,7 @@ import {
   HttpCode,
   Res,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import * as fs from 'fs';
@@ -27,6 +27,7 @@ import { CreateByCountDto } from './dtos/create-by-count.dto';
 import { generatePermitHtml } from './utils/permit-html-template';
 import { generateLogsHtml } from './utils/logs-html-template';
 import { buildPermitPdf, buildLogsPdf } from './utils/pdf-generator';
+import { PlanSearchDto } from './dtos/planssearch.dto';
 
 // Ensure directory exists
 const uploadDir = './uploads/requests';
@@ -45,14 +46,16 @@ export const requestMulterOptions = {
   }),
   fileFilter: (req, file, callback) => {
     // Allowed file types based on legacy mime mappings or file extension
-    const mimeRegex = /\/(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|csv|mp4|webm|ogg|octet-stream|vnd.openxmlformats-officedocument.wordprocessingml.document|vnd.openxmlformats-officedocument.spreadsheetml.sheet|msword|vnd.ms-excel)$/i;
-    const extRegex = /\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|csv|mp4|webm|ogg)$/i;
+    const mimeRegex = /\/(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|csv|mp4|webm|ogg|octet-stream|vnd.openxmlformats-officedocument.wordprocessingml.document|vnd.openxmlformats-officedocument.spreadsheetml.sheet|msword|vnd.ms-excel|zip|x-zip-compressed|x-rar-compressed|vnd.rar|x-7z-compressed|plain|dwg|x-dwg|vnd.dwg|vnd.ms-outlook)$/i;
+    const extRegex = /\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|csv|mp4|webm|ogg|zip|rar|7z|txt|dwg|msg)$/i;
 
     const isMimeValid = file.mimetype && mimeRegex.test(file.mimetype);
     const isExtValid = file.originalname && extRegex.test(file.originalname);
 
     if (!isMimeValid && !isExtValid) {
-      return callback(new Error('Unsupported or corrupt file type'), false);
+      const errMsg = `Unsupported or corrupt file type: "${file.originalname}" (MimeType: "${file.mimetype || 'unknown'}")`;
+      console.error(errMsg);
+      return callback(new Error(errMsg), false);
     }
     callback(null, true);
   },
@@ -64,12 +67,24 @@ export class RequestsController {
 
   // 1. Create Request
   @Post()
-  @UseInterceptors(FilesInterceptor('rams_file', 10, requestMulterOptions))
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'rams_file', maxCount: 10 },
+        { name: 'rams_file[]', maxCount: 10 },
+      ],
+      requestMulterOptions,
+    ),
+  )
   async create(
     @Body() createDto: CreateRequestDto,
-    @UploadedFiles() ramsFiles?: any[]
+    @UploadedFiles() files?: { rams_file?: any[]; 'rams_file[]'?: any[] },
   ) {
     try {
+      const ramsFiles = [
+        ...(files?.rams_file || []),
+        ...(files?.['rams_file[]'] || []),
+      ];
       const result = await this.requestsService.create(createDto, ramsFiles);
       return result;
     } catch (error) {
@@ -82,13 +97,25 @@ export class RequestsController {
 
   // 2. Update Request
   @Put(':id')
-  @UseInterceptors(FilesInterceptor('rams_file', 10, requestMulterOptions))
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'rams_file', maxCount: 10 },
+        { name: 'rams_file[]', maxCount: 10 },
+      ],
+      requestMulterOptions,
+    ),
+  )
   async update(
     @Param('id') id: string,
     @Body() updateDto: UpdateRequestDto,
-    @UploadedFiles() ramsFiles?: any[]
+    @UploadedFiles() files?: { rams_file?: any[]; 'rams_file[]'?: any[] },
   ) {
     try {
+      const ramsFiles = [
+        ...(files?.rams_file || []),
+        ...(files?.['rams_file[]'] || []),
+      ];
       const result = await this.requestsService.update(Number(id), updateDto, ramsFiles);
       return result;
     } catch (error) {
@@ -291,9 +318,9 @@ export class RequestsController {
 
   // 17. Fetch plans list with nested notes (planslist.php)
   @Post('plans')
-  async plansList(@Body() searchDto: SearchRequestDto) {
+  async plansList(@Body() searchDto: PlanSearchDto) {
     try {
-      const result = await this.requestsService.search(searchDto);
+      const result = await this.requestsService.plansList(searchDto);
       return [result[0], result[1]];
     } catch (error) {
       return { message: error.message };

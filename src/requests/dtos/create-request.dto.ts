@@ -91,6 +91,10 @@ export class CreateRequestDto {
 
   @IsString()
   @IsOptional()
+  zone?: string;
+
+  @IsString()
+  @IsOptional()
   Room_Nos?: string;
 
   @IsString()

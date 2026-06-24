@@ -70,6 +70,9 @@ describe('RequestsService - Validation and Zone Logic', () => {
       mockUserRepo, // userRepo
       mockEmployeeRepo, // employeeRepo
       mockDepartmentRepo, // departmentRepo
+      {} as any, // precautionRepo
+      {} as any, // mechanicalWorkRepo
+      {} as any, // electricalWorkRepo
       mockRedisCacheService, // redisCacheService
     );
   });

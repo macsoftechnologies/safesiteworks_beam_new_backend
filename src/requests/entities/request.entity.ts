@@ -112,4 +112,7 @@ export class RequestEntity {
 
   @Column({ name: 'Safety_Precautions', type: 'text', nullable: true })
   safetyPrecautions?: string;
+
+  @Column({ name: 'zone', type: 'varchar', length: 255, nullable: true })
+  zone?: string;
 }

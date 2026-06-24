@@ -53,6 +53,10 @@ export class SearchRequestDto {
   @IsOptional()
   Zone_Id?: number;
 
+  @IsString()
+  @IsOptional()
+  zone?: string;
+
   @IsNumber()
   @IsOptional()
   Sub_Contractor_Id?: number;
