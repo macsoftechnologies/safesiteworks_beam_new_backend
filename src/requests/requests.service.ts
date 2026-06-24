@@ -2558,6 +2558,71 @@ export class RequestsService {
     };
   }
 
+  // Fetch logs for a specific permit_no (log.php equivalent)
+  async getPermitLogs(permitNo: string): Promise<any> {
+    const query = `
+      SELECT 
+        l.id,
+        l.requestId,
+        l.requestType,
+        l.userId,
+        l.createdTime,
+        COALESCE(NULLIF(l.permitno, ''), r.PermitNo) AS PermitNo,
+        l.system,
+        u.username,
+        u.userType,
+        r.Company_Name,
+        s.subContractorName
+      FROM logs l
+      LEFT JOIN requests r ON l.requestId = r.id
+      LEFT JOIN users u ON l.userId = u.id
+      LEFT JOIN subcontractors s ON r.Sub_Contractor_Id = s.id
+      WHERE r.PermitNo = ? OR l.permitno = ?
+      ORDER BY l.createdTime ASC
+    `;
+    
+    const logs = await this.logRepo.query(query, [permitNo, permitNo]);
+
+    if (logs.length === 0) {
+      return { data: [], message: 'No Logs Found' };
+    }
+
+    const data: any[] = [];
+    for (const row of logs) {
+      const fields = await this.logDataRepo.find({
+        where: { logId: Number(row.id) }
+      });
+
+      const systemFlag = Number(row.system);
+      const logsusertype = systemFlag === 0 ? (row.userType ?? '') : 'System Auto Cancel';
+      const logsubcontractor = systemFlag === 0 ? (row.subContractorName ?? '') : 'NA';
+      const logusername = systemFlag === 0 ? (row.username ?? '') : 'NA';
+
+      data.push({
+        id: row.id ?? '',
+        requestId: row.requestId ?? '',
+        requestType: row.requestType ?? '',
+        userId: row.userId ?? '',
+        createdTime: row.createdTime ?? '',
+        username: logusername,
+        PermitNo: row.PermitNo ?? '',
+        userType: logsusertype,
+        Company_Name: row.Company_Name ?? '',
+        contractor_name: logsubcontractor,
+        fields: fields.map(f => ({
+          logs_data_id: f.logsDataId,
+          log_id: f.logId,
+          field_name: f.fieldName,
+          previous: f.previous,
+          present: f.present,
+          createdTime: f.createdTime
+        }))
+      });
+    }
+
+    return { data };
+  }
+
   // 6. Fetch logs for a specific user
   async readLogs(userId: number): Promise<any> {
     const logs = await this.logRepo.find({

@@ -222,6 +222,32 @@ export class RequestsController {
     }
   }
 
+  // 10b. Fetch permit logs (log.php) - path param style
+  @Get('logs/permit/:permitNo')
+  async getPermitLogs(@Param('permitNo') permitNo: string) {
+    if (!permitNo || permitNo.trim() === '') {
+      return { status: HttpStatus.BAD_REQUEST, message: 'Missing or empty permitNo' };
+    }
+    try {
+      return await this.requestsService.getPermitLogs(permitNo);
+    } catch (error) {
+      return { status: HttpStatus.INTERNAL_SERVER_ERROR, message: error.message };
+    }
+  }
+
+  // 10c. Fetch permit logs (log.php) - query param style
+  @Get('logs')
+  async getPermitLogsQuery(@Query('permit_no') permitNo: string) {
+    if (!permitNo || permitNo.trim() === '') {
+      return { status: HttpStatus.BAD_REQUEST, message: 'Missing or empty permit_no' };
+    }
+    try {
+      return await this.requestsService.getPermitLogs(permitNo);
+    } catch (error) {
+      return { status: HttpStatus.INTERNAL_SERVER_ERROR, message: error.message };
+    }
+  }
+
   // 11. Create complete log (log.php)
   @Post('logs/complete')
   async createCompleteLog(@Body() body: { id: number; PermitNo: string; status: string; module: string }) {
