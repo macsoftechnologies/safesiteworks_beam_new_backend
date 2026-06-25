@@ -3424,7 +3424,6 @@ export class RequestsService {
       checkRequired('End_Time', existing?.endTime);
       checkRequired('Building_Id', existing?.buildingId);
       checkRequired('Floor_Id', existing?.floorId);
-      checkRequired('Plans_Id', existing?.plansId);
       checkRequired('Room_Nos', existing?.roomNos);
       checkRequired('Room_Type', existing?.roomType);
       checkRequired('Zone_Id', existing?.zoneId);
