@@ -732,6 +732,28 @@ export class RequestsService {
       0,
     );
 
+    // 5. Add note if provided in create DTO
+    if (dto.notes && dto.notes.trim() !== '') {
+      let noteUsername = 'System';
+      if (dto.userId) {
+        const user = await this.userRepo.findOne({ where: { id: dto.userId } });
+        if (user && user.username) {
+          noteUsername = user.username;
+        }
+      }
+
+      await this.noteRepo.save(
+        this.noteRepo.create({
+          requestId,
+          permitNo,
+          userId: dto.userId || 0,
+          username: noteUsername,
+          note: dto.notes,
+          createdTime: new Date(),
+        }),
+      );
+    }
+
     await this.redisCacheService.deleteByPattern('requests:*');
 
     return {
