@@ -3550,7 +3550,11 @@ export class RequestsService {
               ['isolating_responsible', 'isolating_resposible'],
               subTables?.energElec?.isolatingResponsible,
             );
-            if (Number(isolatingResponsibleVal) !== 1) {
+            if (
+              isolatingResponsibleVal === undefined ||
+              isolatingResponsibleVal === null ||
+              String(isolatingResponsibleVal).trim() === ''
+            ) {
               errors.push('isolating_responsible must be checked');
             }
             checkCheckbox(
@@ -3664,7 +3668,11 @@ export class RequestsService {
             ['pneumatic_hydrostatic', 'pnematic_hydrostatic'],
             subTables?.press?.pnematicHydrostatic,
           );
-          if (Number(pneumaticHydrostatic) !== 1) {
+          if (
+            pneumaticHydrostatic === undefined ||
+            pneumaticHydrostatic === null ||
+            String(pneumaticHydrostatic).trim() === ''
+          ) {
             errors.push('pneumatic_hydrostatic must be checked');
           } else {
             checkRequired(
@@ -3762,7 +3770,11 @@ export class RequestsService {
           ['welding_activity', 'welding_activitiy'],
           subTables?.fire?.weldingActivity,
         );
-        if (Number(weldingActivity) !== 1) {
+        if (
+          weldingActivity === undefined ||
+          weldingActivity === null ||
+          String(weldingActivity).trim() === ''
+        ) {
           errors.push('welding_activity must be checked');
         } else {
           checkCheckbox('heat_treatment', subTables?.fire?.heatTreatment);
@@ -3806,7 +3818,11 @@ export class RequestsService {
           ['vendor_supplier', 'vendor_supplies'],
           subTables?.lift?.vendorSupplies,
         );
-        if (Number(vendorSupplier) !== 1) {
+        if (
+          vendorSupplier === undefined ||
+          vendorSupplier === null ||
+          String(vendorSupplier).trim() === ''
+        ) {
           errors.push('vendor_supplier must be checked');
         }
         checkCheckbox('lift_plan', subTables?.lift?.liftPlan);
@@ -3859,7 +3875,8 @@ export class RequestsService {
         ['course_of_action', 'course_of_actions'],
         subTables?.gen?.courseOfActions,
       );
-      if (Number(courseOfAction) !== 1) {
+      const courseOfActionNum = Number(courseOfAction);
+      if (courseOfActionNum !== 1 && courseOfActionNum !== 2) {
         errors.push('course_of_action must be checked');
       }
       checkRequired('other_ppe', subTables?.ppe?.otherPpe);
