@@ -445,7 +445,7 @@ export class RequestsService {
       numberOfWorkers: dto.Number_Of_Workers,
       badgeNumbers: dto.Badge_Numbers,
       teamId: dto.teamId,
-      notes: dto.Notes,
+      notes: dto.notes,
       requestStatus: dto.Request_status || 'Pending',
       status: dto.status !== undefined ? dto.status : 1,
       createdTime: dto.createdTime ? new Date(dto.createdTime) : new Date(),
@@ -589,6 +589,7 @@ export class RequestsService {
         closeNote: dto.close_note || '',
         newSubContractor: dto.new_sub_contractor || '',
         workType: dto.work_type || '',
+        ramsNumber: dto.rams_number,
       }),
     );
 
@@ -624,6 +625,8 @@ export class RequestsService {
         specificRisksBasedOnTask: dto.specific_risks_based_on_task || 0,
         workEnvironmentSafetyEnsured: dto.work_environment_safety_ensured || 0,
         courseOfActionInEmergencies: dto.course_of_action_in_emergencies || 0,
+        ifNoLoto: dto.if_no_loto,
+        hazardausSubstances: dto.hazardaus_substances,
       }),
     );
 
@@ -869,7 +872,7 @@ export class RequestsService {
     );
     compare('Badge_Numbers', existing.badgeNumbers, dto.Badge_Numbers);
     compare('teamId', existing.teamId, dto.teamId);
-    compare('Notes', existing.notes, dto.Notes);
+    // compare('notes', existing.notes, dto.notes);
     compare('Request_status', existing.requestStatus, dto.Request_status);
     compare('permit_type', existing.permitType, dto.permit_type);
     compare('permit_under', existing.permitUnder, dto.permit_under);
@@ -1155,6 +1158,7 @@ export class RequestsService {
         dto.new_sub_contractor,
       );
       compare('work_type', ext.workType, dto.work_type);
+      compare('rams_number', ext.ramsNumber, dto.rams_number);
     }
     if (fire) {
       compare('Hot_work', fire.hotWork, dto.Hot_work);
@@ -1245,6 +1249,8 @@ export class RequestsService {
         fire.courseOfActionInEmergencies,
         dto.course_of_action_in_emergencies,
       );
+      compare('if_no_loto', fire.ifNoLoto, dto.if_no_loto);
+      compare('hazardaus_substances', fire.hazardausSubstances, dto.hazardaus_substances);
     }
     if (gen) {
       compare(
@@ -1466,7 +1472,7 @@ export class RequestsService {
     );
     addIfChanged('badgeNumbers', dto.Badge_Numbers, existing.badgeNumbers);
     addIfChanged('teamId', dto.teamId, existing.teamId);
-    addIfChanged('notes', dto.Notes, existing.notes);
+    addIfChanged('notes', dto.notes, existing.notes);
     addIfChanged('requestStatus', dto.Request_status, existing.requestStatus);
     addIfChanged('status', dto.status, existing.status);
     addIfChanged('permitType', dto.permit_type, existing.permitType);
@@ -1611,6 +1617,7 @@ export class RequestsService {
       closeNote: dto.close_note,
       newSubContractor: dto.new_sub_contractor,
       workType: dto.work_type,
+      ramsNumber: dto.rams_number,
     });
 
     await updateSubTable(this.fireHotworkRepo, fire, {
@@ -1643,6 +1650,8 @@ export class RequestsService {
       specificRisksBasedOnTask: dto.specific_risks_based_on_task,
       workEnvironmentSafetyEnsured: dto.work_environment_safety_ensured,
       courseOfActionInEmergencies: dto.course_of_action_in_emergencies,
+      ifNoLoto: dto.if_no_loto,
+      hazardausSubstances: dto.hazardaus_substances,
     });
 
     await updateSubTable(this.generalRepo, gen, {
@@ -2412,7 +2421,7 @@ export class RequestsService {
             Number_Of_Workers: req.numberOfWorkers || '',
             Badge_Numbers: req.badgeNumbers || '',
             teamId: req.teamId || '',
-            Notes: req.notes || '',
+            notes: req.notes || '',
             Request_status: req.requestStatus || '',
             status: req.status,
             createdTime: req.createdTime || '',
@@ -2701,7 +2710,7 @@ export class RequestsService {
             Number_Of_Workers: req.numberOfWorkers || '',
             Badge_Numbers: req.badgeNumbers || '',
             teamId: req.teamId || '',
-            Notes: req.notes || '',
+            notes: req.notes || '',
             Request_status: req.requestStatus || '',
             status: req.status,
             createdTime: req.createdTime || '',
@@ -2808,7 +2817,7 @@ export class RequestsService {
     return await this.ramsFileRepo.findOne({ where: { ramsFileId } });
   }
 
-  // 5. Add notes (bulk)
+  // 5. Add Notes (bulk)
   async addNotes(body: {
     request_id: string;
     permit_no: string;
@@ -4274,7 +4283,7 @@ export class RequestsService {
       Number_Of_Workers: req.numberOfWorkers || '',
       Badge_Numbers: req.badgeNumbers || '',
       teamId: req.teamId || '',
-      Notes: req.notes || '',
+      notes: req.notes || '',
       Request_status: req.requestStatus || '',
       status: req.status,
       createdTime: req.createdTime || '',

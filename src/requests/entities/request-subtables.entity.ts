@@ -295,6 +295,9 @@ export class RequestExtraMisc {
 
   @Column({ name: 'work_type', type: 'varchar', length: 200, nullable: true })
   workType?: string;
+
+  @Column({ name: 'rams_number', type: 'varchar', length: 5000, nullable: true })
+  ramsNumber?: string;
 }
 
 @Entity('request_fire_hotwork')
@@ -379,6 +382,12 @@ export class RequestFireHotwork {
 
   @Column({ name: 'course_of_action_in_emergencies', type: 'int', nullable: true })
   courseOfActionInEmergencies?: number;
+
+  @Column({ name: 'if_no_loto', type: 'int', nullable: true })
+  ifNoLoto?: number;
+
+  @Column({ name: 'hazardaus_substances', type: 'int', nullable: true })
+  hazardausSubstances?: number;
 }
 
 @Entity('request_general')

@@ -5,6 +5,10 @@ export class CreateRequestDto {
   @IsOptional()
   rams_file?: any;
 
+  @IsString()
+  @IsOptional()
+  rams_number?: string;
+
   @Type(() => Number)
   @IsNumber()
   @IsOptional()
@@ -116,7 +120,7 @@ export class CreateRequestDto {
 
   @IsString()
   @IsOptional()
-  Notes?: string;
+  notes?: string;
 
   @IsString()
   @IsOptional()
@@ -703,6 +707,16 @@ export class CreateRequestDto {
   @IsNumber()
   @IsOptional()
   course_of_action_in_emergencies?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  if_no_loto?: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  hazardaus_substances?: number;
 
   // 9. General fields
   @Type(() => Number)
