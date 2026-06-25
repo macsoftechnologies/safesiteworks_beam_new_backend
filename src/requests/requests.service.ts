@@ -3391,7 +3391,7 @@ export class RequestsService {
 
       const checkCheckbox = (key: string, dbField: any) => {
         const val = getValue(key, dbField);
-        if (Number(val) !== 1) {
+        if (val === undefined || val === null || val === '') {
           errors.push(`${key} must be checked`);
           return false;
         }
@@ -3831,9 +3831,18 @@ export class RequestsService {
         'description_of_activity',
         subTables?.ext?.descriptionOfActivity,
       );
-      checkRequired('mechanical_works', subTables?.ext?.mechanicalWorks);
-      checkRequired('electrical_works', subTables?.ext?.electricalWorks);
       checkRequired('work_type', subTables?.ext?.workType);
+      const workTypeVal = String(
+        getValue('work_type', subTables?.ext?.workType) || '',
+      )
+        .toLowerCase()
+        .trim();
+      if (workTypeVal.includes('mechanical') || workTypeVal.includes('both')) {
+        checkRequired('mechanical_works', subTables?.ext?.mechanicalWorks);
+      }
+      if (workTypeVal.includes('electrical') || workTypeVal.includes('both')) {
+        checkRequired('electrical_works', subTables?.ext?.electricalWorks);
+      }
       const otherConditions = getValue(
         'other_conditions',
         subTables?.gen?.otherConditions,
