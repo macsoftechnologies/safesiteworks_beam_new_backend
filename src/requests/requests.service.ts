@@ -4068,10 +4068,14 @@ export class RequestsService {
       throw new BadRequestException('PermitNo is required');
     }
 
-    const zones: any[] = Array.isArray(dto.zone) ? dto.zone : [];
-    if (zones.length === 0) {
+    // zone is now an array of objects: { Zone_Id: number, zone: string }
+    const zoneItems: Array<{ Zone_Id: number; zone: string }> = Array.isArray(dto.zone) ? dto.zone : [];
+    if (zoneItems.length === 0) {
       throw new BadRequestException('Zone not provided');
     }
+
+    const zoneIds = zoneItems.map((z) => z.Zone_Id).filter(Boolean);
+    const zoneNames = zoneItems.map((z) => z.zone).filter(Boolean);
 
     // 2. Fetch the original permit (source to copy from)
     const originalRequest = await this.requestRepo.findOne({
@@ -4081,8 +4085,8 @@ export class RequestsService {
       throw new BadRequestException('Permit number not found');
     }
 
-    // 3. Validate zones exist and have consistent status
-    const zoneEntities = await this.zoneRepo.findBy({ zone: In(zones) });
+    // 3. Validate zones exist and have consistent status (lookup by IDs)
+    const zoneEntities = await this.zoneRepo.findBy({ id: In(zoneIds) });
     if (!zoneEntities || zoneEntities.length === 0) {
       throw new BadRequestException('Zone not found');
     }
@@ -4152,8 +4156,8 @@ export class RequestsService {
 
     const createdTime = dto.createdTime ? new Date(dto.createdTime.replace(',', '')) : new Date();
 
-    // 7. Resolve zone: use first zone id from the array (matching existing entity design)
-    const resolvedZoneId = zones[0];
+    // 7. Resolve zone: use first Zone_Id from the array for zoneId FK
+    const resolvedZoneId = zoneIds[0];
 
     const createdIds: number[] = [];
 
@@ -4187,7 +4191,7 @@ export class RequestsService {
         buildingId: dto.Building_Id ?? originalRequest.buildingId,
         floorId: dto.Floor_Id ?? originalRequest.floorId,
         zoneId: resolvedZoneId,
-        zone: zoneEntities.map((z) => z.zone).join(',') || originalRequest.zone,
+        zone: zoneNames.join(',') || zoneEntities.map((z) => z.zone).join(',') || originalRequest.zone,
         roomNos: dto.Room_Nos ?? originalRequest.roomNos,
         roomType: dto.Room_Type ?? originalRequest.roomType,
         requestStatus: (originalRequest.requestStatus || '').toLowerCase().trim() === 'draft' ? 'Draft' : 'Hold',

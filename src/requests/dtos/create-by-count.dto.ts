@@ -1,5 +1,14 @@
-import { IsString, IsOptional, IsNumber, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export class ZoneItemDto {
+  @Type(() => Number)
+  @IsNumber()
+  Zone_Id: number;
+
+  @IsString()
+  zone: string;
+}
 
 export class CreateByCountDto {
   @Type(() => Number)
@@ -96,10 +105,12 @@ export class CreateByCountDto {
   @IsOptional()
   permit_under?: string;
 
-  // zone is an array of zone IDs (numbers) — will be validated and joined
+  // zone is an array of zone objects with Zone_Id (number) and zone (name string)
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ZoneItemDto)
   @IsOptional()
-  zone?: number[];
+  zone?: ZoneItemDto[];
 
   @IsString()
   @IsOptional()
