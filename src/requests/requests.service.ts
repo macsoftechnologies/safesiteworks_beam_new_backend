@@ -3206,64 +3206,160 @@ export class RequestsService {
 
   // 14. Read Graph Counts summary today vs week (readGraphCounts.php)
   async readGraphCounts(): Promise<any> {
-    const todayCounts = await this.requestRepo
-      .createQueryBuilder('requests')
-      .select('COUNT(*)', 'totalCount')
-      .addSelect(
-        "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
-        'approveCount',
-      )
-      .addSelect(
-        "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
-        'openCount',
-      )
-      .addSelect(
-        "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
-        'closeCount',
-      )
-      .where('requests.status = 1 AND requests.createdTime >= CURDATE()')
-      .getRawOne();
+    return this.redisCacheService.getOrSet(
+      'requests:graph:counts',
+      async () => {
+        const todayCounts = await this.requestRepo
+          .createQueryBuilder('requests')
+          .select('COUNT(*)', 'totalCount')
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
+            'approveCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
+            'openCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
+            'closeCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.nightShift = '1' THEN 1 ELSE 0 END)",
+            'nightshiftCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Draft' THEN 1 ELSE 0 END)",
+            'draftCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Hold' THEN 1 ELSE 0 END)",
+            'holdCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Pre-Approved' THEN 1 ELSE 0 END)",
+            'preApprovedCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
+            'approvedCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Rejected' THEN 1 ELSE 0 END)",
+            'rejectedCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
+            'openedCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Cancelled' THEN 1 ELSE 0 END)",
+            'cancelledCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
+            'closedCount',
+          )
+          .where('requests.status = 1 AND requests.createdTime >= CURDATE()')
+          .getRawOne();
 
-    const lastWeekCounts = await this.requestRepo
-      .createQueryBuilder('requests')
-      .select('COUNT(*)', 'totalCount')
-      .addSelect(
-        "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
-        'approveCount',
-      )
-      .addSelect(
-        "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
-        'openCount',
-      )
-      .addSelect(
-        "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
-        'closeCount',
-      )
-      .where(
-        'requests.status = 1 AND requests.createdTime >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)',
-      )
-      .getRawOne();
+        const lastWeekCounts = await this.requestRepo
+          .createQueryBuilder('requests')
+          .select('COUNT(*)', 'totalCount')
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
+            'approveCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
+            'openCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
+            'closeCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.nightShift = '1' THEN 1 ELSE 0 END)",
+            'nightshiftCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Draft' THEN 1 ELSE 0 END)",
+            'draftCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Hold' THEN 1 ELSE 0 END)",
+            'holdCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Pre-Approved' THEN 1 ELSE 0 END)",
+            'preApprovedCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
+            'approvedCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Rejected' THEN 1 ELSE 0 END)",
+            'rejectedCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
+            'openedCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Cancelled' THEN 1 ELSE 0 END)",
+            'cancelledCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
+            'closedCount',
+          )
+          .where(
+            'requests.status = 1 AND requests.createdTime >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)',
+          )
+          .getRawOne();
 
-    return {
-      data: {
-        day: [
-          {
-            totalCount: Number(todayCounts.totalCount || 0),
-            approveCount: Number(todayCounts.approveCount || 0),
-            openCount: Number(todayCounts.openCount || 0),
-            closeCount: Number(todayCounts.closeCount || 0),
+        return {
+          data: {
+            day: [
+              {
+                totalCount: Number(todayCounts.totalCount || 0),
+                approveCount: Number(todayCounts.approveCount || 0),
+                openCount: Number(todayCounts.openCount || 0),
+                closeCount: Number(todayCounts.closeCount || 0),
+                nightshiftCount: Number(todayCounts.nightshiftCount || 0),
+                draftCount: Number(todayCounts.draftCount || 0),
+                holdCount: Number(todayCounts.holdCount || 0),
+                preApprovedCount: Number(todayCounts.preApprovedCount || 0),
+                approvedCount: Number(todayCounts.approvedCount || 0),
+                rejectedCount: Number(todayCounts.rejectedCount || 0),
+                openedCount: Number(todayCounts.openedCount || 0),
+                cancelledCount: Number(todayCounts.cancelledCount || 0),
+                closedCount: Number(todayCounts.closedCount || 0),
+              },
+            ],
+            week: [
+              {
+                totalCount: Number(lastWeekCounts.totalCount || 0),
+                approveCount: Number(lastWeekCounts.approveCount || 0),
+                openCount: Number(lastWeekCounts.openCount || 0),
+                closeCount: Number(lastWeekCounts.closeCount || 0),
+                nightshiftCount: Number(lastWeekCounts.nightshiftCount || 0),
+                draftCount: Number(lastWeekCounts.draftCount || 0),
+                holdCount: Number(lastWeekCounts.holdCount || 0),
+                preApprovedCount: Number(lastWeekCounts.preApprovedCount || 0),
+                approvedCount: Number(lastWeekCounts.approvedCount || 0),
+                rejectedCount: Number(lastWeekCounts.rejectedCount || 0),
+                openedCount: Number(lastWeekCounts.openedCount || 0),
+                cancelledCount: Number(lastWeekCounts.cancelledCount || 0),
+                closedCount: Number(lastWeekCounts.closedCount || 0),
+              },
+            ],
           },
-        ],
-        week: [
-          {
-            totalCount: Number(lastWeekCounts.totalCount || 0),
-            approveCount: Number(lastWeekCounts.approveCount || 0),
-            openCount: Number(lastWeekCounts.openCount || 0),
-            closeCount: Number(lastWeekCounts.closeCount || 0),
-          },
-        ],
+        };
       },
-    };
+      1000 * 60 * 5,
+    );
   }
 
   private async checkZoneStatusAndAssignPermitUnder(

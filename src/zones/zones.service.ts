@@ -90,4 +90,37 @@ export class ZonesService {
     }
     return zone;
   }
+
+  async getStatusCounts(): Promise<any> {
+    return this.redisCacheService.getOrSet(
+      'zones:status:counts',
+      async () => {
+        const counts = await this.zonesRepo
+          .createQueryBuilder('zones')
+          .select(
+            "SUM(CASE WHEN zones.status = 'UC' THEN 1 ELSE 0 END)",
+            'ucCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN zones.status = 'C' THEN 1 ELSE 0 END)",
+            'cCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN zones.status = 'HO' THEN 1 ELSE 0 END)",
+            'hoCount',
+          )
+          .getRawOne();
+
+        return {
+          statusCode: HttpStatus.OK,
+          data: {
+            UC: Number(counts.ucCount || 0),
+            C: Number(counts.cCount || 0),
+            HO: Number(counts.hoCount || 0),
+          },
+        };
+      },
+      1000 * 60 * 5,
+    );
+  }
 }

@@ -537,4 +537,43 @@ export class EmployeesService {
     await this.userLogRepo.save(log);
     return { statusCode: HttpStatus.OK, message: 'User Log Created' };
   }
+
+  async getEmployeeCounts(): Promise<any> {
+    return this.cache.getOrSet(
+      'employees:analytics:counts',
+      async () => {
+        const counts = await this.employeeRepo
+          .createQueryBuilder('employees')
+          .leftJoin(User, 'u', 'u.empId = employees.id')
+          .select(
+            "SUM(CASE WHEN employees.departId IS NOT NULL AND employees.departId != 0 THEN 1 ELSE 0 END)",
+            'departmentCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN employees.subContId IS NOT NULL AND employees.subContId != 0 THEN 1 ELSE 0 END)",
+            'contractorCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN employees.obserId IS NOT NULL AND employees.obserId != 0 THEN 1 ELSE 0 END)",
+            'observerCount',
+          )
+          .addSelect(
+            "SUM(CASE WHEN u.userType IS NULL OR (LOWER(u.userType) NOT LIKE '%admin%' AND LOWER(u.userType) NOT LIKE '%superadmin%') THEN 1 ELSE 0 END)",
+            'totalCount',
+          )
+          .getRawOne();
+
+        return {
+          statusCode: HttpStatus.OK,
+          data: {
+            departments: Number(counts.departmentCount || 0),
+            contractors: Number(counts.contractorCount || 0),
+            observers: Number(counts.observerCount || 0),
+            total: Number(counts.totalCount || 0),
+          },
+        };
+      },
+      1000 * 60 * 5,
+    );
+  }
 }

@@ -85,6 +85,20 @@ export class EmployeesController {
     return this.employeeService.findBySubCont(query);
   }
 
+  @Get('analytics/counts')
+  @ApiOperation({ summary: 'Get employee counts grouped by category' })
+  @ApiResponse({
+    status: 200,
+    description: 'Employee counts grouped by Departments, Contractors, Observers, and Total (excluding admins/superadmins).',
+  })
+  async getEmployeeCounts() {
+    try {
+      return await this.employeeService.getEmployeeCounts();
+    } catch (error) {
+      return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Error retrieving employee counts' };
+    }
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a single employee by ID' })
   @ApiParam({ name: 'id', type: Number, example: 1 })

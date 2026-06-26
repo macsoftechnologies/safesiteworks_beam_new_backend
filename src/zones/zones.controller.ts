@@ -35,6 +35,15 @@ export class ZonesController {
     }
   }
 
+  @Get('status/counts')
+  async getStatusCounts() {
+    try {
+      return await this.zonesService.getStatusCounts();
+    } catch (error) {
+      return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Error retrieving zone status counts' };
+    }
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     try {
