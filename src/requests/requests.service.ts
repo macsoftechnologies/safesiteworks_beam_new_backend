@@ -3213,18 +3213,6 @@ export class RequestsService {
           .createQueryBuilder('requests')
           .select('COUNT(*)', 'totalCount')
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
-            'approveCount',
-          )
-          .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
-            'openCount',
-          )
-          .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
-            'closeCount',
-          )
-          .addSelect(
             "SUM(CASE WHEN requests.nightShift = '1' THEN 1 ELSE 0 END)",
             'nightshiftCount',
           )
@@ -3266,18 +3254,6 @@ export class RequestsService {
         const lastWeekCounts = await this.requestRepo
           .createQueryBuilder('requests')
           .select('COUNT(*)', 'totalCount')
-          .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
-            'approveCount',
-          )
-          .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
-            'openCount',
-          )
-          .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
-            'closeCount',
-          )
           .addSelect(
             "SUM(CASE WHEN requests.nightShift = '1' THEN 1 ELSE 0 END)",
             'nightshiftCount',
@@ -3324,9 +3300,6 @@ export class RequestsService {
             day: [
               {
                 totalCount: Number(todayCounts.totalCount || 0),
-                approveCount: Number(todayCounts.approveCount || 0),
-                openCount: Number(todayCounts.openCount || 0),
-                closeCount: Number(todayCounts.closeCount || 0),
                 nightshiftCount: Number(todayCounts.nightshiftCount || 0),
                 draftCount: Number(todayCounts.draftCount || 0),
                 holdCount: Number(todayCounts.holdCount || 0),
@@ -3341,9 +3314,6 @@ export class RequestsService {
             week: [
               {
                 totalCount: Number(lastWeekCounts.totalCount || 0),
-                approveCount: Number(lastWeekCounts.approveCount || 0),
-                openCount: Number(lastWeekCounts.openCount || 0),
-                closeCount: Number(lastWeekCounts.closeCount || 0),
                 nightshiftCount: Number(lastWeekCounts.nightshiftCount || 0),
                 draftCount: Number(lastWeekCounts.draftCount || 0),
                 holdCount: Number(lastWeekCounts.holdCount || 0),
