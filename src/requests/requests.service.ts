@@ -197,7 +197,9 @@ export class RequestsService {
     }
 
     const normalizedCurrent = (existing.requestStatus || '').toLowerCase().trim();
-    const normalizedNew = newStatus.toLowerCase().trim();
+    // Resolve prefixed UI statuses to their base status before applying rules
+    const resolvedNewStatus = this.resolveApprovalStatus(newStatus);
+    const normalizedNew = resolvedNewStatus.toLowerCase().trim();
 
     if (normalizedCurrent === normalizedNew) {
       return;
@@ -1847,20 +1849,24 @@ export class RequestsService {
       }
     }
 
-    // 2. Perform updates
+    // 2. Resolve the incoming status to the actual stored value
+    //    CONM-*/COMM-* are UI-only prefixes that encode which approval stream is acting
+    const resolvedStatus = this.resolveApprovalStatus(Request_status);
+
+    // 3. Perform updates
     for (const existing of requestsToUpdate) {
       const updateData: Partial<RequestEntity> = {};
       if (Request_status !== undefined)
-        updateData.requestStatus = Request_status;
+        updateData.requestStatus = resolvedStatus;
       if (status !== undefined) updateData.status = status;
 
       await this.requestRepo.update(existing.id, updateData);
 
-      // Create log
+      // Create log with the resolved status
       await this.createLogs(
         existing.id,
         userId || 0,
-        Request_status || (status === 1 ? 'Pending' : 'Cancelled'),
+        resolvedStatus || (status === 1 ? 'Pending' : 'Cancelled'),
         new Date(),
         [],
         0,
@@ -1874,6 +1880,39 @@ export class RequestsService {
       message: 'Request Updated',
     };
   }
+
+  /**
+   * Resolves CONM-prefixed and COMM-prefixed statuses (sent from the UI approval buttons)
+   * into the actual requestStatus value to be stored in the database.
+   *
+   * CONM = Construction Management (Department / first-approval role)
+   * COMM = Commissioning Management (Department1 / second-approval role)
+   *
+   * Mapping:
+   *   CONM-Pre-Approved    => Pre-Approved
+   *   CONM-Final-Approved  => Approved
+   *   CONM-Single-Approved => Approved
+   *   COMM-Pre-Approved    => Pre-Approved
+   *   COMM-Final-Approved  => Approved
+   *   COMM-Single-Approved => Approved
+   *
+   * Any other status (Rejected, Opened, Closed, etc.) is passed through unchanged.
+   */
+  private resolveApprovalStatus(requestStatus?: string): string {
+    if (!requestStatus) return requestStatus ?? '';
+
+    const statusMap: Record<string, string> = {
+      'CONM-Pre-Approved': 'Pre-Approved',
+      'CONM-Final-Approved': 'Approved',
+      'CONM-Single-Approved': 'Approved',
+      'COMM-Pre-Approved': 'Pre-Approved',
+      'COMM-Final-Approved': 'Approved',
+      'COMM-Single-Approved': 'Approved',
+    };
+
+    return statusMap[requestStatus] ?? requestStatus;
+  }
+
 
   // Helper to resolve room names from ID string
   private async resolveRoomNames(roomNos?: string): Promise<string> {
