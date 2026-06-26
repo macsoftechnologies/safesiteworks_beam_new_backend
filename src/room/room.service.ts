@@ -33,6 +33,7 @@ export class RoomService {
         const findOptions: any = {
           where,
           relations: { floor: true },
+          order: { room_id: 'DESC' },
         };
         if (!isExport) {
           findOptions.take = limit;

@@ -30,7 +30,10 @@ export class BuildingService {
           where.site_id = siteid;
         }
 
-        const findOptions: any = { where };
+        const findOptions: any = {
+          where,
+          order: { build_id: 'DESC' },
+        };
         if (!isExport) {
           findOptions.take = limit;
           findOptions.skip = (page - 1) * limit;

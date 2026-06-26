@@ -56,7 +56,9 @@ export class RoleService {
     return this.redisCacheService.getOrSet(
       `roles:list:${isExport}:${page}:${limit}`,
       async () => {
-        const findOptions: any = {};
+        const findOptions: any = {
+          order: { createdTime: 'DESC' },
+        };
         if (!isExport) {
           findOptions.take = limit;
           findOptions.skip = (page - 1) * limit;

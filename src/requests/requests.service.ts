@@ -1964,6 +1964,7 @@ export class RequestsService {
         // Build TypeORM Query Builder to support complex safety joins and filters
         const qb = this.requestRepo
           .createQueryBuilder('requests')
+          .where('requests.status = :status', { status: 1 })
           // Left join sub-tables
           .leftJoinAndMapOne(
             'requests.chemical',

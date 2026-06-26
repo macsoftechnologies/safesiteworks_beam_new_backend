@@ -32,6 +32,7 @@ export class ElectricalService {
 
         const findOptions: any = {
           where,
+          order: { createdTime: 'DESC' },
         };
         if (!isExport) {
           findOptions.take = limit;

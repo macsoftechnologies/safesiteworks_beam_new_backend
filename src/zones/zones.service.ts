@@ -40,6 +40,7 @@ export class ZonesService {
         const findOptions: any = {
           where,
           relations: { floor: true },
+          order: { createdTime: 'DESC' },
         };
         if (!isExport) {
           findOptions.take = limit;

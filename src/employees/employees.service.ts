@@ -106,7 +106,9 @@ export class EmployeesService {
     return this.cache.getOrSet(
       `employees:list:all:${isExport}:${page}:${limit}`,
       async () => {
-        const findOptions: any = {};
+        const findOptions: any = {
+          order: { createdTime: 'DESC' },
+        };
         if (!isExport) {
           findOptions.take = limit;
           findOptions.skip = (page - 1) * limit;
@@ -166,6 +168,7 @@ export class EmployeesService {
       async () => {
         const findOptions: any = {
           where: { subContId },
+          order: { createdTime: 'DESC' },
         };
         if (!isExport) {
           findOptions.take = limit;
@@ -201,6 +204,7 @@ export class EmployeesService {
       async () => {
         const findOptions: any = {
           where: { departId },
+          order: { createdTime: 'DESC' },
         };
         if (!isExport) {
           findOptions.take = limit;
@@ -269,6 +273,7 @@ export class EmployeesService {
 
         const findOptions: any = {
           where,
+          order: { createdTime: 'DESC' },
         };
 
         if (!isExport) {

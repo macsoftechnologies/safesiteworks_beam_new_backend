@@ -89,7 +89,9 @@ export class UsersService {
     return this.redisCacheService.getOrSet(
       `users:list:${isExport}:${page}:${limit}`,
       async () => {
-        const findOptions: any = {};
+        const findOptions: any = {
+          order: { created: 'DESC' },
+        };
         if (!isExport) {
           findOptions.take = limit;
           findOptions.skip = (page - 1) * limit;

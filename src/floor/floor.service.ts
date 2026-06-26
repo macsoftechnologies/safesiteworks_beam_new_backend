@@ -30,7 +30,10 @@ export class FloorService {
           where.build_id = bid;
         }
 
-        const findOptions: any = { where };
+        const findOptions: any = {
+          where,
+          order: { fl_id: 'DESC' },
+        };
         if (!isExport) {
           findOptions.take = limit;
           findOptions.skip = (page - 1) * limit;
