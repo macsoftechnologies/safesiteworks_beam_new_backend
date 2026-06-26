@@ -169,31 +169,55 @@ export class RequestsService {
     let role = 'observer';
     let departmentName = '';
 
-    if (user.userType === 'Admin') {
+    // userType can be a comma-separated string (e.g. "Admin,Department")
+    // so split and check membership rather than doing an exact string match
+    const userTypes = (user.userType || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    if (userTypes.includes('Admin') || userTypes.includes('SuperAdmin')) {
       role = 'admin';
-    } else if (user.userType === 'Subcontractor') {
-      role = 'contractor';
-    } else if (user.userType === 'Department' && user.empId) {
-      const employee = await this.employeeRepo.findOne({ where: { id: user.empId } });
-      if (employee) {
-        if (employee.departId) {
-          const dept = await this.departmentRepo.findOne({ where: { id: employee.departId } });
-          if (dept) {
-            departmentName = (dept.departmentName || '').toUpperCase().trim();
-            if (departmentName.includes('CONM') || departmentName.includes('CON M')) {
-              role = 'CoNM';
-            } else if (departmentName.includes('C&Q') || departmentName.includes('CQ') || departmentName.includes('C & Q')) {
-              role = 'C&Q';
+    } else if (userTypes.includes('Department') || userTypes.includes('Department1')) {
+      // Department  = CONM (Construction Management / first-approval stream)
+      // Department1 = C&Q  (Commissioning / second-approval stream)
+      // Try to resolve the exact stream via the employee's department name first
+      if (user.empId) {
+        const employee = await this.employeeRepo.findOne({ where: { id: user.empId } });
+        if (employee) {
+          if (employee.departId) {
+            const dept = await this.departmentRepo.findOne({ where: { id: employee.departId } });
+            if (dept) {
+              departmentName = (dept.departmentName || '').toUpperCase().trim();
+              if (departmentName.includes('CONM') || departmentName.includes('CON M')) {
+                role = 'CoNM';
+              } else if (departmentName.includes('C&Q') || departmentName.includes('CQ') || departmentName.includes('C & Q')) {
+                role = 'C&Q';
+              } else {
+                // Generic department – default based on userType flag
+                role = userTypes.includes('Department1') ? 'C&Q' : 'CoNM';
+              }
             } else {
-              role = 'department';
+              role = userTypes.includes('Department1') ? 'C&Q' : 'CoNM';
             }
+          } else if (employee.subContId) {
+            role = 'contractor';
+          } else if (employee.obserId) {
+            role = 'observer';
+          } else {
+            // Employee exists but no departId/subContId/obserId — treat by userType
+            role = userTypes.includes('Department1') ? 'C&Q' : 'CoNM';
           }
-        } else if (employee.subContId) {
-          role = 'contractor';
-        } else if (employee.obserId) {
-          role = 'observer';
+        } else {
+          // No employee record found – fall back to userType
+          role = userTypes.includes('Department1') ? 'C&Q' : 'CoNM';
         }
+      } else {
+        // No empId on user – use userType directly
+        role = userTypes.includes('Department1') ? 'C&Q' : 'CoNM';
       }
+    } else if (userTypes.includes('Subcontractor')) {
+      role = 'contractor';
     }
 
     const normalizedCurrent = (existing.requestStatus || '').toLowerCase().trim();
