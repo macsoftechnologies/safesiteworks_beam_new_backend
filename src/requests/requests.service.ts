@@ -1546,15 +1546,24 @@ export class RequestsService {
     ) => {
       const filteredFields: any = {};
       for (const key in fields) {
-        if (
-          fields[key] !== undefined &&
-          !this.areEqual(existingSub?.[key], fields[key])
-        ) {
+        if (fields[key] !== undefined) {
           filteredFields[key] = fields[key];
         }
       }
       if (Object.keys(filteredFields).length > 0) {
-        await repo.update({ requestId: id }, filteredFields);
+        if (existingSub) {
+          const changedFields: any = {};
+          for (const key in filteredFields) {
+            if (!this.areEqual(existingSub[key], filteredFields[key])) {
+              changedFields[key] = filteredFields[key];
+            }
+          }
+          if (Object.keys(changedFields).length > 0) {
+            await repo.update({ requestId: id }, changedFields);
+          }
+        } else {
+          await repo.save(repo.create({ requestId: id, ...filteredFields }));
+        }
       }
     };
 
@@ -1710,7 +1719,7 @@ export class RequestsService {
       specificRisks: dto.specific_risks,
       environmentEnsured: dto.environment_ensured,
       courseOfActions:
-        dto.course_of_actions !== undefined
+        dto.course_of_actions !== undefined && dto.course_of_actions !== null
           ? dto.course_of_actions
           : dto.course_of_action,
     });
@@ -2546,6 +2555,10 @@ export class RequestsService {
           mergeSub((req as any).ppe, this.ppeRepo);
           mergeSub((req as any).pressureTesting, this.pressureTestingRepo);
 
+          if (flatObj.course_of_actions !== undefined) {
+            flatObj.course_of_action = flatObj.course_of_actions;
+          }
+
           // Fetch files & notes
           const files = await this.ramsFileRepo.find({
             where: { requestId: req.id, status: 1 },
@@ -2832,6 +2845,10 @@ export class RequestsService {
           mergeSub((req as any).lifting, this.liftingRepo);
           mergeSub((req as any).ppe, this.ppeRepo);
           mergeSub((req as any).pressureTesting, this.pressureTestingRepo);
+
+          if (flatObj.course_of_actions !== undefined) {
+            flatObj.course_of_action = flatObj.course_of_actions;
+          }
 
           const files = await this.ramsFileRepo.find({
             where: { requestId: req.id, status: 1 },
@@ -4513,6 +4530,10 @@ export class RequestsService {
     mergeSub((req as any).lifting, this.liftingRepo);
     mergeSub((req as any).ppe, this.ppeRepo);
     mergeSub((req as any).pressureTesting, this.pressureTestingRepo);
+
+    if (flatObj.course_of_actions !== undefined) {
+      flatObj.course_of_action = flatObj.course_of_actions;
+    }
 
     // Fetch Opened (check-in) log
     const checkInLog = await this.logRepo
