@@ -414,4 +414,24 @@ export class RequestsController {
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).send(error.message);
     }
   }
+
+  // 20. Fetch Request details by ID
+  @Get(':id')
+  async getRequestDetailsById(@Param('id') id: string) {
+    try {
+      const data = await this.requestsService.getRequestDetailsById(Number(id));
+      if (!data) {
+        return {
+          status: HttpStatus.NOT_FOUND,
+          message: `Request with ID ${id} not found`,
+        };
+      }
+      return data;
+    } catch (error) {
+      return {
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message || 'Failed to retrieve request details',
+      };
+    }
+  }
 }

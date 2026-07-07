@@ -4401,8 +4401,8 @@ export class RequestsService {
 
   // --- NEW PERMIT AND LOG DATA METHODS ---
 
-  async getRequestDetailsByPermitNo(permitNo: string): Promise<any> {
-    const qb = this.requestRepo
+  private getRequestDetailsQueryBuilder() {
+    return this.requestRepo
       .createQueryBuilder('requests')
       .leftJoinAndMapOne('requests.chemical', RequestChemicalHazard, 'chemical', 'requests.id = chemical.request_id')
       .leftJoinAndMapOne('requests.confined', RequestConfined, 'confined', 'requests.id = confined.request_id')
@@ -4422,9 +4422,22 @@ export class RequestsService {
       .leftJoinAndMapOne('requests.zone', Zone, 'zone', 'requests.Zone_Id = zone.id')
       .leftJoinAndMapOne('requests.subcontractor', Subcontractor, 'subcontractor', 'requests.Sub_Contractor_Id = subcontractor.id')
       .leftJoinAndMapOne('requests.activityRelation', Activity, 'activityRelation', 'requests.Type_Of_Activity_Id = activityRelation.id')
-      .leftJoinAndMapOne('requests.user', User, 'user', 'requests.userId = user.id')
-      .where('requests.permitNo = :permitNo AND requests.status = 1', { permitNo });
+      .leftJoinAndMapOne('requests.user', User, 'user', 'requests.userId = user.id');
+  }
 
+  async getRequestDetailsByPermitNo(permitNo: string): Promise<any> {
+    const qb = this.getRequestDetailsQueryBuilder()
+      .where('requests.permitNo = :permitNo AND requests.status = 1', { permitNo });
+    return this.getRequestDetailsFromQueryBuilder(qb);
+  }
+
+  async getRequestDetailsById(id: number): Promise<any> {
+    const qb = this.getRequestDetailsQueryBuilder()
+      .where('requests.id = :id AND requests.status = 1', { id });
+    return this.getRequestDetailsFromQueryBuilder(qb);
+  }
+
+  private async getRequestDetailsFromQueryBuilder(qb: any): Promise<any> {
     const req = await qb.getOne();
     if (!req) return null;
 
