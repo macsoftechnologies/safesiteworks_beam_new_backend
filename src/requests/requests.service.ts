@@ -792,7 +792,12 @@ export class RequestsService {
   }
 
   // Update Request
-  async update(id: number, dto: UpdateRequestDto, files?: any[]): Promise<any> {
+  async update(
+    id: number,
+    dto: UpdateRequestDto,
+    files?: any[],
+    images?: any[],
+  ): Promise<any> {
     const existing = await this.requestRepo.findOne({ where: { id } });
     if (!existing) {
       throw new BadRequestException('Request not found');
@@ -1819,28 +1824,55 @@ export class RequestsService {
       }
     }
 
-    // Save base64 image if passed
-    if (dto.Image1) {
-      const encodedString = dto.Image1.split(',');
-      const base64Data = encodedString[1] || encodedString[0];
-      if (base64Data) {
-        const buffer = Buffer.from(base64Data, 'base64');
-        const filename = `${Date.now()}_${Math.round(Math.random() * 1e9)}.png`;
-        const uploadDir = './uploads/requests';
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
-        }
-        const filePath = path.join(uploadDir, filename);
-        fs.writeFileSync(filePath, buffer);
-
-        // insert record into uploadimage table
+    // Save uploaded images (multer)
+    if (images && images.length > 0) {
+      for (const file of images) {
         await this.uploadImageRepo.save(
           this.uploadImageRepo.create({
             requestId: id,
-            imageName: filePath.replace(/\\/g, '/'),
+            imageName: file.path.replace(/\\/g, '/'),
             userId: dto.userId || existing.userId || 0,
           }),
         );
+      }
+    }
+
+    // Save base64 images if passed (accepts single base64 string or JSON array of base64 strings)
+    if (dto.Image1) {
+      let base64Array: string[] = [];
+      try {
+        if (typeof dto.Image1 === 'string' && dto.Image1.trim().startsWith('[')) {
+          base64Array = JSON.parse(dto.Image1);
+        } else {
+          base64Array = [dto.Image1];
+        }
+      } catch (e) {
+        base64Array = [dto.Image1];
+      }
+
+      for (const imgStr of base64Array) {
+        if (!imgStr) continue;
+        const encodedString = imgStr.split(',');
+        const base64Data = encodedString[1] || encodedString[0];
+        if (base64Data) {
+          const buffer = Buffer.from(base64Data, 'base64');
+          const filename = `${Date.now()}_${Math.round(Math.random() * 1e9)}.png`;
+          const uploadDir = './uploads/requests';
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+          const filePath = path.join(uploadDir, filename);
+          fs.writeFileSync(filePath, buffer);
+
+          // insert record into uploadimage table
+          await this.uploadImageRepo.save(
+            this.uploadImageRepo.create({
+              requestId: id,
+              imageName: filePath.replace(/\\/g, '/'),
+              userId: dto.userId || existing.userId || 0,
+            }),
+          );
+        }
       }
     }
 

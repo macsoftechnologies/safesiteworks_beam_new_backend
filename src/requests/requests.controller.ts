@@ -102,6 +102,10 @@ export class RequestsController {
       [
         { name: 'rams_file', maxCount: 10 },
         { name: 'rams_file[]', maxCount: 10 },
+        { name: 'images', maxCount: 10 },
+        { name: 'images[]', maxCount: 10 },
+        { name: 'fire_image', maxCount: 10 },
+        { name: 'fire_image[]', maxCount: 10 },
       ],
       requestMulterOptions,
     ),
@@ -109,14 +113,28 @@ export class RequestsController {
   async update(
     @Param('id') id: string,
     @Body() updateDto: UpdateRequestDto,
-    @UploadedFiles() files?: { rams_file?: any[]; 'rams_file[]'?: any[] },
+    @UploadedFiles()
+    files?: {
+      rams_file?: any[];
+      'rams_file[]'?: any[];
+      images?: any[];
+      'images[]'?: any[];
+      fire_image?: any[];
+      'fire_image[]'?: any[];
+    },
   ) {
     try {
       const ramsFiles = [
         ...(files?.rams_file || []),
         ...(files?.['rams_file[]'] || []),
       ];
-      const result = await this.requestsService.update(Number(id), updateDto, ramsFiles);
+      const imageFiles = [
+        ...(files?.images || []),
+        ...(files?.['images[]'] || []),
+        ...(files?.fire_image || []),
+        ...(files?.['fire_image[]'] || []),
+      ];
+      const result = await this.requestsService.update(Number(id), updateDto, ramsFiles, imageFiles);
       return result;
     } catch (error) {
       return {
