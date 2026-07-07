@@ -538,6 +538,29 @@ export class EmployeesService {
     return { statusCode: HttpStatus.OK, message: 'User Log Created' };
   }
 
+  async getUserLogs(
+    query: PaginationQueryDto,
+  ): Promise<{ statusCode: HttpStatus; data: UserLog[]; total: number; page: number; limit: number; totalPages: number }> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await this.userLogRepo.findAndCount({
+      order: { timestamp: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
   async getEmployeeCounts(): Promise<any> {
     return this.cache.getOrSet(
       'employees:analytics:counts',

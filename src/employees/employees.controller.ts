@@ -99,6 +99,38 @@ export class EmployeesController {
     }
   }
 
+  @Get('logs-reports')
+  @ApiOperation({ summary: 'Get all user activity logs (latest first)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20, description: 'Items per page (default: 20)' })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        statusCode: 200,
+        data: [
+          {
+            id: 1,
+            action: 'LOGIN',
+            body: '{}',
+            method: 'POST',
+            url: '/auth/login',
+            status: '200',
+            user: 'john@example.com',
+            timestamp: '2024-01-01T12:00:00.000Z',
+          },
+        ],
+        total: 100,
+        page: 1,
+        limit: 20,
+        totalPages: 5,
+      },
+    },
+  })
+  getUserLogs(@Query() query: PaginationQueryDto) {
+    return this.employeeService.getUserLogs(query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a single employee by ID' })
   @ApiParam({ name: 'id', type: Number, example: 1 })
