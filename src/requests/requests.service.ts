@@ -844,15 +844,35 @@ export class RequestsService {
 
     // Validate status transition
     const currentStatus = (existing.requestStatus || '').toLowerCase().trim();
-    let newStatus = '';
-    if (dto.Request_status !== undefined && dto.Request_status !== '') {
-      newStatus = dto.Request_status.toLowerCase().trim();
-    } else if (dto.status !== undefined) {
-      newStatus = dto.status === 1 ? 'pending' : 'cancelled'; // map basic integer status if needed
-    }
+    let isStatusChanged = false;
+    let finalRequestStatusForLog = 'Edited';
 
-    if (newStatus !== '' && newStatus !== currentStatus) {
-      await this.validateStatusTransitionAndRole(existing, newStatus, dto.userId ?? 0);
+    if (dto.Request_status !== undefined && dto.Request_status !== '') {
+      const normalizedNew = dto.Request_status.toLowerCase().trim();
+      if (normalizedNew !== currentStatus) {
+        try {
+          await this.validateStatusTransitionAndRole(existing, normalizedNew, dto.userId ?? 0);
+          isStatusChanged = true;
+          finalRequestStatusForLog = dto.Request_status;
+        } catch (error) {
+          // If the status transition is invalid (e.g. trying to revert Approved to Draft during edit),
+          // we silently ignore the status change and do NOT update requestStatus in the requests table.
+          isStatusChanged = false;
+          finalRequestStatusForLog = 'Edited';
+        }
+      }
+    } else if (dto.status !== undefined) {
+      const normalizedNew = dto.status === 1 ? 'pending' : 'cancelled';
+      if (normalizedNew !== currentStatus) {
+        try {
+          await this.validateStatusTransitionAndRole(existing, normalizedNew, dto.userId ?? 0);
+          isStatusChanged = true;
+          finalRequestStatusForLog = dto.status === 1 ? 'Pending' : 'Cancelled';
+        } catch (error) {
+          isStatusChanged = false;
+          finalRequestStatusForLog = 'Edited';
+        }
+      }
     }
 
     // Compare and build fieldChanges
@@ -1521,8 +1541,13 @@ export class RequestsService {
     addIfChanged('badgeNumbers', dto.Badge_Numbers, existing.badgeNumbers);
     addIfChanged('teamId', dto.teamId, existing.teamId);
     addIfChanged('notes', dto.notes, existing.notes);
-    addIfChanged('requestStatus', dto.Request_status, existing.requestStatus);
-    addIfChanged('status', dto.status, existing.status);
+    if (isStatusChanged) {
+      if (dto.Request_status !== undefined && dto.Request_status !== '') {
+        addIfChanged('requestStatus', dto.Request_status, existing.requestStatus);
+      } else if (dto.status !== undefined) {
+        addIfChanged('status', dto.status, existing.status);
+      }
+    }
     addIfChanged('permitType', dto.permit_type, existing.permitType);
     addIfChanged('permitUnder', dto.permit_under, existing.permitUnder);
     addIfChanged('newDate', dto.new_date, existing.newDate);
@@ -1828,7 +1853,7 @@ export class RequestsService {
     await this.createLogs(
       id,
       dto.userId || existing.userId || 0,
-      dto.Request_status || existing.requestStatus || 'Updated',
+      finalRequestStatusForLog,
       new Date(),
       finalChanges,
       0,
