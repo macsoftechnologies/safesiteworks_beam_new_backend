@@ -251,6 +251,8 @@
 
 
 import PDFDocument from 'pdfkit';
+import { join } from 'path';
+import { existsSync } from 'fs';
 
 // ─── Colour palette ──────────────────────────────────────────────────────────
 const C = {
@@ -313,6 +315,7 @@ function sectionBar(
   yesNoVal?: any,
   bgColor = C.primary,
   textColor = C.white,
+  logoName?: string,
 ) {
   ensureSpace(doc, 32);
   const y = doc.y;
@@ -321,9 +324,22 @@ function sectionBar(
   // Background rectangle
   doc.fillColor(bgColor).rect(MARGIN, y, CONTENT_W, BAR_H).fill();
 
+  let textX = MARGIN + 8;
+  if (logoName) {
+    const logoPath = join(process.cwd(), './src/images/logos', logoName);
+    if (existsSync(logoPath)) {
+      try {
+        doc.image(logoPath, MARGIN + 8, y + 4, { height: 18 });
+        textX = MARGIN + 32;
+      } catch (err) {
+        console.error(`Error drawing logo ${logoName} in PDF:`, err);
+      }
+    }
+  }
+
   // Title text — set position explicitly
   doc.fillColor(textColor).fontSize(10).font('Helvetica-Bold')
-    .text(title, MARGIN + 8, y + 8, { width: CONTENT_W - 110, lineBreak: false });
+    .text(title, textX, y + 8, { width: CONTENT_W - 110, lineBreak: false });
 
   // Yes / No radio indicators
   if (yesNoVal !== undefined) {
@@ -762,7 +778,9 @@ export function buildPermitPdf(data: any): Promise<Buffer> {
       }
       twoCol(doc, ['Site / Project', safeVal(data.Company_Name)], ['Building', safeVal(data.building_name)]);
       separator(doc);
-      twoCol(doc, ['Floor / Level', safeVal(data.Room_Type)], ['Area / Room', safeVal(data.Room_Nos)]);
+      twoCol(doc, ['Floor / Level', safeVal(data.Room_Type)], ['Zone', safeVal(data.zone_name)]);
+      separator(doc);
+      oneRow(doc, 'Specific Rooms', safeVal(data.room_names || data.Room_Nos));
       separator(doc);
 
       // ── Section 4: Tools & Workers ───────────────────────────────────────
@@ -795,236 +813,219 @@ export function buildPermitPdf(data: any): Promise<Buffer> {
       // ════════════════════════════════════════════════════════════════════
       // 6. HOTWORK
       // ════════════════════════════════════════════════════════════════════
-      sectionBar(doc, '6. Hotwork', data.Hot_work, C.hotwork, C.white);
-      if (Number(data.Hot_work) === 1) {
-        drawChecklistTable(doc, [
-          { q: 'Are there other tasks in progress in the area?', val: data.tasks_in_progress_in_the_area },
-          { q: 'Have you considered any alternative cold methods? (e.g. hydraulic cutters vs. angle grinder)', val: data.lighting_sufficiently },
-          { q: 'Have the team been informed about the specific risks based on task? (RAMS/Toolbox talk etc.)', val: data.spesific_risks_based_on_task },
-          { q: 'Is the work environment safely ensured? Have the necessary warning signs been placed?', val: data.work_environment_safety_ensured },
-          { q: 'Have the team been informed about the course of action in emergencies?', val: data.course_of_action_in_emergencies },
-          { q: 'Should a fire watch be established?', val: data.fire_watch_establish },
-          { q: 'Can you confirm that the flammable materials are removed from the work area?', val: data.combustible_material },
-          { q: 'Should safety measures be implemented to stop sparks from splattering on flooring or other surfaces?', val: data.safety_measures },
-          { q: 'Are fire extinguishers and fire blanket ready for use in the area?', val: data.extinguishers_and_fire_blanket },
-        ]);
-        oneRow(doc, 'Is there any welding activity?', yesNo(data.welding_activitiy));
-        if (Number(data.welding_activitiy) === 1) {
-          drawChecklistTable(doc, [
-            { q: 'The people who will do heat treatment had welder certificates?', val: data.heat_treatment },
-            { q: 'Should air extraction be established? (Welding fumes directly led to open air)', val: data.air_extraction_be_established },
-          ]);
-        }
-        twoCol(doc, ['Is it a low risk hotwork?', yesNo(data.low_risk_hotwork)], ['Is it a high risk hotwork?', yesNo(data.high_risk_hotwork)]);
-        twoCol(doc, ['Hot work checklist filled in?', yesNo(data.hot_work_checklist_filled)], ['Fire guard present?', yesNo(data.fire_guard_present)]);
+      const isHotWorkActive = Number(data.Hot_work) === 1;
+      sectionBar(doc, '6. Hotwork', data.Hot_work ?? 0, C.hotwork, C.white, 'HotWorks.png');
+      drawChecklistTable(doc, [
+        { q: 'Are there other tasks in progress in the area?', val: isHotWorkActive ? data.tasks_in_progress_in_the_area : 0 },
+        { q: 'Have you considered any alternative cold methods? (e.g. hydraulic cutters vs. angle grinder)', val: isHotWorkActive ? data.lighting_sufficiently : 0 },
+        { q: 'Have the team been informed about the specific risks based on task? (RAMS/Toolbox talk etc.)', val: isHotWorkActive ? data.spesific_risks_based_on_task : 0 },
+        { q: 'Is the work environment safely ensured? Have the necessary warning signs been placed?', val: isHotWorkActive ? data.work_environment_safety_ensured : 0 },
+        { q: 'Have the team been informed about the course of action in emergencies?', val: isHotWorkActive ? data.course_of_action_in_emergencies : 0 },
+        { q: 'Should a fire watch be established?', val: isHotWorkActive ? data.fire_watch_establish : 0 },
+        { q: 'Can you confirm that the flammable materials are removed from the work area?', val: isHotWorkActive ? data.combustible_material : 0 },
+        { q: 'Should safety measures be implemented to stop sparks from splattering on flooring or other surfaces?', val: isHotWorkActive ? data.safety_measures : 0 },
+        { q: 'Are fire extinguishers and fire blanket ready for use in the area?', val: isHotWorkActive ? data.extinguishers_and_fire_blanket : 0 },
+      ]);
+      const isWeldingActive = isHotWorkActive && Number(data.welding_activitiy) === 1;
+      oneRow(doc, 'Is there any welding activity?', yesNo(isHotWorkActive ? data.welding_activitiy : 0));
+      drawChecklistTable(doc, [
+        { q: 'The people who will do heat treatment had welder certificates?', val: isWeldingActive ? data.heat_treatment : 0 },
+        { q: 'Should air extraction be established? (Welding fumes directly led to open air)', val: isWeldingActive ? data.air_extraction_be_established : 0 },
+      ]);
+      twoCol(doc, ['Is it a low risk hotwork?', yesNo(isHotWorkActive ? data.low_risk_hotwork : 0)], ['Is it a high risk hotwork?', yesNo(isHotWorkActive ? data.high_risk_hotwork : 0)]);
+      twoCol(doc, ['Hot work checklist filled in?', yesNo(isHotWorkActive ? data.hot_work_checklist_filled : 0)], ['Fire guard present?', yesNo(isHotWorkActive ? data.fire_guard_present : 0)]);
 
-        if (data.h_heat_source !== undefined || data.h_workplace_check !== undefined) {
-          sectionBar(doc, 'Hotwork — Post Work Checks', undefined, C.hotwork, C.white);
-          drawChecklistTable(doc, [
-            { q: 'Has the work area been inspected for smoldering materials or residual heat?', val: data.h_heat_source },
-            { q: 'Have all tools and hot work equipment been safely removed from the work area?', val: data.h_workplace_check },
-            { q: 'Has the area been cleaned and restored to its original safe condition?', val: data.h_fire_detectors },
-          ]);
-          twoCol(doc,
-            ['1hr Check Time', (data.h_start_time && !String(data.h_start_time).startsWith('1970')) ? data.h_start_time : 'N/A'],
-            ['3hrs Check Time', (data.h_end_time && !String(data.h_end_time).startsWith('1970')) ? data.h_end_time : 'N/A']);
-        }
-      }
+      sectionBar(doc, 'Hotwork — Post Work Checks', undefined, C.hotwork, C.white, 'HotWorks.png');
+      drawChecklistTable(doc, [
+        { q: 'Has the work area been inspected for smoldering materials or residual heat?', val: isHotWorkActive ? data.h_heat_source : 0 },
+        { q: 'Have all tools and hot work equipment been safely removed from the work area?', val: isHotWorkActive ? data.h_workplace_check : 0 },
+        { q: 'Has the area been cleaned and restored to its original safe condition?', val: isHotWorkActive ? data.h_fire_detectors : 0 },
+      ]);
+      twoCol(doc,
+        ['1hr Check Time', (isHotWorkActive && data.h_start_time && !String(data.h_start_time).startsWith('1970')) ? data.h_start_time : 'N/A'],
+        ['3hrs Check Time', (isHotWorkActive && data.h_end_time && !String(data.h_end_time).startsWith('1970')) ? data.h_end_time : 'N/A']);
 
       // ════════════════════════════════════════════════════════════════════
       // 7. ELECTRICAL SYSTEMS
       // ════════════════════════════════════════════════════════════════════
-      sectionBar(doc, '7. Working on Site Temporary Electrical Systems', data.working_on_electrical_system, C.primary, C.yellow);
-      if (Number(data.working_on_electrical_system) === 1) {
-        drawChecklistTable(doc, [
-          { q: 'Is the responsible person for the area informed?', val: data.responsible_for_the_informed },
-          { q: 'Check if the board is de-energized — is it de-energized?', val: data.de_energized },
-          { q: 'Do you have risk assessment done (RAMS)?', val: data.do_risk_assessment },
-          { q: 'Secure the area against reconnection using LOTO (Lock-out/Tag-out) with at least a craftsman\'s padlock.', val: data.if_no_loto },
-          { q: 'Do appliances/devices that run on electricity have insulation?', val: data.electricity_have_isulation },
-        ]);
-      }
+      const isElecActive = Number(data.working_on_electrical_system) === 1;
+      sectionBar(doc, '7. Working on Site Temporary Electrical Systems', data.working_on_electrical_system ?? 0, C.primary, C.yellow, 'ElectricalSystems.png');
+      drawChecklistTable(doc, [
+        { q: 'Is the responsible person for the area informed?', val: isElecActive ? data.responsible_for_the_informed : 0 },
+        { q: 'Check if the board is de-energized — is it de-energized?', val: isElecActive ? data.de_energized : 0 },
+        { q: 'Do you have risk assessment done (RAMS)?', val: isElecActive ? data.do_risk_assessment : 0 },
+        { q: 'Secure the area against reconnection using LOTO (Lock-out/Tag-out) with at least a craftsman\'s padlock.', val: isElecActive ? data.if_no_loto : 0 },
+        { q: 'Do appliances/devices that run on electricity have insulation?', val: isElecActive ? data.electricity_have_isulation : 0 },
+      ]);
 
       // ════════════════════════════════════════════════════════════════════
       // 8. HAZARDOUS SUBSTANCES
       // ════════════════════════════════════════════════════════════════════
-      sectionBar(doc, '8. Working with Hazardous Substances / Chemicals', data.working_hazardious_substen, '#7a6000', C.white);
-      if (Number(data.working_hazardious_substen) === 1) {
-        drawChecklistTable(doc, [
-          { q: 'Relevant MAL-codes and safety datasheets for hazardous media have been presented?', val: data.relevant_mal },
-          { q: 'Is MSDS (Material Safety Data Sheet) submitted?', val: data.msds },
-          { q: 'Has the use of protective equipment been taken into account — and are they present?', val: data.equipment_taken_account },
-          { q: 'Has the use of ventilation been taken into account?', val: data.ventilation },
-          { q: 'Will the hazardous substances affect people outside the working area? (fumes)', val: data.hazardaus_substances },
-          { q: 'Are there means for safe storage and disposal? Is it mapped on the site plan?', val: data.storage_and_disposal },
-          { q: 'Are the spill kits in place and reachable in case of a leak or spill?', val: data.reachable_case },
-          { q: 'Is RAMS covering chemicals risk assessment for working with the substance?', val: data.checical_risk_assessment },
-        ]);
-      }
+      const isChemActive = Number(data.working_hazardious_substen) === 1;
+      sectionBar(doc, '8. Working with Hazardous Substances / Chemicals', data.working_hazardious_substen ?? 0, '#7a6000', C.white, 'substanceChemical.png');
+      drawChecklistTable(doc, [
+        { q: 'Relevant MAL-codes and safety datasheets for hazardous media have been presented?', val: isChemActive ? data.relevant_mal : 0 },
+        { q: 'Is MSDS (Material Safety Data Sheet) submitted?', val: isChemActive ? data.msds : 0 },
+        { q: 'Has the use of protective equipment been taken into account — and are they present?', val: isChemActive ? data.equipment_taken_account : 0 },
+        { q: 'Has the use of ventilation been taken into account?', val: isChemActive ? data.ventilation : 0 },
+        { q: 'Will the hazardous substances affect people outside the working area? (fumes)', val: isChemActive ? data.hazardaus_substances : 0 },
+        { q: 'Are there means for safe storage and disposal? Is it mapped on the site plan?', val: isChemActive ? data.storage_and_disposal : 0 },
+        { q: 'Are the spill kits in place and reachable in case of a leak or spill?', val: isChemActive ? data.reachable_case : 0 },
+        { q: 'Is RAMS covering chemicals risk assessment for working with the substance?', val: isChemActive ? data.checical_risk_assessment : 0 },
+      ]);
 
       // ════════════════════════════════════════════════════════════════════
       // 9. PRESSURE TESTING (Commissioning only)
       // ════════════════════════════════════════════════════════════════════
       if (data.permit_type === 'Commissioning') {
-        sectionBar(doc, '9. Pressure Testing of Equipment', data.pressure_testing_of_equipment, '#3ba9fd', C.white);
-        if (Number(data.pressure_testing_of_equipment) === 1) {
-          drawChecklistTable(doc, [
-            { q: 'Linewalk of the pipework/equipment done?', val: data.line_walk },
-            { q: 'Pressure test is coordinated with NNE C&Q?', val: data.pressure_test_coordinated },
-            { q: 'Is the pipework/equipment MIC (Mechanical Installation Complete)?', val: data.pipework_mic },
-            { q: 'LOTO plan attached to the work permit?', val: data.loto_plan_attached },
-            { q: 'Is the exclusion zone calculated and layout attached to work permit?', val: data.exclusion_zone_calculated },
-            { q: 'Pneumatic test?', val: data.pneumatic_hydrostatic },
-            { q: 'Hydrostatic test?', val: data.pressure_of_the_test },
-            { q: 'Safety Valves are calibrated and attached to the Pressure testing rig?', val: data.safety_valves_calibrated },
-          ]);
-          if (Number(data.pneumatic_hydrostatic) === 1)
-            oneRow(doc, 'Pressure of Pneumatic Test', `${safeVal(data.pressure_pneumatic)} BarG`);
-          if (Number(data.pressure_of_the_test) === 1)
-            oneRow(doc, 'Pressure of Hydrostatic Test', `${safeVal(data.pressure_hydrostatic)} BarG`);
-        }
+        const isPressureActive = Number(data.pressure_testing_of_equipment) === 1;
+        sectionBar(doc, '9. Pressure Testing of Equipment', data.pressure_testing_of_equipment ?? 0, '#3ba9fd', C.white, 'testingequipment.png');
+        drawChecklistTable(doc, [
+          { q: 'Linewalk of the pipework/equipment done?', val: isPressureActive ? data.line_walk : 0 },
+          { q: 'Pressure test is coordinated with NNE C&Q?', val: isPressureActive ? data.pressure_test_coordinated : 0 },
+          { q: 'Is the pipework/equipment MIC (Mechanical Installation Complete)?', val: isPressureActive ? data.pipework_mic : 0 },
+          { q: 'LOTO plan attached to the work permit?', val: isPressureActive ? data.loto_plan_attached : 0 },
+          { q: 'Is the exclusion zone calculated and layout attached to work permit?', val: isPressureActive ? data.exclusion_zone_calculated : 0 },
+          { q: 'Pneumatic test?', val: isPressureActive ? data.pneumatic_hydrostatic : 0 },
+          { q: 'Hydrostatic test?', val: isPressureActive ? data.pressure_of_the_test : 0 },
+          { q: 'Safety Valves are calibrated and attached to the Pressure testing rig?', val: isPressureActive ? data.safety_valves_calibrated : 0 },
+        ]);
+        if (Number(data.pneumatic_hydrostatic) === 1)
+          oneRow(doc, 'Pressure of Pneumatic Test', `${safeVal(data.pressure_pneumatic)} BarG`);
+        if (Number(data.pressure_of_the_test) === 1)
+          oneRow(doc, 'Pressure of Hydrostatic Test', `${safeVal(data.pressure_hydrostatic)} BarG`);
       }
 
       // ════════════════════════════════════════════════════════════════════
       // 10. WORKING AT HEIGHT
       // ════════════════════════════════════════════════════════════════════
-      sectionBar(doc, '10. Working at Height', data.working_at_height, C.height, C.white);
-      if (Number(data.working_at_height) === 1) {
-        drawChecklistTable(doc, [
-          { q: 'Has the working area been segregated or demarcated with hand barriers?', val: data.segragated_demarkated },
-          { q: 'Are suitable anchor points in place for lanyard attachments?', val: data.lanyard_attachments },
-          { q: 'In case of emergency is there a rescue plan in place?', val: data.rescue_plan },
-          { q: 'Has the work been planned to avoid hazards like falling objects, machine interference etc.?', val: data.avoid_hazards },
-          { q: 'Has the team had certified working at height training?', val: data.height_training },
-          { q: 'Will work be carried out under supervision of personnel with Working at Height training?', val: data.supervision },
-          { q: 'Full body harness with fall-preventing system deployed & twin lanyard provided?', val: data.shock_absorbing },
-          { q: 'Are working at height equipment (harness and lanyard) inspected and suitable?', val: data.height_equipments },
-          { q: 'Horizontal or vertical life line systems in place?', val: data.vertical_life },
-          { q: 'Are all tools secured from falling from height?', val: data.secured_falling },
-          { q: 'Have protective measures for dropped objects been established? (lanyards, nets, demarcation)', val: data.dropped_objects },
-          { q: 'Has proper and safe access and egress been ensured?', val: data.safe_acces },
-          { q: 'Are the weather conditions acceptable?', val: data.weather_acceptable },
-        ]);
-      }
+      const isHeightActive = Number(data.working_at_height) === 1;
+      sectionBar(doc, '10. Working at Height', data.working_at_height ?? 0, C.height, C.white, 'WorkingAtHight.png');
+      drawChecklistTable(doc, [
+        { q: 'Has the working area been segregated or demarcated with hand barriers?', val: isHeightActive ? data.segragated_demarkated : 0 },
+        { q: 'Are suitable anchor points in place for lanyard attachments?', val: isHeightActive ? data.lanyard_attachments : 0 },
+        { q: 'In case of emergency is there a rescue plan in place?', val: isHeightActive ? data.rescue_plan : 0 },
+        { q: 'Has the work been planned to avoid hazards like falling objects, machine interference etc.?', val: isHeightActive ? data.avoid_hazards : 0 },
+        { q: 'Has the team had certified working at height training?', val: isHeightActive ? data.height_training : 0 },
+        { q: 'Will work be carried out under supervision of personnel with Working at Height training?', val: isHeightActive ? data.supervision : 0 },
+        { q: 'Full body harness with fall-preventing system deployed & twin lanyard provided?', val: isHeightActive ? data.shock_absorbing : 0 },
+        { q: 'Are working at height equipment (harness and lanyard) inspected and suitable?', val: isHeightActive ? data.height_equipments : 0 },
+        { q: 'Horizontal or vertical life line systems in place?', val: isHeightActive ? data.vertical_life : 0 },
+        { q: 'Are all tools secured from falling from height?', val: isHeightActive ? data.secured_falling : 0 },
+        { q: 'Have protective measures for dropped objects been established? (lanyards, nets, demarcation)', val: isHeightActive ? data.dropped_objects : 0 },
+        { q: 'Has proper and safe access and egress been ensured?', val: isHeightActive ? data.safe_acces : 0 },
+        { q: 'Are the weather conditions acceptable?', val: isHeightActive ? data.weather_acceptable : 0 },
+      ]);
 
       // ════════════════════════════════════════════════════════════════════
       // 11. CONFINED SPACE
       // ════════════════════════════════════════════════════════════════════
-      sectionBar(doc, '11. Working in Confined Space', data.working_confined_spaces, C.confined, C.white);
-      if (Number(data.working_confined_spaces) === 1) {
-        drawChecklistTable(doc, [
-          { q: 'Is the tank/container cleaned so the task can take place without risk from vapours, gases etc.?', val: data.vapours_gases },
-          { q: 'Are oxygen measurement and LEL measurement done before starting the work?', val: data.lel_measurement },
-          { q: 'Are the container and all equipment on the container (including agitator) properly secured?', val: data.all_equipment },
-          { q: 'Are there safe entry and exit conditions? (e.g. ladder)', val: data.exit_conditions },
-          { q: 'Are means of communication for emergency rescue determined? (Siren, radio or telephone)', val: data.communication_emergency },
-          { q: 'Are rescue equipments for use in place and ready?', val: data.rescue_equipments },
-          { q: 'Are space and ventilation adequate?', val: data.space_ventilation },
-          { q: 'Is an oxygen meter provided for the work?', val: data.oxygen_meter },
-        ]);
-      }
+      const isConfinedActive = Number(data.working_confined_spaces) === 1;
+      sectionBar(doc, '11. Working in Confined Space', data.working_confined_spaces ?? 0, C.confined, C.white, 'ConfinedSpace.png');
+      drawChecklistTable(doc, [
+        { q: 'Is the tank/container cleaned so the task can take place without risk from vapours, gases etc.?', val: isConfinedActive ? data.vapours_gases : 0 },
+        { q: 'Are oxygen measurement and LEL measurement done before starting the work?', val: isConfinedActive ? data.lel_measurement : 0 },
+        { q: 'Are the container and all equipment on the container (including agitator) properly secured?', val: isConfinedActive ? data.all_equipment : 0 },
+        { q: 'Are there safe entry and exit conditions? (e.g. ladder)', val: isConfinedActive ? data.exit_conditions : 0 },
+        { q: 'Are means of communication for emergency rescue determined? (Siren, radio or telephone)', val: isConfinedActive ? data.communication_emergency : 0 },
+        { q: 'Are rescue equipments for use in place and ready?', val: isConfinedActive ? data.rescue_equipments : 0 },
+        { q: 'Are space and ventilation adequate?', val: isConfinedActive ? data.space_ventilation : 0 },
+        { q: 'Is an oxygen meter provided for the work?', val: isConfinedActive ? data.oxygen_meter : 0 },
+      ]);
 
       // ════════════════════════════════════════════════════════════════════
       // 12. EXCAVATION WORKS
       // ════════════════════════════════════════════════════════════════════
-      sectionBar(doc, '12. Excavation Works', data.excavation_works, C.excavation, C.white);
-      if (Number(data.excavation_works) === 1) {
-        drawChecklistTable(doc, [
-          { q: 'Is the excavation area segregated (1m from edge with hard barriers or 2m with soft barriers) before work begins?', val: data.excavation_segregated },
-          { q: 'Has the digging permit been obtained in accordance with Danish regulations and NN standards?', val: data.nn_standards },
-          { q: 'Does excavation require shoring?', val: data.excavation_shoring },
-          { q: 'Is the sloping correct in relation to the depth of the dig as per Danish regulations?', val: data.danish_regulation },
-          { q: 'Have proper and safe access and egress been provided?', val: data.safe_access_and_egress },
-          { q: 'Are correctly positioned ladders or correctly sloped stairways accessible?', val: data.correctly_sloped },
-          { q: 'Does all machinery have valid inspection dates?', val: data.inspection_dates },
-          { q: 'Have clearly marked drawings been submitted?', val: data.marked_drawings },
-          { q: 'Are the underground areas cleared from all electrical, piping and other services?', val: data.underground_areas_cleared },
-        ]);
-      }
+      const isExcavationActive = Number(data.excavation_works) === 1;
+      sectionBar(doc, '12. Excavation Works', data.excavation_works ?? 0, C.excavation, C.white, 'ExcavationWorks.png');
+      drawChecklistTable(doc, [
+        { q: 'Is the excavation area segregated (1m from edge with hard barriers or 2m with soft barriers) before work begins?', val: isExcavationActive ? data.excavation_segregated : 0 },
+        { q: 'Has the digging permit been obtained in accordance with Danish regulations and NN standards?', val: isExcavationActive ? data.nn_standards : 0 },
+        { q: 'Does excavation require shoring?', val: isExcavationActive ? data.excavation_shoring : 0 },
+        { q: 'Is the sloping correct in relation to the depth of the dig as per Danish regulations?', val: isExcavationActive ? data.danish_regulation : 0 },
+        { q: 'Have proper and safe access and egress been provided?', val: isExcavationActive ? data.safe_access_and_egress : 0 },
+        { q: 'Are correctly positioned ladders or correctly sloped stairways accessible?', val: isExcavationActive ? data.correctly_sloped : 0 },
+        { q: 'Does all machinery have valid inspection dates?', val: isExcavationActive ? data.inspection_dates : 0 },
+        { q: 'Have clearly marked drawings been submitted?', val: isExcavationActive ? data.marked_drawings : 0 },
+        { q: 'Are the underground areas cleared from all electrical, piping and other services?', val: isExcavationActive ? data.underground_areas_cleared : 0 },
+      ]);
 
       // ════════════════════════════════════════════════════════════════════
       // 13. CRANE & LIFTING
       // ════════════════════════════════════════════════════════════════════
-      sectionBar(doc, '13. Using Crane or Lifting', data.using_cranes_or_lifting, C.crane, C.white);
-      if (Number(data.using_cranes_or_lifting) === 1) {
-        drawChecklistTable(doc, [
-          { q: 'Is there an appointed person in charge of the lifting/crane operation?', val: data.appointed_person },
-          { q: 'Are the details of load (dimensions, SWL) and loading/unloading requirements provided by vendor or supplier?', val: data.vendor_supplier ?? data.vendor_supplies },
-          { q: 'Is lift plan submitted?', val: data.lift_plan },
-          { q: 'Has the correct crane/lifting equipment as stated in the lift plan been supplied and inspected?', val: data.supplied_and_inspected },
-          { q: 'Do the crane operators have the legally required certificates?', val: data.legal_required_certificates },
-          { q: 'Is laydown area suitable and prepared for lifting?', val: data.prapared_lifting },
-          { q: 'Is the entire area of the lifting task fenced off?', val: data.lifting_task_fenced },
-          { q: 'Have all overhead risks (cables, adjacent structures etc.) been identified and precautions implemented?', val: data.overhead_risks },
-        ]);
-      }
+      const isLiftingActive = Number(data.using_cranes_or_lifting) === 1;
+      sectionBar(doc, '13. Using Crane or Lifting', data.using_cranes_or_lifting ?? 0, C.crane, C.white, 'Craneslifting.png');
+      drawChecklistTable(doc, [
+        { q: 'Is there an appointed person in charge of the lifting/crane operation?', val: isLiftingActive ? data.appointed_person : 0 },
+        { q: 'Are the details of load (dimensions, SWL) and loading/unloading requirements provided by vendor or supplier?', val: isLiftingActive ? (data.vendor_supplier ?? data.vendor_supplies) : 0 },
+        { q: 'Is lift plan submitted?', val: isLiftingActive ? data.lift_plan : 0 },
+        { q: 'Has the correct crane/lifting equipment as stated in the lift plan been supplied and inspected?', val: isLiftingActive ? data.supplied_and_inspected : 0 },
+        { q: 'Do the crane operators have the legally required certificates?', val: isLiftingActive ? data.legal_required_certificates : 0 },
+        { q: 'Is laydown area suitable and prepared for lifting?', val: isLiftingActive ? data.prapared_lifting : 0 },
+        { q: 'Is the entire area of the lifting task fenced off?', val: isLiftingActive ? data.lifting_task_fenced : 0 },
+        { q: 'Have all overhead risks (cables, adjacent structures etc.) been identified and precautions implemented?', val: isLiftingActive ? data.overhead_risks : 0 },
+      ]);
 
       // ════════════════════════════════════════════════════════════════════
       // COMMISSIONING-ONLY SECTIONS
       // ════════════════════════════════════════════════════════════════════
       if (data.permit_type === 'Commissioning') {
+        const isPowerActive = Number(data.power_on) === 1;
+        sectionBar(doc, '14. Energising, Isolating & Working on Live Electrical Systems', data.power_on ?? 0, C.poweron, C.white, 'electrical_works.png');
 
-        sectionBar(doc, '14. Energising, Isolating & Working on Live Electrical Systems', data.power_on, C.poweron, C.white);
-        if (Number(data.power_on) === 1) {
+        const isEnergisingActive = isPowerActive && Number(data.energising_equipment) === 1;
+        sectionBar(doc, '14a. Energising Electrical Equipment', data.energising_equipment ?? 0, C.poweron, C.white, 'electrical_works.png');
+        drawChecklistTable(doc, [
+          { q: 'Is the responsible person for the area informed?', val: isEnergisingActive ? data.responsible_for_the_area : 0 },
+          { q: 'Do you have a risk assessment done?', val: isEnergisingActive ? data.risk_assessment_done : 0 },
+          { q: 'Barriers & Signage in place?', val: isEnergisingActive ? data.barriers_signage : 0 },
+          { q: 'Arc flash boundary and PPE evaluated?', val: isEnergisingActive ? data.arc_flash : 0 },
+          { q: 'Have all the cables that need to be energized been tested?', val: isEnergisingActive ? data.energized_been_tested : 0 },
+          { q: 'Have all punches been closed?', val: isEnergisingActive ? data.punches_been_closed : 0 },
+          { q: 'Is Electrical Checklist completed?', val: isEnergisingActive ? data.toct_checklist : 0 },
+          { q: 'Have you informed and aligned with EL LOTO team and provided an energisation request form?', val: isEnergisingActive ? data.informed_aligned : 0 },
+        ]);
 
-          sectionBar(doc, '14a. Energising Electrical Equipment', data.energising_equipment, C.poweron, C.white);
-          if (Number(data.energising_equipment) === 1) {
-            drawChecklistTable(doc, [
-              { q: 'Is the responsible person for the area informed?', val: data.responsible_for_the_area },
-              { q: 'Do you have a risk assessment done?', val: data.risk_assessment_done },
-              { q: 'Barriers & Signage in place?', val: data.barriers_signage },
-              { q: 'Arc flash boundary and PPE evaluated?', val: data.arc_flash },
-              { q: 'Have all the cables that need to be energized been tested?', val: data.energized_been_tested },
-              { q: 'Have all punches been closed?', val: data.punches_been_closed },
-              { q: 'Is Electrical Checklist completed?', val: data.toct_checklist },
-              { q: 'Have you informed and aligned with EL LOTO team and provided an energisation request form?', val: data.informed_aligned },
-            ]);
-          }
+        const isIsolatingActive = isPowerActive && Number(data.isolating_live) === 1;
+        sectionBar(doc, '14b. Isolating Live Electrical Systems for Maintenance or Modification', data.isolating_live ?? 0, C.poweron, C.white, 'electrical_works.png');
+        drawChecklistTable(doc, [
+          { q: 'Is the responsible person for the area informed?', val: isIsolatingActive ? (data.isolating_resposible ?? data.isolating_responsible) : 0 },
+          { q: 'Has a Risk Assessment been completed?', val: isIsolatingActive ? data.isolating_risk_assessment : 0 },
+          { q: 'Have C&Q LOTO been informed and tasks co-ordinated for shutdown work?', val: isIsolatingActive ? data.cq_informed : 0 },
+          { q: 'Have C&Q LOTO been provided marked up single line diagrams/electrical drawings?', val: isIsolatingActive ? data.cq_provided : 0 },
+          { q: 'Has a De-Energisation Request form and supporting documentation been provided to C&Q LOTO?', val: isIsolatingActive ? data.de_energisation_request : 0 },
+          { q: 'Are all barriers, signage and PPE prepared for the task?', val: isIsolatingActive ? data.ppe_prepared : 0 },
+          { q: 'Has absence of voltage been verified and proven dead?', val: isIsolatingActive ? data.absence_of_voltage : 0 },
+          { q: 'Has stored energy been discharged?', val: isIsolatingActive ? data.stored_energy : 0 },
+          { q: 'Have any secondary or back up power supplies been confirmed and accounted for?', val: isIsolatingActive ? data.backup_power : 0 },
+        ]);
 
-          sectionBar(doc, '14b. Isolating Live Electrical Systems for Maintenance or Modification', data.isolating_live, C.poweron, C.white);
-          if (Number(data.isolating_live) === 1) {
-            drawChecklistTable(doc, [
-              { q: 'Is the responsible person for the area informed?', val: data.isolating_resposible ?? data.isolating_responsible },
-              { q: 'Has a Risk Assessment been completed?', val: data.isolating_risk_assessment },
-              { q: 'Have C&Q LOTO been informed and tasks co-ordinated for shutdown work?', val: data.cq_informed },
-              { q: 'Have C&Q LOTO been provided marked up single line diagrams/electrical drawings?', val: data.cq_provided },
-              { q: 'Has a De-Energisation Request form and supporting documentation been provided to C&Q LOTO?', val: data.de_energisation_request },
-              { q: 'Are all barriers, signage and PPE prepared for the task?', val: data.ppe_prepared },
-              { q: 'Has absence of voltage been verified and proven dead?', val: data.absence_of_voltage },
-              { q: 'Has stored energy been discharged?', val: data.stored_energy },
-              { q: 'Have any secondary or back up power supplies been confirmed and accounted for?', val: data.backup_power },
-            ]);
-          }
+        const isWorkingNearLiveActive = isPowerActive && Number(data.working_near_live) === 1;
+        sectionBar(doc, '14c. Working on OR near Live Electrical Systems', data.working_near_live ?? 0, C.poweron, C.white, 'electrical_works.png');
+        drawChecklistTable(doc, [
+          { q: 'Live work is unavoidable and justified?', val: isWorkingNearLiveActive ? data.unavoidable : 0 },
+          { q: 'De-energisation is not reasonably practicable?', val: isWorkingNearLiveActive ? data.reasonably_practicable : 0 },
+          { q: 'Live work authorised by electrical responsible person?', val: isWorkingNearLiveActive ? data.work_authorised : 0 },
+          { q: 'Risk assessment has been completed?', val: isWorkingNearLiveActive ? data.working_risk_assessment : 0 },
+          { q: 'Arc flash boundary and PPE evaluated?', val: isWorkingNearLiveActive ? data.working_arc_boundary : 0 },
+          { q: 'Barriers and Signage in place?', val: isWorkingNearLiveActive ? data.working_barriers : 0 },
+          { q: 'Insulated tools and approved test equipment to be used?', val: isWorkingNearLiveActive ? data.insulated_tools : 0 },
+          { q: 'Work will always be carried out with a second person to assist in the event of an emergency?', val: isWorkingNearLiveActive ? data.event_of_emergency : 0 },
+        ]);
 
-          sectionBar(doc, '14c. Working on OR near Live Electrical Systems', data.working_near_live, C.poweron, C.white);
-          if (Number(data.working_near_live) === 1) {
-            drawChecklistTable(doc, [
-              { q: 'Live work is unavoidable and justified?', val: data.unavoidable },
-              { q: 'De-energisation is not reasonably practicable?', val: data.reasonably_practicable },
-              { q: 'Live work authorised by electrical responsible person?', val: data.work_authorised },
-              { q: 'Risk assessment has been completed?', val: data.working_risk_assessment },
-              { q: 'Arc flash boundary and PPE evaluated?', val: data.working_arc_boundary },
-              { q: 'Barriers and Signage in place?', val: data.working_barriers },
-              { q: 'Insulated tools and approved test equipment to be used?', val: data.insulated_tools },
-              { q: 'Work will always be carried out with a second person to assist in the event of an emergency?', val: data.event_of_emergency },
-            ]);
-          }
-        }
-
-        sectionBar(doc, '15. Energization of Mechanical Equipment', data.pressurization, C.pressurize, C.primary);
-        if (Number(data.pressurization) === 1) {
-          drawChecklistTable(doc, [
-            { q: 'Pressure test performed and approved?', val: data.performed_approved },
-            { q: 'Flushing approved?', val: data.flushing_approved },
-            { q: 'MC approved?', val: data.mc_approved },
-            { q: 'Walkdown with Visual inspection performed?', val: data.visual_inspection },
-            { q: 'LOTO plan approved and installed by LOTO officer?', val: data.loto_plan_approved },
-            { q: 'Ensure Safety Valves follow Media Code?', val: data.follow_media_code },
-            { q: 'C&Q Safety signs are in place?', val: data.cq_safety_signs },
-          ]);
-          if (Number(data.mc_approved) === 1)
-            oneRow(doc, 'MC Number', safeVal(data.mc_number_text));
-        }
+        const isPressurizeActive = Number(data.pressurization) === 1;
+        sectionBar(doc, '15. Energization of Mechanical Equipment', data.pressurization ?? 0, C.pressurize, C.primary, 'mechanical1.png');
+        drawChecklistTable(doc, [
+          { q: 'Pressure test performed and approved?', val: isPressurizeActive ? data.performed_approved : 0 },
+          { q: 'Flushing approved?', val: isPressurizeActive ? data.flushing_approved : 0 },
+          { q: 'MC approved?', val: isPressurizeActive ? data.mc_approved : 0 },
+          { q: 'Walkdown with Visual inspection performed?', val: isPressurizeActive ? data.visual_inspection : 0 },
+          { q: 'LOTO plan approved and installed by LOTO officer?', val: isPressurizeActive ? data.loto_plan_approved : 0 },
+          { q: 'Ensure Safety Valves follow Media Code?', val: isPressurizeActive ? data.follow_media_code : 0 },
+          { q: 'C&Q Safety signs are in place?', val: isPressurizeActive ? data.cq_safety_signs : 0 },
+        ]);
+        if (Number(data.mc_approved) === 1)
+          oneRow(doc, 'MC Number', safeVal(data.mc_number_text));
 
         if (data.work_type) {
           sectionBar(doc, 'Type of Work');
@@ -1044,16 +1045,6 @@ export function buildPermitPdf(data: any): Promise<Buffer> {
       // PPE
       // ════════════════════════════════════════════════════════════════════
       sectionBar(doc, 'PPE Requirements');
-      doc.fillColor(C.primary).fontSize(9).font('Helvetica-Bold')
-        .text('Mandatory PPE (always required):', MARGIN, doc.y, { width: CONTENT_W });
-      doc.fillColor(C.dark).fontSize(9).font('Helvetica')
-        .text('• Hard Hat   • Safety Shoes   • High Visibility Vest   • Long Pants   • Specific Gloves',
-          MARGIN + 10, doc.y + 2, { width: CONTENT_W });
-      doc.moveDown(0.6);
-
-      doc.fillColor(C.primary).fontSize(9).font('Helvetica-Bold')
-        .text('Task Specific PPE:', MARGIN, doc.y, { width: CONTENT_W });
-      doc.moveDown(0.3);
 
       [
         { label: 'Eye Protection', val: data.eye_protection },

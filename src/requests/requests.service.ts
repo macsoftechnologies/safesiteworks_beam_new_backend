@@ -4050,7 +4050,14 @@ export class RequestsService {
         'description_of_activity',
         subTables?.ext?.descriptionOfActivity,
       );
-      checkRequired('work_type', subTables?.ext?.workType);
+      // work_type is only required for Commissioning permit type
+      const resolvedPermitType = String(
+        dto.permit_type || (existing?.permitType) || '',
+      ).toLowerCase().trim();
+      if (resolvedPermitType === 'commissioning') {
+        checkRequired('work_type', subTables?.ext?.workType);
+      }
+
       const workTypeVal = String(
         getValue('work_type', subTables?.ext?.workType) || '',
       )
@@ -4075,12 +4082,13 @@ export class RequestsService {
       checkCheckbox('lighting_begin_work', subTables?.gen?.lightingBeginWork);
       checkCheckbox('specific_risks', subTables?.gen?.specificRisks);
       checkCheckbox('environment_ensured', subTables?.gen?.environmentEnsured);
+      // course_of_action must be validated for ALL permit types.
+      // A value of 0 (No) is a valid selection — only throw error when completely absent.
       const courseOfAction = getMultiValue(
         ['course_of_action', 'course_of_actions'],
         subTables?.gen?.courseOfActions,
       );
-      const courseOfActionNum = Number(courseOfAction);
-      if (courseOfActionNum !== 1 && courseOfActionNum !== 2) {
+      if (courseOfAction === undefined || courseOfAction === null) {
         errors.push('course_of_action must be checked');
       }
       checkRequired('other_ppe', subTables?.ppe?.otherPpe);
@@ -4520,6 +4528,7 @@ export class RequestsService {
     const flatObj: any = {
       id: req.id,
       userId: req.userId || '',
+      created_by_user: (req as any).user?.username || '',
       Company_Name: req.companyName || '',
       PermitNo: req.permitNo || '',
       Sub_Contractor_Id: req.subContractorId || '',
