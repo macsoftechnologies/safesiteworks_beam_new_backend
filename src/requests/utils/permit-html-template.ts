@@ -2,31 +2,21 @@ import { join } from 'path';
 import { getBase64Image } from './image-utils';
 
 export function generatePermitHtml(data: any): string {
-  const leftLogo = getBase64Image(join(process.cwd(), './newbeam1/images/left_side.jpeg'));
-  const rightLogo = getBase64Image(join(process.cwd(), './newbeam1/images/right_side.jpeg'));
-  const attachFileIcon = getBase64Image(join(process.cwd(), './newbeam1/images/attach-file.png'));
+  const imgEyeProtection = getBase64Image(join(process.cwd(), 'src/images/safetyIcons/Eyeprotection.png'));
+  const imgFallProtection = getBase64Image(join(process.cwd(), 'src/images/safetyIcons/Fallprotection.png'));
+  const imgHearingProtection = getBase64Image(join(process.cwd(), 'src/images/safetyIcons/Hearingprotection.png'));
+  const imgRespiratoryProtection = getBase64Image(join(process.cwd(), 'src/images/safetyIcons/Respiratoryprotection.png'));
 
-  const imgHardHat = getBase64Image(join(process.cwd(), './newbeam1/images/HardHat.png'));
-  const imgSafetyShoes = getBase64Image(join(process.cwd(), './newbeam1/images/Safetyshoes.png'));
-  const imgHighVisibility = getBase64Image(join(process.cwd(), './newbeam1/images/HighVisibility.png'));
-  const imgLongPants = getBase64Image(join(process.cwd(), './newbeam1/images/Longpants.png'));
-  const imgSpecificGloves = getBase64Image(join(process.cwd(), './newbeam1/images/SpecificGloves.png'));
-
-  const imgEyeProtection = getBase64Image(join(process.cwd(), './newbeam1/images/Eyeprotection.png'));
-  const imgFallProtection = getBase64Image(join(process.cwd(), './newbeam1/images/Fallprotection.png'));
-  const imgHearingProtection = getBase64Image(join(process.cwd(), './newbeam1/images/Hearingprotection.png'));
-  const imgRespiratoryProtection = getBase64Image(join(process.cwd(), './newbeam1/images/Respiratoryprotection.png'));
-
-  const imgHotWorks = getBase64Image(join(process.cwd(), './newbeam1/images/HotWorks.png'));
-  const imgElectricalSystems = getBase64Image(join(process.cwd(), './newbeam1/images/ElectricalSystems.png'));
-  const imgSubstanceChemical = getBase64Image(join(process.cwd(), './newbeam1/images/substanceChemical.png'));
-  const imgTestingEquipment = getBase64Image(join(process.cwd(), './newbeam1/images/testingequipment.png'));
-  const imgWorkingAtHight = getBase64Image(join(process.cwd(), './newbeam1/images/WorkingAtHight.png'));
-  const imgConfinedSpace = getBase64Image(join(process.cwd(), './newbeam1/images/ConfinedSpace.png'));
-  const imgExcavationWorks = getBase64Image(join(process.cwd(), './newbeam1/images/ExcavationWorks.png'));
-  const imgCranesLifting = getBase64Image(join(process.cwd(), './newbeam1/images/Craneslifting.png'));
-  const imgElectricalWorks = getBase64Image(join(process.cwd(), './newbeam1/images/electrical_works.png'));
-  const imgMechanicalWorks = getBase64Image(join(process.cwd(), './newbeam1/images/mechanical1.png'));
+  const imgHotWorks = getBase64Image(join(process.cwd(), 'src/images/logos/HotWorks.png'));
+  const imgElectricalSystems = getBase64Image(join(process.cwd(), 'src/images/logos/ElectricalSystems.png'));
+  const imgSubstanceChemical = getBase64Image(join(process.cwd(), 'src/images/logos/substanceChemical.png'));
+  const imgTestingEquipment = getBase64Image(join(process.cwd(), 'src/images/logos/testingequipment.png'));
+  const imgWorkingAtHight = getBase64Image(join(process.cwd(), 'src/images/logos/WorkingAtHight.png'));
+  const imgConfinedSpace = getBase64Image(join(process.cwd(), 'src/images/logos/ConfinedSpace.png'));
+  const imgExcavationWorks = getBase64Image(join(process.cwd(), 'src/images/logos/ExcavationWorks.png'));
+  const imgCranesLifting = getBase64Image(join(process.cwd(), 'src/images/logos/Craneslifting.png'));
+  const imgElectricalWorks = getBase64Image(join(process.cwd(), 'src/images/logos/electrical_works.png'));
+  const imgMechanicalWorks = getBase64Image(join(process.cwd(), 'src/images/logos/mechanical1.png'));
 
   // Format Helper for Date
   const formatDateOnly = (dateStr: any) => {
@@ -319,24 +309,284 @@ export function generatePermitHtml(data: any): string {
     return '8 hrs';
   };
 
-  // Map status to a step index (0 to 4)
+  // Map status to dynamic steps list based on logs history
   const requestStatus = getStatusText();
-  let activeStepIndex = 0; // Draft
-  if (requestStatus === 'Submitted' || requestStatus === 'Pending') {
-    activeStepIndex = 1;
-  } else if (requestStatus === 'Approved') {
-    activeStepIndex = 2;
-  } else if (requestStatus === 'Open' || requestStatus === 'Opened' || requestStatus === 'Opened/Active') {
-    activeStepIndex = 3;
-  } else if (requestStatus === 'Closed') {
-    activeStepIndex = 4;
+  const logsList = (data.logs || []).filter(
+    (l: any) => l.requestType && l.requestType.trim() !== 'Edited',
+  );
+
+  const findLogByType = (types: string[]) => {
+    return logsList.find((l: any) =>
+      types.includes(l.requestType.toLowerCase().trim()),
+    );
+  };
+
+  const logDraft = findLogByType(['draft', 'created']);
+  const logHold = findLogByType(['hold']);
+  const logPreApproved = findLogByType(['pre-approved', 'pre_approved']);
+  const logApproved = findLogByType(['approved']);
+  const logOpened = findLogByType(['opened', 'open', 'opened/active']);
+  const logClosed = findLogByType(['closed']);
+  const logRejected = findLogByType(['rejected', 'reject']);
+  const logCancelled = findLogByType(['cancelled', 'cancel']);
+
+  // Build the list of steps for the tracking bar
+  const trackingSteps: {
+    label: string;
+    log?: any;
+    iconType: string;
+  }[] = [];
+
+  // Step 1: Draft or Hold
+  const firstStepLabel = logDraft ? 'Draft' : 'Hold';
+  const firstStepLog = logDraft || logHold;
+  trackingSteps.push({
+    label: firstStepLabel,
+    log: firstStepLog,
+    iconType: firstStepLabel.toLowerCase(),
+  });
+
+  // Check Pre-Approved
+  if (logPreApproved || requestStatus.toLowerCase() === 'pre-approved') {
+    trackingSteps.push({
+      label: 'Pre-Approved',
+      log: logPreApproved,
+      iconType: 'pre-approved',
+    });
   }
 
+  // Branch for Rejected vs Approved
+  if (logRejected || requestStatus.toLowerCase() === 'rejected') {
+    trackingSteps.push({
+      label: 'Rejected',
+      log: logRejected,
+      iconType: 'rejected',
+    });
+  } else {
+    // Approved
+    trackingSteps.push({
+      label: 'Approved',
+      log: logApproved,
+      iconType: 'approved',
+    });
+
+    // Check if Cancelled after approved
+    if (logCancelled || requestStatus.toLowerCase() === 'cancelled') {
+      trackingSteps.push({
+        label: 'Cancelled',
+        log: logCancelled,
+        iconType: 'cancelled',
+      });
+    } else {
+      // Standard flow: Opened -> Closed
+      trackingSteps.push({
+        label: 'Opened',
+        log: logOpened,
+        iconType: 'opened',
+      });
+      trackingSteps.push({
+        label: 'Closed',
+        log: logClosed,
+        iconType: 'closed',
+      });
+    }
+  }
+
+  // Find active step index: the last step in the list that has a log record
+  let activeStepIndex = 0;
+  for (let i = 0; i < trackingSteps.length; i++) {
+    if (trackingSteps[i].log) {
+      activeStepIndex = i;
+    }
+  }
+
+  // Percentage of progress line
+  const progressPercent =
+    trackingSteps.length > 1
+      ? (activeStepIndex / (trackingSteps.length - 1)) * 100
+      : 0;
+
   const getStepClass = (stepIdx: number) => {
-    if (activeStepIndex === stepIdx) return 'step-active';
-    if (activeStepIndex > stepIdx) return 'step-completed';
-    return 'step-upcoming';
+    const step = trackingSteps[stepIdx];
+    let baseClass = 'step-upcoming';
+    if (activeStepIndex === stepIdx) {
+      baseClass = 'step-active';
+    } else if (activeStepIndex > stepIdx) {
+      baseClass = 'step-completed';
+    }
+
+    if (step.label === 'Rejected') {
+      return `${baseClass} step-rejected`;
+    }
+    if (step.label === 'Cancelled') {
+      return `${baseClass} step-cancelled`;
+    }
+    return baseClass;
   };
+
+  const toSvgDataUrl = (svgContent: string) => {
+    const base64 = Buffer.from(svgContent.trim()).toString('base64');
+    return `data:image/svg+xml;base64,${base64}`;
+  };
+
+  const locationPinDataUrl = toSvgDataUrl(`
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#64748b" stroke-width="2" width="14" height="14">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  `);
+
+  const statusIconDataUrl = toSvgDataUrl(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="#2563eb" width="20" height="20">
+      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+    </svg>
+  `);
+
+  const companyIconDataUrl = toSvgDataUrl(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="#ef4444" width="20" height="20">
+      <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-3a1 1 0 00-1-1H7a1 1 0 00-1 1v3a1 1 0 01-1 1H3a1 1 0 110-2V4zm2 2h4v2H6V6zm10 4h-4v2h4v-2z" clip-rule="evenodd" />
+    </svg>
+  `);
+
+  const calendarIconDataUrl = toSvgDataUrl(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="#f97316" width="20" height="20">
+      <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd" />
+    </svg>
+  `);
+
+  const workersIconDataUrl = toSvgDataUrl(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="#16a34a" width="20" height="20">
+      <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+    </svg>
+  `);
+
+  const durationIconDataUrl = toSvgDataUrl(`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="#64748b" width="20" height="20">
+      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+    </svg>
+  `);
+
+  const getCardHeaderIcon = (name: string) => {
+    let svgContent = '';
+    if (name === 'location') {
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#475569" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>`;
+    } else if (name === 'tools') {
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#475569" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>`;
+    } else if (name === 'safety') {
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#475569" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>`;
+    } else if (name === 'users') {
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#475569" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>`;
+    } else if (name === 'hazards') {
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#dc2626" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+    } else if (name === 'check') {
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#475569" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>`;
+    } else if (name === 'confirmations') {
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#475569" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>`;
+    } else if (name === 'attachments') {
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#475569" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 11-2.828-2.828l6.414-6.586a4 4 0 015.656 5.656l-6.415 6.585a6 6 0 11-8.486-8.486L10.5 10" /></svg>`;
+    } else if (name === 'metadata') {
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#475569" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+    } else if (name === 'hra-main') {
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#475569" stroke-width="2" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>`;
+    } else if (name === 'no-hra-alert') {
+      svgContent = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#94a3b8" stroke-width="2" width="48" height="48"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+    }
+    return `
+      <img src="${toSvgDataUrl(svgContent)}" style="width: ${name === 'hra-main' ? '24px' : '20px'}; height: ${name === 'hra-main' ? '24px' : '20px'}; display: block;" />
+    `;
+  };
+
+  const getStepIconSvg = (iconType: string, color: string) => {
+    switch (iconType) {
+      case 'draft':
+      case 'hold':
+        return `
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="${color}" stroke-width="2" width="20" height="20">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        `;
+      case 'pre-approved':
+        return `
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="${color}" stroke-width="2" width="20" height="20">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+        `;
+      case 'approved':
+        return `
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="${color}" stroke-width="2" width="20" height="20">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-16 0 9 9 0 0116 0z" />
+          </svg>
+        `;
+      case 'opened':
+        return `
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="${color}" stroke-width="2" width="20" height="20">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        `;
+      case 'closed':
+        return `
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="${color}" stroke-width="2" width="20" height="20">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        `;
+      case 'rejected':
+        return `
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="${color}" stroke-width="2" width="20" height="20">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        `;
+      case 'cancelled':
+        return `
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="${color}" stroke-width="2" width="20" height="20">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+        `;
+      default:
+        return '';
+    }
+  };
+
+  const getStepIconDataUrl = (iconType: string, color: string) => {
+    const svgStr = getStepIconSvg(iconType, color);
+    const base64 = Buffer.from(svgStr.trim()).toString('base64');
+    return `data:image/svg+xml;base64,${base64}`;
+  };
+
+  const getStepHtml = (step: any, idx: number) => {
+    const metaHtml = step.log
+      ? `
+        <div class="step-meta" style="font-size: 10px; color: #64748b; margin-top: 6px; line-height: 1.3; font-weight: 500; word-break: break-all; max-width: 100px;">
+          <div>${formatDateTime(step.log.createdTime)}</div>
+          <div style="font-weight: 600; color: #475569; margin-top: 1px;">By: ${step.log.user?.username || `User #${step.log.userId}` || ''}</div>
+        </div>
+      `
+      : '';
+
+    let iconColor = '#94a3b8';
+    const isCompleted = activeStepIndex > idx;
+    const isActive = activeStepIndex === idx;
+    if (isCompleted) {
+      iconColor = '#ffffff';
+    } else if (isActive) {
+      if (step.label === 'Rejected' || step.label === 'Cancelled') {
+        iconColor = '#ffffff';
+      } else {
+        iconColor = '#2563eb';
+      }
+    }
+
+    return `
+      <div class="stepper-step ${getStepClass(idx)}">
+        <div class="step-circle">
+          <img src="${getStepIconDataUrl(step.iconType, iconColor)}" style="width: 20px; height: 20px; display: block;" />
+        </div>
+        <div class="step-label">${step.label}</div>
+        ${metaHtml}
+      </div>
+    `;
+  };
+
+  const stepperStepsHtml = trackingSteps.map((step, idx) => getStepHtml(step, idx)).join('');
 
   const getStageName = () => {
     if (activeStepIndex === 0) return 'Drafting';
@@ -378,13 +628,13 @@ export function generatePermitHtml(data: any): string {
 
   const renderActiveHazardCards = () => {
     let html = '';
-    
+
     if (Number(data.Hot_work) === 1) {
       const riskLevelText = Number(data.high_risk_hotwork) === 1 ? 'High Risk' : 'Low Risk';
       const riskLevelClass = Number(data.high_risk_hotwork) === 1 ? 'text-danger' : 'text-success';
       const checklistFilled = Number(data.hot_work_checklist_filled) === 1;
       const areaIsolated = Number(data.work_environment_safety_ensured) === 1;
-      
+
       html += `
         <div class="active-hazard-card mb-3">
           <div class="active-hazard-header">
@@ -586,9 +836,9 @@ export function generatePermitHtml(data: any): string {
   // Compile complex map loops to safe HTML variables BEFORE starting the return string literal
   const attachmentsHtml = data.files && data.files.length > 0
     ? data.files.map((file: any) => {
-        const filename = file.ramsFile ? file.ramsFile.split('/').pop() : 'Attachment';
-        return `
-          <a href="/requests/files/${file.ramsFileId}" target="_blank" class="attachment-box">
+      const filename = file.ramsFile ? file.ramsFile.split('/').pop() : 'Attachment';
+      return `
+          <a href="/requests/files/${file.ramsFileId}" download class="attachment-box">
             <div class="attachment-icon-wrap">
               <svg class="attachment-file-icon text-danger" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -605,7 +855,7 @@ export function generatePermitHtml(data: any): string {
             </div>
           </a>
         `;
-      }).join('')
+    }).join('')
     : '<p class="text-muted">No attachments.</p>';
 
   const imagesHtml = data.images && data.images.length > 0
@@ -851,8 +1101,8 @@ export function generatePermitHtml(data: any): string {
     .stepper-line {
       position: absolute;
       top: 20px;
-      left: 80px;
-      right: 80px;
+      left: 95px;
+      right: 95px;
       height: 4px;
       background-color: #e2e8f0;
       z-index: 1;
@@ -877,7 +1127,7 @@ export function generatePermitHtml(data: any): string {
       flex-direction: column;
       align-items: center;
       text-align: center;
-      width: 80px;
+      width: 110px;
     }
     .step-circle {
       width: 44px;
@@ -926,6 +1176,32 @@ export function generatePermitHtml(data: any): string {
       background-color: #f8fafc;
       border-color: #e2e8f0;
       color: #94a3b8;
+    }
+
+    /* Rejected State Style */
+    .step-completed.step-rejected .step-circle,
+    .step-active.step-rejected .step-circle {
+      background-color: #ef4444 !important;
+      border-color: #ef4444 !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2) !important;
+    }
+    .step-completed.step-rejected .step-label,
+    .step-active.step-rejected .step-label {
+      color: #ef4444 !important;
+    }
+
+    /* Cancelled State Style */
+    .step-completed.step-cancelled .step-circle,
+    .step-active.step-cancelled .step-circle {
+      background-color: #f97316 !important;
+      border-color: #f97316 !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 10px rgba(249, 115, 22, 0.2) !important;
+    }
+    .step-completed.step-cancelled .step-label,
+    .step-active.step-cancelled .step-label {
+      color: #f97316 !important;
     }
 
     /* Stats Grid */
@@ -1463,10 +1739,7 @@ export function generatePermitHtml(data: any): string {
               <span class="header-badge badge-risk">${getRiskLevel()} Risk</span>
               <span class="header-badge badge-status">${getStatusText()}</span>
               <span class="location-pin-text">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px; color: #64748b;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
+                <img src="${locationPinDataUrl}" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;" />
                 ${data.room_names || data.Room_Nos || data.zone_name || '-'}
               </span>
             </div>
@@ -1486,50 +1759,10 @@ export function generatePermitHtml(data: any): string {
       <!-- Stepper Widget -->
       <div class="stepper-container">
         <div class="stepper-line">
-          <div class="stepper-line-progress" style="width: ${activeStepIndex * 25}%;"></div>
+          <div class="stepper-line-progress" style="width: ${progressPercent}%;"></div>
         </div>
         <div class="stepper-steps">
-          <div class="stepper-step ${getStepClass(0)}">
-            <div class="step-circle">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </div>
-            <div class="step-label">Draft</div>
-          </div>
-          <div class="stepper-step ${getStepClass(1)}">
-            <div class="step-circle">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div class="step-label">Submitted</div>
-          </div>
-          <div class="stepper-step ${getStepClass(2)}">
-            <div class="step-circle">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-            </div>
-            <div class="step-label">Approved</div>
-          </div>
-          <div class="stepper-step ${getStepClass(3)}">
-            <div class="step-circle">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div class="step-label">Opened</div>
-          </div>
-          <div class="stepper-step ${getStepClass(4)}">
-            <div class="step-circle">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <div class="step-label">Closed</div>
-          </div>
+          ${stepperStepsHtml}
         </div>
       </div>
     </div>
@@ -1538,9 +1771,7 @@ export function generatePermitHtml(data: any): string {
     <div class="stats-row">
       <div class="stats-card">
         <div class="stats-icon-wrap bg-blue-light">
-          <svg class="stats-icon color-blue" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-          </svg>
+          <img src="${statusIconDataUrl}" style="width: 20px; height: 20px; display: block;" />
         </div>
         <div class="stats-info">
           <div class="stats-label">Status</div>
@@ -1549,31 +1780,27 @@ export function generatePermitHtml(data: any): string {
       </div>
       <div class="stats-card">
         <div class="stats-icon-wrap bg-red-light">
-          <svg class="stats-icon color-red" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-          </svg>
+          <img src="${companyIconDataUrl}" style="width: 20px; height: 20px; display: block;" />
         </div>
         <div class="stats-info">
-          <div class="stats-label">Risk Level</div>
-          <div class="stats-value text-red">${getRiskLevel()}</div>
+          <div class="stats-label">Contractor</div>
+          <div class="stats-value text-red" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px;">
+            ${data.subContractorName || data.Company_Name || '-'}
+          </div>
         </div>
       </div>
       <div class="stats-card">
         <div class="stats-icon-wrap bg-orange-light">
-          <svg class="stats-icon color-orange" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.291 1.528c-.111.66-.226 1.482-.332 2.246a36.415 36.415 0 00-.007 2.689c.04.47.085.908.135 1.298.09.702.162 1.006.162 1.006a1 1 0 001.914-.572s-.029-.275-.098-.77a15.072 15.072 0 01-.156-1.258c-.061-.758-.06-1.714.02-2.67.064-.757.171-1.503.278-2.14.095-.568.19-1.077.287-1.448.213-.805.472-1.375.79-1.762.316-.388.706-.607 1.163-.676a1 1 0 00.774-1.397c-.37-.828-.963-1.529-1.58-2.107zm2.405 5.065a1 1 0 00-.994.024c-.4.22-.767.54-1.026.877-.26.338-.455.73-.626 1.14-.345.822-.618 1.802-.81 2.771-.057.292-.11.589-.16.883-.048.28-.09.56-.128.83a10.1 10.1 0 00-.06 1.697c.059.419.16.862.3 1.257l.022.06c.093.25.3.435.56.5a1 1 0 001.213-.67c.228-.68.423-1.372.585-2.079.162-.708.293-1.42.386-2.115a20.088 20.088 0 00.063-1.635 14.887 14.887 0 00-.11-1.33 8.356 8.356 0 00-.224-1.024 1 1 0 00-.813-.74z" clip-rule="evenodd" />
-          </svg>
+          <img src="${calendarIconDataUrl}" style="width: 20px; height: 20px; display: block;" />
         </div>
         <div class="stats-info">
-          <div class="stats-label">Active Hazards</div>
-          <div class="stats-value text-orange">${activeHazardsCount}</div>
+          <div class="stats-label">Date</div>
+          <div class="stats-value text-orange">${formatDateOnly(data.Working_Date)}</div>
         </div>
       </div>
       <div class="stats-card">
         <div class="stats-icon-wrap bg-green-light">
-          <svg class="stats-icon color-green" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
-          </svg>
+          <img src="${workersIconDataUrl}" style="width: 20px; height: 20px; display: block;" />
         </div>
         <div class="stats-info">
           <div class="stats-label">Workers</div>
@@ -1582,24 +1809,11 @@ export function generatePermitHtml(data: any): string {
       </div>
       <div class="stats-card">
         <div class="stats-icon-wrap bg-grey-light">
-          <svg class="stats-icon color-grey" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
-          </svg>
+          <img src="${durationIconDataUrl}" style="width: 20px; height: 20px; display: block;" />
         </div>
         <div class="stats-info">
           <div class="stats-label">Duration</div>
           <div class="stats-value text-grey">${getDuration()}</div>
-        </div>
-      </div>
-      <div class="stats-card">
-        <div class="stats-icon-wrap bg-purple-light">
-          <svg class="stats-icon color-purple" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd" />
-          </svg>
-        </div>
-        <div class="stats-info">
-          <div class="stats-label">Stage</div>
-          <div class="stats-value text-purple">${getStageName()}</div>
         </div>
       </div>
     </div>
@@ -1641,10 +1855,7 @@ export function generatePermitHtml(data: any): string {
           <div class="card-section-header">
             <div class="card-section-title-wrap">
               <span class="card-section-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
+                ${getCardHeaderIcon('location')}
               </span>
               <div>
                 <h2 class="card-section-title">Location & Schedule</h2>
@@ -1692,10 +1903,7 @@ export function generatePermitHtml(data: any): string {
           <div class="card-section-header">
             <div class="card-section-title-wrap">
               <span class="card-section-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
+                ${getCardHeaderIcon('tools')}
               </span>
               <div>
                 <h2 class="card-section-title">Work Details & Resources</h2>
@@ -1704,6 +1912,10 @@ export function generatePermitHtml(data: any): string {
             </div>
           </div>
           <div class="info-grid">
+            <div class="info-fullwidth">
+              <div class="info-label">Description of Activity</div>
+              <div class="info-value" style="font-weight: 700; color: #0f172a; margin-bottom: 8px;">${data.description_of_activity || data.descriptionOfActivity || '-'}</div>
+            </div>
             <div>
               <div class="info-label">Contractor</div>
               <div class="info-value">${data.subContractorName || data.Company_Name || '-'}</div>
@@ -1728,9 +1940,7 @@ export function generatePermitHtml(data: any): string {
           <div class="card-section-header">
             <div class="card-section-title-wrap">
               <span class="card-section-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
+                ${getCardHeaderIcon('safety')}
               </span>
               <div>
                 <h2 class="card-section-title">Safety Precautions & Notes</h2>
@@ -1757,9 +1967,7 @@ export function generatePermitHtml(data: any): string {
           <div class="card-section-header">
             <div class="card-section-title-wrap">
               <span class="card-section-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
+                ${getCardHeaderIcon('users')}
               </span>
               <div>
                 <h2 class="card-section-title">Toolbox Talk Attendees</h2>
@@ -1800,9 +2008,7 @@ export function generatePermitHtml(data: any): string {
           <div class="card-section-header">
             <div class="card-section-title-wrap">
               <span class="card-section-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px; color: #dc2626;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                ${getCardHeaderIcon('hazards')}
               </span>
               <div>
                 <h2 class="card-section-title">Active Hazards</h2>
@@ -1820,9 +2026,7 @@ export function generatePermitHtml(data: any): string {
           <div class="card-section-header">
             <div class="card-section-title-wrap">
               <span class="card-section-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
+                ${getCardHeaderIcon('check')}
               </span>
               <div>
                 <h2 class="card-section-title">Required PPE</h2>
@@ -1849,9 +2053,7 @@ export function generatePermitHtml(data: any): string {
           <div class="card-section-header">
             <div class="card-section-title-wrap">
               <span class="card-section-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
+                ${getCardHeaderIcon('confirmations')}
               </span>
               <div>
                 <h2 class="card-section-title">Confirmations</h2>
@@ -1878,9 +2080,7 @@ export function generatePermitHtml(data: any): string {
           <div class="card-section-header">
             <div class="card-section-title-wrap">
               <span class="card-section-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 11-2.828-2.828l6.414-6.414a4 4 0 015.656 5.656l-6.415 6.415a6 6 0 11-8.486-8.486L10.5 10" />
-                </svg>
+                ${getCardHeaderIcon('attachments')}
               </span>
               <div>
                 <h2 class="card-section-title">Attachments</h2>
@@ -1898,9 +2098,7 @@ export function generatePermitHtml(data: any): string {
           <div class="card-section-header">
             <div class="card-section-title-wrap">
               <span class="card-section-icon">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px;">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+                ${getCardHeaderIcon('metadata')}
               </span>
               <div>
                 <h2 class="card-section-title">Metadata</h2>
@@ -1936,19 +2134,15 @@ export function generatePermitHtml(data: any): string {
     <div class="mt-4 pt-4 border-top">
       
       <div class="d-flex align-items-center gap-2 mb-4">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 24px; height: 24px; color: #475569; display: inline-block; vertical-align: middle;">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        </svg>
+        ${getCardHeaderIcon('hra-main')}
         <h3 style="font-weight: 800; font-size: 20px; color: #334155; margin: 0; display: inline-block; vertical-align: middle;">Hazard Risk Assessments (HRAs) & Detailed Checklists</h3>
       </div>
 
       <!-- If no HRAs are active, show a clean 'No HRAs' notice at the bottom -->
       ${activeHazardsCount === 0 ? `
         <div class="dashboard-card text-center" style="padding: 32px; background-color: #f8fafc; border: 1px dashed #cbd5e1; margin-bottom: 24px;">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 48px; height: 48px; color: #94a3b8; margin: 0 auto 12px auto; display: block;">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div style="font-size: 16px; font-weight: 700; color: #64748b;">No Hazard Risk Assessments (HRAs) Active</div>
+          ${getCardHeaderIcon('no-hra-alert')}
+          <div style="font-size: 16px; font-weight: 700; color: #64748b; margin-top: 12px;">No Hazard Risk Assessments (HRAs) Active</div>
           <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;">This permit does not require high-risk checklist controls.</div>
         </div>
       ` : ''}
@@ -1982,9 +2176,9 @@ export function generatePermitHtml(data: any): string {
 
       <!-- Hotwork Checklist Table -->
       ${(() => {
-        const isHotWorkActive = Number(data.Hot_work) === 1;
-        const isWeldingActive = isHotWorkActive && Number(data.welding_activitiy) === 1;
-        return `
+      const isHotWorkActive = Number(data.Hot_work) === 1;
+      const isWeldingActive = isHotWorkActive && Number(data.welding_activitiy) === 1;
+      return `
         <div class="dashboard-card">
           <div class="detailed-section-title">
             ${imgHotWorks ? `<img src="${imgHotWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
@@ -2074,12 +2268,12 @@ export function generatePermitHtml(data: any): string {
           </div>
         </div>
       `;
-      })()}
+    })()}
 
       <!-- Temporary Site Electrical Systems Table -->
       ${(() => {
-        const isElecActive = Number(data.working_on_electrical_system) === 1;
-        return `
+      const isElecActive = Number(data.working_on_electrical_system) === 1;
+      return `
         <div class="dashboard-card">
           <div class="detailed-section-title">
             ${imgElectricalSystems ? `<img src="${imgElectricalSystems}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
@@ -2100,12 +2294,12 @@ export function generatePermitHtml(data: any): string {
           </table>
         </div>
         `;
-      })()}
+    })()}
 
       <!-- Working with Hazardous Substances/Chemicals -->
       ${(() => {
-        const isChemActive = Number(data.working_hazardious_substen) === 1;
-        return `
+      const isChemActive = Number(data.working_hazardious_substen) === 1;
+      return `
         <div class="dashboard-card">
           <div class="detailed-section-title">
             ${imgSubstanceChemical ? `<img src="${imgSubstanceChemical}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
@@ -2126,13 +2320,13 @@ export function generatePermitHtml(data: any): string {
           </table>
         </div>
         `;
-      })()}
+    })()}
 
       <!-- Pressure Testing of Equipment -->
       ${(() => {
-        if (data.permit_type !== 'Commissioning') return '';
-        const isPressureActive = Number(data.pressure_testing_of_equipment) === 1;
-        return `
+      if (data.permit_type !== 'Commissioning') return '';
+      const isPressureActive = Number(data.pressure_testing_of_equipment) === 1;
+      return `
         <div class="dashboard-card">
           <div class="detailed-section-title">
             ${imgTestingEquipment ? `<img src="${imgTestingEquipment}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
@@ -2153,12 +2347,12 @@ export function generatePermitHtml(data: any): string {
           </table>
         </div>
         `;
-      })()}
+    })()}
 
       <!-- Working at Height -->
       ${(() => {
-        const isHeightActive = Number(data.working_at_height) === 1;
-        return `
+      const isHeightActive = Number(data.working_at_height) === 1;
+      return `
         <div class="dashboard-card">
           <div class="detailed-section-title">
             ${imgWorkingAtHight ? `<img src="${imgWorkingAtHight}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
@@ -2179,12 +2373,12 @@ export function generatePermitHtml(data: any): string {
           </table>
         </div>
         `;
-      })()}
+    })()}
 
       <!-- Working in Confined Space -->
       ${(() => {
-        const isConfinedActive = Number(data.working_confined_spaces) === 1;
-        return `
+      const isConfinedActive = Number(data.working_confined_spaces) === 1;
+      return `
         <div class="dashboard-card">
           <div class="detailed-section-title">
             ${imgConfinedSpace ? `<img src="${imgConfinedSpace}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
@@ -2205,12 +2399,12 @@ export function generatePermitHtml(data: any): string {
           </table>
         </div>
         `;
-      })()}
+    })()}
 
       <!-- Excavation Works -->
       ${(() => {
-        const isExcavationActive = Number(data.excavation_works) === 1;
-        return `
+      const isExcavationActive = Number(data.excavation_works) === 1;
+      return `
         <div class="dashboard-card">
           <div class="detailed-section-title">
             ${imgExcavationWorks ? `<img src="${imgExcavationWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
@@ -2231,12 +2425,12 @@ export function generatePermitHtml(data: any): string {
           </table>
         </div>
         `;
-      })()}
+    })()}
 
       <!-- Crane and Lifting Operations -->
       ${(() => {
-        const isLiftingActive = Number(data.using_cranes_or_lifting) === 1;
-        return `
+      const isLiftingActive = Number(data.using_cranes_or_lifting) === 1;
+      return `
         <div class="dashboard-card">
           <div class="detailed-section-title">
             ${imgCranesLifting ? `<img src="${imgCranesLifting}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
@@ -2257,16 +2451,16 @@ export function generatePermitHtml(data: any): string {
           </table>
         </div>
         `;
-      })()}
+    })()}
 
       <!-- Energising, Isolating and Working on Live Electrical Systems -->
       ${(() => {
-        if (data.permit_type !== 'Commissioning') return '';
-        const isPowerActive = Number(data.power_on) === 1;
-        const isEnergisingActive = isPowerActive && Number(data.energising_equipment) === 1;
-        const isIsolatingActive = isPowerActive && Number(data.isolating_live) === 1;
-        const isWorkingNearLiveActive = isPowerActive && Number(data.working_near_live) === 1;
-        return `
+      if (data.permit_type !== 'Commissioning') return '';
+      const isPowerActive = Number(data.power_on) === 1;
+      const isEnergisingActive = isPowerActive && Number(data.energising_equipment) === 1;
+      const isIsolatingActive = isPowerActive && Number(data.isolating_live) === 1;
+      const isWorkingNearLiveActive = isPowerActive && Number(data.working_near_live) === 1;
+      return `
         <div class="dashboard-card">
           <div class="detailed-section-title">
             ${imgElectricalWorks ? `<img src="${imgElectricalWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
@@ -2319,13 +2513,13 @@ export function generatePermitHtml(data: any): string {
           </table>
         </div>
         `;
-      })()}
+    })()}
 
       <!-- Energisation of Mechanical equipment -->
       ${(() => {
-        if (data.permit_type !== 'Commissioning') return '';
-        const isPressurizeActive = Number(data.pressurization) === 1;
-        return `
+      if (data.permit_type !== 'Commissioning') return '';
+      const isPressurizeActive = Number(data.pressurization) === 1;
+      return `
         <div class="dashboard-card">
           <div class="detailed-section-title">
             ${imgMechanicalWorks ? `<img src="${imgMechanicalWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
@@ -2346,7 +2540,7 @@ export function generatePermitHtml(data: any): string {
           </table>
         </div>
         `;
-      })()}
+    })()}
 
       <!-- Blank toolbox talk attendance row for printed signature collections -->
       <div class="dashboard-card">
@@ -2430,15 +2624,22 @@ export function generatePermitHtml(data: any): string {
       var element = document.getElementById('root');
       var name = "${data.PermitNo || 'Permit'}" + ".pdf";
       var opt = {
-        margin: [15, 15, 15, 15],
+        margin: [10, 10, 10, 10],
         filename: name,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true,
+          windowWidth: 1280,
+          scrollX: 0,
+          scrollY: 0
+        },
         jsPDF: {
           unit: 'mm',
-          format: [330, 483],
+          format: 'a4',
           orientation: 'portrait'
-        }
+        },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
       };
       
       html2pdf().set(opt).from(element).save().then(function() {

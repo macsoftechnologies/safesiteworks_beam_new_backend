@@ -2,8 +2,8 @@ import { join } from 'path';
 import { getBase64Image } from './image-utils';
 
 export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): string {
-  const leftLogo = getBase64Image(join(process.cwd(), './newbeam1/images/left_side.jpeg'));
-  const rightLogo = getBase64Image(join(process.cwd(), './newbeam1/images/right_side.jpeg'));
+  const leftLogo = getBase64Image(join(process.cwd(), './src/images/logos/left_side.jpeg'));
+  const rightLogo = getBase64Image(join(process.cwd(), './src/images/logos/right_side.jpeg'));
 
   const formatDate = (dateStr: string | Date) => {
     if (!dateStr) return '-';
@@ -27,6 +27,38 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
     }
   };
 
+  const TYPE_STYLES: Record<string, { color: string; bg: string; icon: string }> = {
+    Hold: { color: "#d97706", bg: "#fef3c7", icon: "⏸" },
+    Edited: { color: "#2563eb", bg: "#dbeafe", icon: "✏️" },
+    Approved: { color: "#16a34a", bg: "#dcfce7", icon: "✅" },
+    Opened: { color: "#7c3aed", bg: "#f3e8ff", icon: "🔓" },
+    Closed: { color: "#4b5563", bg: "#f3f4f6", icon: "🔒" },
+    Rejected: { color: "#dc2626", bg: "#fee2e2", icon: "❌" },
+    Cancelled: { color: "#dc2626", bg: "#fee2e2", icon: "🚫" },
+    Draft: { color: "#475569", bg: "#f1f5f9", icon: "📝" },
+    Submitted: { color: "#0284c7", bg: "#e0f2fe", icon: "📤" },
+  };
+
+  const getStatusIcon = (type: string) => {
+    const key = Object.keys(TYPE_STYLES).find(k => k.toLowerCase() === String(type).toLowerCase().trim());
+    return key ? TYPE_STYLES[key].icon : "•";
+  };
+
+  const getStatusClass = (type: string) => {
+    const key = Object.keys(TYPE_STYLES).find(k => k.toLowerCase() === String(type).toLowerCase().trim());
+    return key ? `status-${key}` : "status-default";
+  };
+
+  const getTypeStyle = (type: string) => {
+    const key = Object.keys(TYPE_STYLES).find(k => k.toLowerCase() === String(type).toLowerCase().trim());
+    return key ? TYPE_STYLES[key] : { color: "#64748b", bg: "#f1f5f9", icon: "•" };
+  };
+
+  // Find metadata details from the first log if available
+  const firstLog = logs[0];
+  const companyName = firstLog?.request?.companyName || '-';
+  const mainContractor = firstLog?.system === 1 ? 'NA' : (firstLog?.request?.subcontractor?.subContractorName || '-');
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -37,15 +69,16 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
   <link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary: #222a45;
+      --primary: #0f172a;
       --accent: #edc510;
-      --bg: #f5f7fb;
+      --bg: #f8fafc;
       --card-bg: #ffffff;
-      --text: #333333;
-      --text-muted: #6c757d;
-      --success: #28a745;
-      --danger: #dc3545;
-      --info: #17a2b8;
+      --border-color: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --info: #3b82f6;
     }
 
     * {
@@ -62,12 +95,12 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
     }
 
     .container {
-      max-width: 1100px;
+      max-width: 900px;
       margin: 0 auto;
       background: var(--card-bg);
       padding: 40px;
       border-radius: 16px;
-      box-shadow: 0 10px 30px rgba(34, 42, 69, 0.06);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
     }
 
     .header-section {
@@ -100,6 +133,23 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
       font-weight: 700;
     }
 
+    .meta-summary {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 30px;
+      padding: 14px 20px;
+      background-color: #f1f5f9;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+    }
+
+    .meta-summary-item {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
     .section-title {
       font-size: 18px;
       color: var(--primary);
@@ -110,80 +160,225 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
       font-weight: 700;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 15px;
-      background: #fff;
-      border-radius: 8px;
-      overflow: hidden;
-      border: 1px solid #dee2e6;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.01);
+    /* Timeline styling */
+    .timeline-container {
+      position: relative;
+      margin-top: 30px;
+      padding-left: 10px;
     }
 
-    th, td {
-      padding: 12px 15px;
-      text-align: left;
-      border-bottom: 1px solid #dee2e6;
-      font-size: 14px;
+    .timeline-line {
+      position: absolute;
+      left: 19px;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background-color: #cbd5e1;
     }
 
-    th {
-      background-color: var(--primary);
-      color: var(--accent);
-      font-size: 14px;
-      font-weight: 700;
+    .timeline-item {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 28px;
+      position: relative;
     }
 
-    .log-row td {
-      font-weight: 600;
-      color: #444;
+    .timeline-item:last-child {
+      margin-bottom: 0;
     }
 
-    .log-row:hover td {
-      background-color: #f1f3f9;
+    .timeline-dot-wrap {
+      width: 40px;
+      flex-shrink: 0;
+      display: flex;
+      justify-content: center;
+      padding-top: 2px;
+      position: relative;
+      z-index: 2;
     }
 
-    .changes-container {
-      padding: 15px 25px;
-      background-color: #fafbfc;
-      border-bottom: 1px solid #dee2e6;
+    .timeline-dot {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 2px solid;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
     }
 
-    .changes-table {
-      width: 100%;
-      margin: 0;
-      box-shadow: none;
-      border: 1px solid #e9ecef;
+    .timeline-card {
+      flex: 1;
+      background-color: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 18px 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.01);
+      transition: all 0.2s ease;
     }
 
-    .changes-table th {
-      background-color: #edf0f5;
-      color: var(--primary);
-      font-size: 12px;
-      padding: 8px 12px;
+    .timeline-card:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+      border-color: #cbd5e1;
     }
 
-    .changes-table td {
-      padding: 8px 12px;
-      font-size: 13px;
+    .card-top-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
     .badge-status {
-      display: inline-block;
-      padding: 4px 10px;
+      padding: 4px 12px;
+      border-radius: 20px;
       font-size: 11px;
       font-weight: 700;
-      border-radius: 20px;
+      border: 1px solid;
+      letter-spacing: 0.3px;
       text-transform: uppercase;
-      color: #fff;
-      background-color: var(--info);
+      display: inline-block;
     }
 
-    .badge-Opened { background-color: var(--info); }
-    .badge-Closed { background-color: var(--danger); }
-    .badge-Approved { background-color: var(--success); }
-    .badge-Draft { background-color: var(--text-muted); }
+    /* Colors mapping corresponding to TYPE_STYLES */
+    .status-Hold { color: #d97706; background-color: #fef3c7; border-color: #fcd34d; }
+    .status-Edited { color: #2563eb; background-color: #dbeafe; border-color: #bfdbfe; }
+    .status-Approved { color: #16a34a; background-color: #dcfce7; border-color: #bbf7d0; }
+    .status-Opened { color: #7c3aed; background-color: #f3e8ff; border-color: #e9d5ff; }
+    .status-Closed { color: #4b5563; background-color: #f3f4f6; border-color: #e5e7eb; }
+    .status-Rejected { color: #dc2626; background-color: #fee2e2; border-color: #fecaca; }
+    .status-Cancelled { color: #dc2626; background-color: #fee2e2; border-color: #fecaca; }
+    .status-Draft { color: #475569; background-color: #f1f5f9; border-color: #e2e8f0; }
+    .status-Submitted { color: #0284c7; background-color: #e0f2fe; border-color: #bae6fd; }
+    .status-default { color: #64748b; background-color: #f1f5f9; border-color: #e2e8f0; }
+
+    .log-time {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .user-details-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
+      background-color: #f1f5f9;
+      color: #2563eb;
+    }
+
+    .user-info-text p {
+      margin: 0;
+    }
+
+    .user-username {
+      font-size: 14px;
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .user-role {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .company-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .meta-item {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* Changes section styling */
+    .changes-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px dashed #cbd5e1;
+    }
+
+    .changes-title {
+      margin: 0 0 10px 0;
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 700;
+    }
+
+    .change-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background-color: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .change-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .change-field {
+      font-size: 13px;
+      color: var(--text);
+      font-weight: 700;
+      min-width: 120px;
+    }
+
+    .change-value-prev {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      background-color: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fca5a5;
+      text-decoration: line-through;
+    }
+
+    .change-arrow {
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .change-value-pres {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      background-color: #dcfce7;
+      color: #15803d;
+      border: 1px solid #86efac;
+      font-weight: 500;
+    }
 
     .image-grid {
       display: grid;
@@ -276,76 +471,93 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
     </div>
   </div>
 
-  <!-- Logs Table -->
-  <div class="section-title">Permit Actions Log</div>
-  <table>
-    <thead>
-      <tr>
-        <th>Username</th>
-        <th>User Type</th>
-        <th>Site</th>
-        <th>Contractor</th>
-        <th>Action Time</th>
-        <th>Work Date</th>
-        <th>Status Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${logs.map((log: any) => {
-        // Map user type mapping logic from PHP
-        let usertype = log.user?.userType || '';
-        if (log.system === 1) {
-          usertype = 'System Auto Cancel';
-        } else {
-          const uLower = usertype.toLowerCase().trim();
-          if (uLower === 'department') usertype = 'ConM/HSE';
-          else if (uLower === 'department1') usertype = 'C&Q';
-          else if (uLower === 'subcontractor') usertype = 'Contractor';
-        }
+  <!-- Meta Summary bar -->
+  <div class="meta-summary">
+    <span class="meta-summary-item">🏢 ${companyName}</span>
+    <span class="meta-summary-item">👷 ${mainContractor}</span>
+  </div>
 
-        const username = log.system === 1 ? 'NA' : (log.user?.username || 'System');
-        const contractor = log.system === 1 ? 'NA' : (log.request?.subcontractor?.subContractorName || '-');
+  <div class="section-title">Permit Actions Timeline</div>
+  
+  <div class="timeline-container">
+    <div class="timeline-line"></div>
+    
+    ${logs.map((log: any) => {
+      let usertype = log.user?.userType || '';
+      if (log.system === 1) {
+        usertype = 'System Auto Cancel';
+      } else {
+        const uLower = usertype.toLowerCase().trim();
+        if (uLower === 'department') usertype = 'ConM/HSE';
+        else if (uLower === 'department1') usertype = 'C&Q';
+        else if (uLower === 'subcontractor') usertype = 'Contractor';
+      }
 
-        return `
-        <tr class="log-row">
-          <td>${username}</td>
-          <td>${usertype}</td>
-          <td>${log.request?.companyName || '-'}</td>
-          <td>${contractor}</td>
-          <td>${formatDateTime(log.createdTime)}</td>
-          <td>${formatDate(log.request?.workingDate)}</td>
-          <td><span class="badge-status badge-${log.requestType}">${log.requestType || 'Created'}</span></td>
-        </tr>
-        ${log.changes && log.changes.length > 0 ? `
-        <tr>
-          <td colspan="7" class="changes-container">
-            <table class="changes-table">
-              <thead>
-                <tr>
-                  <th>Field Path / Name</th>
-                  <th>Previous Value</th>
-                  <th>Present Value</th>
-                  <th>Changed At</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${log.changes.map((chg: any) => `
-                <tr>
-                  <td><strong>${chg.fieldName}</strong></td>
-                  <td>${chg.previous === null || chg.previous === '' ? '<i>Empty</i>' : chg.previous}</td>
-                  <td>${chg.present === null || chg.present === '' ? '<i>Empty</i>' : chg.present}</td>
-                  <td>${formatDateTime(chg.createdTime)}</td>
-                </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </td>
-        </tr>
-        ` : ''}
-        `;
-      }).join('')}
-    </tbody>
-  </table>
+      const username = log.system === 1 ? 'NA' : (log.user?.username || 'System');
+      const contractor = log.system === 1 ? 'NA' : (log.request?.subcontractor?.subContractorName || '-');
+      const compName = log.request?.companyName || '-';
+
+      const style = getTypeStyle(log.requestType);
+      const badgeClass = getStatusClass(log.requestType);
+
+      return `
+      <div class="timeline-item">
+        <!-- Timeline dot -->
+        <div class="timeline-dot-wrap">
+          <div class="timeline-dot" style="background-color: ${style.bg}; border-color: ${style.color}; color: ${style.color};">
+            ${style.icon}
+          </div>
+        </div>
+
+        <!-- Card -->
+        <div class="timeline-card">
+          <!-- Top row: type badge + time -->
+          <div class="card-top-row">
+            <span class="badge-status ${badgeClass}">
+              ${log.requestType || 'Created'}
+            </span>
+            <span class="log-time">
+              🕐 ${formatDateTime(log.createdTime)}
+            </span>
+          </div>
+
+          <!-- User details -->
+          <div class="user-details-row">
+            <div class="avatar" style="border-color: ${style.color}; color: ${style.color}; background-color: ${style.bg};">
+              ${(username?.[0] || '?').toUpperCase()}
+            </div>
+            <div class="user-info-text">
+              <p class="user-username">${username}</p>
+              <p class="user-role">${usertype}</p>
+            </div>
+          </div>
+
+          <!-- Company info -->
+          <div class="company-row">
+            <span class="meta-item">🏢 ${compName}</span>
+            <span class="meta-item">👷 ${contractor}</span>
+            ${log.request?.workingDate ? `<span class="meta-item">📅 Work Date: ${formatDate(log.request.workingDate)}</span>` : ''}
+          </div>
+
+          <!-- Field changes (only for Edited) -->
+          ${log.changes && log.changes.length > 0 ? `
+            <div class="changes-section">
+              <p class="changes-title">Changes Made</p>
+              ${log.changes.map((chg: any) => `
+                <div class="change-row">
+                  <span class="change-field">${chg.fieldName}</span>
+                  <span class="change-value-prev">${chg.previous === null || chg.previous === '' ? 'Empty' : chg.previous}</span>
+                  <span class="change-arrow">→</span>
+                  <span class="change-value-pres">${chg.present === null || chg.present === '' ? 'Empty' : chg.present}</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+      `;
+    }).join('')}
+  </div>
 
   <!-- Uploaded Images Section -->
   ${images && images.length > 0 ? `
@@ -380,16 +592,28 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script>
   function downloadPDF() {
+    const downloadBar = document.querySelector('.download-bar');
+    if (downloadBar) downloadBar.style.display = 'none';
+
     const element = document.getElementById('root-content');
     const name = "Permit_Logs_" + "${permitNo}".trim() + ".pdf";
     const opt = {
-      margin: 8,
+      margin: [10, 10, 10, 10],
       filename: name,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      html2canvas: { 
+        scale: 2, 
+        useCORS: true,
+        windowWidth: 1200,
+        scrollX: 0,
+        scrollY: 0
+      },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
-    html2pdf().set(opt).from(element).save();
+    html2pdf().set(opt).from(element).save().then(function() {
+      if (downloadBar) downloadBar.style.display = 'flex';
+    });
   }
 </script>
 </body>

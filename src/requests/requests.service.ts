@@ -4625,6 +4625,14 @@ export class RequestsService {
       flatObj.check_out_user = (checkOutLog as any).user?.username || '';
     }
 
+    // Fetch log records for status tracking
+    flatObj.logs = await this.logRepo
+      .createQueryBuilder('log')
+      .leftJoinAndMapOne('log.user', User, 'user', 'log.userId = user.id')
+      .where('log.requestId = :requestId', { requestId: req.id })
+      .orderBy('log.id', 'ASC')
+      .getMany();
+
     // Fetch attached files & notes
     flatObj.files = await this.ramsFileRepo.find({
       where: { requestId: req.id, status: 1 },

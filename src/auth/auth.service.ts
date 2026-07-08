@@ -77,8 +77,9 @@ export class AuthService {
     const employee = (user.empId !== null && user.empId !== undefined) ? await this.employeeRepo.findOne({ where: { id: user.empId } }) : null;
     const phoneNumber = employee?.phonenumber ?? '';
 
-    // Send SMS via Twilio
-    const smsSent = await this.otpService.sendOtpViaSms(phoneNumber, otp);
+    // Send SMS via Twilio (Disabled as requested)
+    // const smsSent = await this.otpService.sendOtpViaSms(phoneNumber, otp);
+    const smsSent = false;
 
     // Generate auth token (legacy support)
     const authString = user.id + 'beamapi' + new Date().toISOString();
@@ -89,7 +90,7 @@ export class AuthService {
 
     return {
       statusCode: HttpStatus.OK,
-      message: 'Login successful. OTP sent.',
+      message: 'Login successful.',
       id: user.id,
       username: user.username,
       userType: user.userType,
@@ -113,13 +114,12 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // Check if OTP is valid
-    // DEV ONLY: Allow a static OTP override via environment variable for testing
-    const staticOtp = process.env.DEV_STATIC_OTP;
-    const isStaticOtpMatch = staticOtp && otp === staticOtp;
-    if (!isStaticOtpMatch && (!user.otp || user.otp !== otp)) {
-      throw new UnauthorizedException('Invalid OTP');
-    }
+    // OTP validation disabled as requested
+    // const staticOtp = process.env.DEV_STATIC_OTP;
+    // const isStaticOtpMatch = staticOtp && otp === staticOtp;
+    // if (!isStaticOtpMatch && (!user.otp || user.otp !== otp)) {
+    //   throw new UnauthorizedException('Invalid OTP');
+    // }
 
     // Clear OTP
     await this.usersService.clearOtp(user.id);

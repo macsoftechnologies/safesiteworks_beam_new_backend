@@ -237,11 +237,12 @@ export class RequestsController {
       if (!file || !file.ramsFile) {
         return res.status(HttpStatus.NOT_FOUND).send('File not found');
       }
-      const absolutePath = join(process.cwd(), file.ramsFile);
+       const absolutePath = join(process.cwd(), file.ramsFile);
       if (!fs.existsSync(absolutePath)) {
         return res.status(HttpStatus.NOT_FOUND).send('File not found on disk');
       }
-      res.sendFile(absolutePath);
+      const filename = file.ramsFile.split('/').pop() || 'Attachment';
+      res.download(absolutePath, filename);
     } catch (error) {
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).send(error.message);
     }
