@@ -2245,22 +2245,30 @@ export class RequestsService {
           });
         }
         if (dto.Request_status) {
-          if (dto.Request_status === 'Auto-Cancelled') {
-            qb.andWhere('extraMisc.cancelReason = :cancelReason', {
-              cancelReason: 'Permit not opened so system cancelled automatically',
+          const statusList = dto.Request_status.split(',').map(s => s.trim());
+          if (statusList.length > 1) {
+            qb.andWhere('requests.Request_status IN (:...requestStatuses)', {
+              requestStatuses: statusList,
             });
-          } else if (dto.Request_status === 'Cancelled') {
-            qb.andWhere('requests.Request_status = :requestStatus', {
-              requestStatus: dto.Request_status,
-            });
-            qb.andWhere(
-              '(extraMisc.cancelReason IS NULL OR extraMisc.cancelReason != :autoCancelMsg)',
-              { autoCancelMsg: 'Permit not opened so system cancelled automatically' },
-            );
           } else {
-            qb.andWhere('requests.Request_status = :requestStatus', {
-              requestStatus: dto.Request_status,
-            });
+            const singleStatus = statusList[0];
+            if (singleStatus === 'Auto-Cancelled') {
+              qb.andWhere('extraMisc.cancelReason = :cancelReason', {
+                cancelReason: 'Permit not opened so system cancelled automatically',
+              });
+            } else if (singleStatus === 'Cancelled') {
+              qb.andWhere('requests.Request_status = :requestStatus', {
+                requestStatus: singleStatus,
+              });
+              qb.andWhere(
+                '(extraMisc.cancelReason IS NULL OR extraMisc.cancelReason != :autoCancelMsg)',
+                { autoCancelMsg: 'Permit not opened so system cancelled automatically' },
+              );
+            } else {
+              qb.andWhere('requests.Request_status = :requestStatus', {
+                requestStatus: singleStatus,
+              });
+            }
           }
         }
         if (
@@ -2799,18 +2807,26 @@ export class RequestsService {
           qb.andWhere('requests.hras = :hras', { hras: searchDto.hras });
         }
         if (searchDto.Request_status) {
-          if (searchDto.Request_status === 'Auto-Cancelled') {
-            qb.andWhere('extraMisc.cancelReason = :cancelReason', {
-              cancelReason: 'Permit not opened so system cancelled automatically',
+          const statusList = searchDto.Request_status.split(',').map(s => s.trim());
+          if (statusList.length > 1) {
+            qb.andWhere('requests.Request_status IN (:...requestStatuses)', {
+              requestStatuses: statusList,
             });
-          } else if (searchDto.Request_status === 'Cancelled') {
-            qb.andWhere('requests.Request_status = :requestStatus', { requestStatus: searchDto.Request_status });
-            qb.andWhere(
-              '(extraMisc.cancelReason IS NULL OR extraMisc.cancelReason != :autoCancelMsg)',
-              { autoCancelMsg: 'Permit not opened so system cancelled automatically' },
-            );
           } else {
-            qb.andWhere('requests.Request_status = :requestStatus', { requestStatus: searchDto.Request_status });
+            const singleStatus = statusList[0];
+            if (singleStatus === 'Auto-Cancelled') {
+              qb.andWhere('extraMisc.cancelReason = :cancelReason', {
+                cancelReason: 'Permit not opened so system cancelled automatically',
+              });
+            } else if (singleStatus === 'Cancelled') {
+              qb.andWhere('requests.Request_status = :requestStatus', { requestStatus: singleStatus });
+              qb.andWhere(
+                '(extraMisc.cancelReason IS NULL OR extraMisc.cancelReason != :autoCancelMsg)',
+                { autoCancelMsg: 'Permit not opened so system cancelled automatically' },
+              );
+            } else {
+              qb.andWhere('requests.Request_status = :requestStatus', { requestStatus: singleStatus });
+            }
           }
         }
 
@@ -3441,7 +3457,7 @@ export class RequestsService {
             "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
             'closedCount',
           )
-          .where('requests.status = 1 AND requests.createdTime >= CURDATE()');
+          .where('requests.status = 1 AND requests.workingDate = CURDATE()');
 
         if (subContractorId) {
           todayQb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId });
@@ -3489,7 +3505,7 @@ export class RequestsService {
             'closedCount',
           )
           .where(
-            'requests.status = 1 AND requests.createdTime >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)',
+            'requests.status = 1 AND requests.workingDate >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)',
           );
 
         if (subContractorId) {
