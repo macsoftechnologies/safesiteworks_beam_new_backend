@@ -153,6 +153,15 @@ export class RequestsService {
     return String(val1).trim() === String(val2).trim();
   }
 
+  async getSubcontractorIdForUser(userId?: number): Promise<number | null> {
+    if (!userId) return null;
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (user && user.userType === 'Subcontractor') {
+      return user.typeId;
+    }
+    return null;
+  }
+
   private async validateStatusTransitionAndRole(
     existing: RequestEntity,
     newStatus: string,
@@ -2081,8 +2090,11 @@ export class RequestsService {
 
 
   // Search/Filter Requests
-  async search(dto: SearchRequestDto): Promise<any> {
-    const key = `requests:search:${JSON.stringify(dto)}`;
+  async search(dto: SearchRequestDto, loggedInUserId?: number): Promise<any> {
+    const subContractorId = await this.getSubcontractorIdForUser(loggedInUserId);
+    const key = subContractorId
+      ? `requests:search:${JSON.stringify(dto)}:subcon:${subContractorId}`
+      : `requests:search:${JSON.stringify(dto)}`;
     return this.redisCacheService.getOrSet(
       key,
       async () => {
@@ -2390,11 +2402,22 @@ export class RequestsService {
           });
         }
 
-        // Role filters (from PHP)
-        if (dto.LoginType === 'Subcontractor' && dto.user_id) {
-          qb.andWhere('requests.userId = :userIdFilter', {
-            userIdFilter: dto.user_id,
+        // Role filters
+        if (subContractorId) {
+          qb.andWhere('requests.Sub_Contractor_Id = :subContractorIdFilter', {
+            subContractorIdFilter: subContractorId,
           });
+        } else if (dto.LoginType === 'Subcontractor' && dto.user_id) {
+          const user = await this.userRepo.findOne({ where: { id: dto.user_id } });
+          if (user && user.userType === 'Subcontractor') {
+            qb.andWhere('requests.Sub_Contractor_Id = :subContractorIdFilter', {
+              subContractorIdFilter: user.typeId,
+            });
+          } else {
+            qb.andWhere('requests.userId = :userIdFilter', {
+              userIdFilter: dto.user_id,
+            });
+          }
         }
 
         // Safety Flag Filters (requires joining sub-tables) - only filter when explicitly set to 1
@@ -2636,9 +2659,16 @@ export class RequestsService {
         }
 
         // Subcontractors and Activities lists
-        const subcontractors = await this.subcontractorRepo.find({
-          order: { subContractorName: 'ASC' },
-        });
+        let subcontractors;
+        if (subContractorId) {
+          subcontractors = await this.subcontractorRepo.find({
+            where: { id: subContractorId },
+          });
+        } else {
+          subcontractors = await this.subcontractorRepo.find({
+            order: { subContractorName: 'ASC' },
+          });
+        }
         const activities = await this.activityRepo.find({
           order: { activityName: 'ASC' },
         });
@@ -2655,8 +2685,11 @@ export class RequestsService {
     );
   }
 
-  async plansList(searchDto: PlanSearchDto): Promise<any> {
-    const key = `requests:plans:${JSON.stringify(searchDto)}`;
+  async plansList(searchDto: PlanSearchDto, loggedInUserId?: number): Promise<any> {
+    const subContractorId = await this.getSubcontractorIdForUser(loggedInUserId);
+    const key = subContractorId
+      ? `requests:plans:${JSON.stringify(searchDto)}:subcon:${subContractorId}`
+      : `requests:plans:${JSON.stringify(searchDto)}`;
     return this.redisCacheService.getOrSet(
       key,
       async () => {
@@ -2730,7 +2763,9 @@ export class RequestsService {
         if (searchDto.Building_Id && Number(searchDto.Building_Id) !== 0) {
           qb.andWhere('requests.Building_Id = :buildingId', { buildingId: searchDto.Building_Id });
         }
-        if (searchDto.Sub_Contractor_Id && Number(searchDto.Sub_Contractor_Id) !== 0) {
+        if (subContractorId) {
+          qb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId });
+        } else if (searchDto.Sub_Contractor_Id && Number(searchDto.Sub_Contractor_Id) !== 0) {
           qb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId: searchDto.Sub_Contractor_Id });
         }
         if (searchDto.Room_Type) {
@@ -3180,11 +3215,13 @@ export class RequestsService {
   }
 
   // 11. Read counts (readCounts.php)
-  async readCounts(): Promise<any> {
+  async readCounts(loggedInUserId?: number): Promise<any> {
+    const subContractorId = await this.getSubcontractorIdForUser(loggedInUserId);
+    const cacheKey = subContractorId ? `requests:counts:subcon:${subContractorId}` : 'requests:counts';
     return this.redisCacheService.getOrSet(
-      'requests:counts',
+      cacheKey,
       async () => {
-        const counts = await this.requestRepo
+        const qb = this.requestRepo
           .createQueryBuilder('requests')
           .leftJoin(
             'request_extra_misc',
@@ -3232,8 +3269,13 @@ export class RequestsService {
             "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
             'closedCount',
           )
-          .where('requests.status = 1')
-          .getRawOne();
+          .where('requests.status = 1');
+
+        if (subContractorId) {
+          qb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId });
+        }
+
+        const counts = await qb.getRawOne();
 
         return {
           data: [
@@ -3257,12 +3299,18 @@ export class RequestsService {
   }
 
   // 12. Read single status count (readRequestCount.php)
-  async readRequestCount(status: string): Promise<any> {
+  async readRequestCount(status: string, loggedInUserId?: number): Promise<any> {
+    const subContractorId = await this.getSubcontractorIdForUser(loggedInUserId);
+    const cacheKey = subContractorId ? `requests:counts:${status}:subcon:${subContractorId}` : `requests:counts:${status}`;
     return this.redisCacheService.getOrSet(
-      `requests:counts:${status}`,
+      cacheKey,
       async () => {
+        const whereClause: any = { requestStatus: status, status: 1 };
+        if (subContractorId) {
+          whereClause.subContractorId = subContractorId;
+        }
         const count = await this.requestRepo.count({
-          where: { requestStatus: status, status: 1 },
+          where: whereClause,
         });
         return {
           data: [
@@ -3277,7 +3325,8 @@ export class RequestsService {
   }
 
   // 13. Read Graph counts per day (readGraph.php)
-  async readGraph(WeekFirstday: string, WeekLastday: string): Promise<any> {
+  async readGraph(WeekFirstday: string, WeekLastday: string, loggedInUserId?: number): Promise<any> {
+    const subContractorId = await this.getSubcontractorIdForUser(loggedInUserId);
     const first = new Date(
       WeekFirstday.replace(' GMT+0530 (India Standard Time)', ''),
     );
@@ -3294,7 +3343,7 @@ export class RequestsService {
 
     const data: any[] = [];
     for (const d of datesList) {
-      const counts = await this.requestRepo
+      const qb = this.requestRepo
         .createQueryBuilder('requests')
         .select(
           "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
@@ -3314,8 +3363,13 @@ export class RequestsService {
         )
         .where('requests.status = 1 AND requests.workingDate = :date', {
           date: d,
-        })
-        .getRawOne();
+        });
+
+      if (subContractorId) {
+        qb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId });
+      }
+
+      const counts = await qb.getRawOne();
 
       const dateObj = new Date(d);
       const dayNames = [
@@ -3342,11 +3396,13 @@ export class RequestsService {
   }
 
   // 14. Read Graph Counts summary today vs week (readGraphCounts.php)
-  async readGraphCounts(): Promise<any> {
+  async readGraphCounts(loggedInUserId?: number): Promise<any> {
+    const subContractorId = await this.getSubcontractorIdForUser(loggedInUserId);
+    const cacheKey = subContractorId ? `requests:graph:counts:subcon:${subContractorId}` : 'requests:graph:counts';
     return this.redisCacheService.getOrSet(
-      'requests:graph:counts',
+      cacheKey,
       async () => {
-        const todayCounts = await this.requestRepo
+        const todayQb = this.requestRepo
           .createQueryBuilder('requests')
           .select('COUNT(*)', 'totalCount')
           .addSelect(
@@ -3385,10 +3441,15 @@ export class RequestsService {
             "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
             'closedCount',
           )
-          .where('requests.status = 1 AND requests.createdTime >= CURDATE()')
-          .getRawOne();
+          .where('requests.status = 1 AND requests.createdTime >= CURDATE()');
 
-        const lastWeekCounts = await this.requestRepo
+        if (subContractorId) {
+          todayQb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId });
+        }
+
+        const todayCounts = await todayQb.getRawOne();
+
+        const lastWeekQb = this.requestRepo
           .createQueryBuilder('requests')
           .select('COUNT(*)', 'totalCount')
           .addSelect(
@@ -3429,8 +3490,13 @@ export class RequestsService {
           )
           .where(
             'requests.status = 1 AND requests.createdTime >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)',
-          )
-          .getRawOne();
+          );
+
+        if (subContractorId) {
+          lastWeekQb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId });
+        }
+
+        const lastWeekCounts = await lastWeekQb.getRawOne();
 
         return {
           data: {

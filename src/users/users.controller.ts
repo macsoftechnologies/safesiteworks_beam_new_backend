@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Query, HttpStatus } from '@nestjs/common';
+import { Controller, Get, UseGuards, Query, HttpStatus, Request } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PaginationQueryDto } from 'src/redis/dtos/pagination.dto';
@@ -11,8 +11,8 @@ export class UsersController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
-  async getUsers(@Query() query: PaginationQueryDto) {
-    const usersResult = await this.usersService.getAllUsers(query);
+  async getUsers(@Query() query: PaginationQueryDto, @Request() req: any) {
+    const usersResult = await this.usersService.getAllUsers(query, req.user?.userId);
     return {
       statusCode: HttpStatus.OK,
       message: 'Users retrieved successfully',

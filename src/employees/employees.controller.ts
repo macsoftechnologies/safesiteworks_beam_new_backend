@@ -10,6 +10,8 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
+  UseGuards,
+  Request,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,6 +24,7 @@ import {
 import { EmployeesService } from './employees.service';
 import { CreateDepEmployeeDto, CreateEmpDto, CreateEmployeeDto, CreateSubEmployeeDto, CreateUserLogDto, DeleteEmployeeDto, EmpListByDeptDto, ReadUsernameDto, SearchEmployeeDto, UpdateDepEmployeeDto, UpdateEmpDto, UpdateEmployeeDto, UpdateSubEmployeeDto, SubContEmployeesQueryDto } from './dtos/employee.dto';
 import { PaginationQueryDto } from 'src/redis/dtos/pagination.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 // ─── Reusable response schemas ────────────────────────────────────────────────
 
@@ -70,8 +73,8 @@ export class EmployeesController {
       },
     },
   })
-  findAll(@Query() query: PaginationQueryDto) {
-    return this.employeeService.findAll(query);
+  findAll(@Query() query: PaginationQueryDto, @Request() req: any) {
+    return this.employeeService.findAll(query, req.user?.userId);
   }
 
   @Get('list')
@@ -81,8 +84,9 @@ export class EmployeesController {
     description: 'Employees under the given sub-contractor.',
     schema: { example: { data: [{ id: 5, employeeName: 'Bob Builder', subContId: 1 }] } },
   })
-  findBySubCont(@Query() query: SubContEmployeesQueryDto) {
-    return this.employeeService.findBySubCont(query);
+  @UseGuards(JwtAuthGuard)
+  findBySubCont(@Query() query: SubContEmployeesQueryDto, @Request() req: any) {
+    return this.employeeService.findBySubCont(query, req.user?.userId);
   }
 
   @Get('analytics/counts')
@@ -199,8 +203,11 @@ export class EmployeesController {
       ],
     },
   })
-  search(@Body() dto: SearchEmployeeDto) {
-    return this.employeeService.search(dto);
+  @Post('search')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  search(@Body() dto: SearchEmployeeDto, @Request() req: any) {
+    return this.employeeService.search(dto, req.user?.userId);
   }
 
   @Post()

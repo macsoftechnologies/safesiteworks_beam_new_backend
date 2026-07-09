@@ -84,14 +84,33 @@ export class UsersService {
   /**
    * Get all users
    */
-  async getAllUsers(query: PaginationQueryDto) {
+  async getAllUsers(query: PaginationQueryDto, loggedInUserId?: number) {
     const { page = 1, limit = 10, isExport = false } = query;
+
+    let subContId: number | null = null;
+    if (loggedInUserId) {
+      const loggedInUser = await this.userRepo.findOne({ where: { id: loggedInUserId } });
+      if (loggedInUser && loggedInUser.userType === 'Subcontractor') {
+        subContId = loggedInUser.typeId;
+      }
+    }
+
+    const cacheKey = subContId
+      ? `users:list:${isExport}:${page}:${limit}:subcon:${subContId}`
+      : `users:list:${isExport}:${page}:${limit}`;
+
     return this.redisCacheService.getOrSet(
-      `users:list:${isExport}:${page}:${limit}`,
+      cacheKey,
       async () => {
         const findOptions: any = {
           order: { created: 'DESC' },
         };
+        if (subContId) {
+          findOptions.where = {
+            userType: 'Subcontractor',
+            typeId: subContId,
+          };
+        }
         if (!isExport) {
           findOptions.take = limit;
           findOptions.skip = (page - 1) * limit;

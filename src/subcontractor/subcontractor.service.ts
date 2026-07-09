@@ -6,12 +6,15 @@ import { CreateSubcontractorDto, UpdateSubcontractorDto } from './dtos/subcontra
 import { FileUploadService } from './file-upload.service';
 import { RedisCacheService } from 'src/redis/redid-cache.service';
 import { PaginationQueryDto } from 'src/redis/dtos/pagination.dto';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class SubcontractorService {
   constructor(
     @InjectRepository(Subcontractor)
     private subcontractorRepo: Repository<Subcontractor>,
+    @InjectRepository(User)
+    private userRepo: Repository<User>,
     private fileUploadService: FileUploadService,
     private readonly redisCacheService: RedisCacheService,
   ) { }
@@ -45,15 +48,31 @@ export class SubcontractorService {
     }
   }
 
-  async findAll(query: PaginationQueryDto) {
+  async findAll(query: PaginationQueryDto, loggedInUserId?: number) {
     try {
       const { page = 1, limit = 10, isExport = false } = query;
+
+      let subContractorId: number | null = null;
+      if (loggedInUserId) {
+        const user = await this.userRepo.findOne({ where: { id: loggedInUserId } });
+        if (user && user.userType === 'Subcontractor') {
+          subContractorId = user.typeId;
+        }
+      }
+
+      const cacheKey = subContractorId
+        ? `subcontractors:list:${isExport}:${page}:${limit}:subcon:${subContractorId}`
+        : `subcontractors:list:${isExport}:${page}:${limit}`;
+
       return this.redisCacheService.getOrSet(
-        `subcontractors:list:${isExport}:${page}:${limit}`,
+        cacheKey,
         async () => {
           const findOptions: any = {
             order: { createdTime: 'DESC' },
           };
+          if (subContractorId) {
+            findOptions.where = { id: subContractorId };
+          }
           if (!isExport) {
             findOptions.take = limit;
             findOptions.skip = (page - 1) * limit;

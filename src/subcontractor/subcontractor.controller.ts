@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, HttpCode, Query, UseInterceptors, UploadedFile, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, HttpCode, Query, UseInterceptors, UploadedFile, HttpStatus, UseGuards, Request } from '@nestjs/common';
 import { SubcontractorService } from './subcontractor.service';
 import { CreateSubcontractorDto, UpdateSubcontractorDto } from './dtos/subcontractor.dto';
 import { PaginationQueryDto } from 'src/redis/dtos/pagination.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 
@@ -28,9 +29,10 @@ export class SubcontractorController {
   constructor(private readonly subcontractorService: SubcontractorService) { }
 
   @Get()
-  async findAll(@Query() query: PaginationQueryDto) {
+  @UseGuards(JwtAuthGuard)
+  async findAll(@Query() query: PaginationQueryDto, @Request() req: any) {
     try {
-      const subcontractors = await this.subcontractorService.findAll(query);
+      const subcontractors = await this.subcontractorService.findAll(query, req.user?.userId);
       return subcontractors;
     } catch (error) {
       return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: error.message };

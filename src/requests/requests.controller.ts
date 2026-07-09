@@ -12,6 +12,8 @@ import {
   HttpStatus,
   HttpCode,
   Res,
+  UseGuards,
+  Request,
 } from '@nestjs/common';
 import { FilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -28,6 +30,7 @@ import { generatePermitHtml } from './utils/permit-html-template';
 import { generateLogsHtml } from './utils/logs-html-template';
 import { buildPermitPdf, buildLogsPdf } from './utils/pdf-generator';
 import { PlanSearchDto } from './dtos/planssearch.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 // Ensure directory exists
 const uploadDir = './uploads/requests';
@@ -146,10 +149,11 @@ export class RequestsController {
 
   // 3. Search Requests
   @Post('search')
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async search(@Body() searchDto: SearchRequestDto) {
+  async search(@Body() searchDto: SearchRequestDto, @Request() req: any) {
     try {
-      const results = await this.requestsService.search(searchDto);
+      const results = await this.requestsService.search(searchDto, req.user?.userId);
       return results;
     } catch (error) {
       return {
@@ -317,9 +321,10 @@ export class RequestsController {
 
   // 15. Fetch requests counts (readCounts.php)
   @Get('counts')
-  async readCounts() {
+  @UseGuards(JwtAuthGuard)
+  async readCounts(@Request() req: any) {
     try {
-      return await this.requestsService.readCounts();
+      return await this.requestsService.readCounts(req.user?.userId);
     } catch (error) {
       return { message: error.message };
     }
@@ -327,9 +332,10 @@ export class RequestsController {
 
   // 16. Fetch request status count (readRequestCount.php)
   @Post('counts/status')
-  async readRequestCount(@Body('Request_status') status: string) {
+  @UseGuards(JwtAuthGuard)
+  async readRequestCount(@Body('Request_status') status: string, @Request() req: any) {
     try {
-      return await this.requestsService.readRequestCount(status);
+      return await this.requestsService.readRequestCount(status, req.user?.userId);
     } catch (error) {
       return { message: error.message };
     }
@@ -337,9 +343,10 @@ export class RequestsController {
 
   // 17. Fetch plans list with nested notes (planslist.php)
   @Post('plans')
-  async plansList(@Body() searchDto: PlanSearchDto) {
+  @UseGuards(JwtAuthGuard)
+  async plansList(@Body() searchDto: PlanSearchDto, @Request() req: any) {
     try {
-      const result = await this.requestsService.plansList(searchDto);
+      const result = await this.requestsService.plansList(searchDto, req.user?.userId);
       return [result[0], result[1]];
     } catch (error) {
       return { message: error.message };
@@ -348,9 +355,10 @@ export class RequestsController {
 
   // 18. Fetch Graph counts per day (readGraph.php)
   @Post('analytics/graph')
-  async readGraph(@Body() body: { WeekFirstday: string; WeekLastday: string }) {
+  @UseGuards(JwtAuthGuard)
+  async readGraph(@Body() body: { WeekFirstday: string; WeekLastday: string }, @Request() req: any) {
     try {
-      return await this.requestsService.readGraph(body.WeekFirstday, body.WeekLastday);
+      return await this.requestsService.readGraph(body.WeekFirstday, body.WeekLastday, req.user?.userId);
     } catch (error) {
       return { message: error.message };
     }
@@ -358,9 +366,10 @@ export class RequestsController {
 
   // 19. Fetch Graph summary (readGraphCounts.php)
   @Get('analytics/graph/counts')
-  async readGraphCounts() {
+  @UseGuards(JwtAuthGuard)
+  async readGraphCounts(@Request() req: any) {
     try {
-      return await this.requestsService.readGraphCounts();
+      return await this.requestsService.readGraphCounts(req.user?.userId);
     } catch (error) {
       return { message: error.message };
     }

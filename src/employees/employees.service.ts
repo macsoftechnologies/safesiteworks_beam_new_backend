@@ -56,13 +56,22 @@ export class EmployeesService {
     private readonly cache: RedisCacheService,
   ) { }
 
-  private async invalidateAfterWrite(opts: {
+  private async invalidateAfterWrite(options: {
     employeeId?: number;
     departId?: number;
     subContId?: number;
     username?: string;
   } = {}): Promise<void> {
     await this.cache.deleteByPattern('employees:*');
+  }
+
+  private async getSubContIdForUser(userId?: number): Promise<number | null> {
+    if (!userId) return null;
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (user && user.userType === 'Subcontractor') {
+      return user.typeId;
+    }
+    return null;
   }
 
   private async mapSubContractorAndUserType(employees: Employee[]): Promise<any[]> {
@@ -101,14 +110,21 @@ export class EmployeesService {
     }
   }
 
-  async findAll(query: PaginationQueryDto): Promise<any> {
+  async findAll(query: PaginationQueryDto, loggedInUserId?: number): Promise<any> {
     const { page = 1, limit = 10, isExport = false } = query;
+    const subContId = await this.getSubContIdForUser(loggedInUserId);
+    const cacheKey = subContId 
+      ? `employees:list:all:${isExport}:${page}:${limit}:subcon:${subContId}`
+      : `employees:list:all:${isExport}:${page}:${limit}`;
     return this.cache.getOrSet(
-      `employees:list:all:${isExport}:${page}:${limit}`,
+      cacheKey,
       async () => {
         const findOptions: any = {
           order: { createdTime: 'DESC' },
         };
+        if (subContId) {
+          findOptions.where = { subContId };
+        }
         if (!isExport) {
           findOptions.take = limit;
           findOptions.skip = (page - 1) * limit;
@@ -161,8 +177,10 @@ export class EmployeesService {
     );
   }
 
-  async findBySubCont(query: SubContEmployeesQueryDto): Promise<any> {
-    const { subcont: subContId, page = 1, limit = 10, isExport = false } = query;
+  async findBySubCont(query: SubContEmployeesQueryDto, loggedInUserId?: number): Promise<any> {
+    const { subcont, page = 1, limit = 10, isExport = false } = query;
+    const loggedInSubContId = await this.getSubContIdForUser(loggedInUserId);
+    const subContId = loggedInSubContId ?? subcont;
     return this.cache.getOrSet(
       `employees:list:subcont:${subContId}:${isExport}:${page}:${limit}`,
       async () => {
@@ -250,25 +268,43 @@ export class EmployeesService {
 
   async search(
     dto: SearchEmployeeDto,
+    loggedInUserId?: number,
   ): Promise<any> {
+    const subContId = await this.getSubContIdForUser(loggedInUserId);
+    const cacheKey = subContId
+      ? `${CACHE_KEYS.search(dto)}:subcon:${subContId}`
+      : CACHE_KEYS.search(dto);
     return this.cache.getOrSet(
-      CACHE_KEYS.search(dto),
+      cacheKey,
       async () => {
         const { page = 1, limit = 10, isExport = false } = dto;
         const skip = (page - 1) * limit;
 
-        let where: FindOptionsWhere<Employee> | FindOptionsWhere<Employee>[] = {};
+        let where: FindOptionsWhere<Employee> | FindOptionsWhere<Employee>[];
 
         if (dto.search) {
           const searchPattern = Like(`%${dto.search}%`);
-          where = [
-            { employeeName: searchPattern },
-            { email: searchPattern },
-            { badgeId: searchPattern },
-            { username: searchPattern },
-            { companyName: searchPattern },
-            { designation: searchPattern },
-          ];
+          if (subContId) {
+            where = [
+              { employeeName: searchPattern, subContId },
+              { email: searchPattern, subContId },
+              { badgeId: searchPattern, subContId },
+              { username: searchPattern, subContId },
+              { companyName: searchPattern, subContId },
+              { designation: searchPattern, subContId },
+            ];
+          } else {
+            where = [
+              { employeeName: searchPattern },
+              { email: searchPattern },
+              { badgeId: searchPattern },
+              { username: searchPattern },
+              { companyName: searchPattern },
+              { designation: searchPattern },
+            ];
+          }
+        } else {
+          where = subContId ? { subContId } : {};
         }
 
         const findOptions: any = {
