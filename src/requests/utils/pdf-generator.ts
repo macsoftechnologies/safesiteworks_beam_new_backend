@@ -278,10 +278,10 @@ const C = {
 
 // ─── Page geometry ────────────────────────────────────────────────────────────
 const PAGE_W = 595;
-const PAGE_H = 6000;   // fit-content: one tall page, no page breaks
+const PAGE_H = 842;   // Standard A4 page height
 const MARGIN = 20;
 const CONTENT_W = PAGE_W - MARGIN * 2;
-const BOTTOM = PAGE_H - 10;   // effectively infinite — ensureSpace never adds a page
+const BOTTOM = PAGE_H - MARGIN - 10;   // Allow bottom margin of 30 points
 
 // ═════════════════════════════════════════════════════════════════════════════
 // UTILITY HELPERS
@@ -298,7 +298,10 @@ function yesNo(v: any): string {
 
 /** Add a new page only when there is not enough vertical space left. */
 function ensureSpace(doc: PDFKit.PDFDocument, needed: number) {
-  if (doc.y + needed > BOTTOM) doc.addPage();
+  if (doc.y + needed > BOTTOM) {
+    doc.addPage();
+    doc.y = MARGIN;
+  }
 }
 
 /** Horizontal rule — does NOT use doc.text so it never moves doc.y unexpectedly */
@@ -463,6 +466,7 @@ function drawChecklistTable(doc: PDFKit.PDFDocument, items: CheckItem[]) {
     // Page break if needed — re-draw header on new page
     if (doc.y + rowH > BOTTOM) {
       doc.addPage();
+      doc.y = MARGIN;
       hy = doc.y;
       doc.fillColor(C.rowHeader).rect(MARGIN, hy, CONTENT_W, HDR_H).fill();
       doc.fillColor(C.primary).fontSize(8).font('Helvetica-Bold')

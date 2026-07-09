@@ -31,6 +31,12 @@ export function generatePermitHtml(data: any): string {
     }
   };
 
+  // Format Helper for Room names / Zone names
+  const formatRooms = (roomsStr: any) => {
+    if (!roomsStr) return '-';
+    return String(roomsStr).split(',').map(r => r.trim()).filter(Boolean).join(', ');
+  };
+
   // Format Helper for Date + Time
   const formatDateTime = (dateStr: any) => {
     if (!dateStr) return '-';
@@ -632,8 +638,6 @@ export function generatePermitHtml(data: any): string {
     if (Number(data.Hot_work) === 1) {
       const riskLevelText = Number(data.high_risk_hotwork) === 1 ? 'High Risk' : 'Low Risk';
       const riskLevelClass = Number(data.high_risk_hotwork) === 1 ? 'text-danger' : 'text-success';
-      const checklistFilled = Number(data.hot_work_checklist_filled) === 1;
-      const areaIsolated = Number(data.work_environment_safety_ensured) === 1;
 
       html += `
         <div class="active-hazard-card mb-3">
@@ -655,25 +659,11 @@ export function generatePermitHtml(data: any): string {
               </span>
             </div>
           </div>
-          <div class="active-hazard-checks">
-            <label class="hazard-checkbox-label">
-              <input type="checkbox" ${checklistFilled ? 'checked' : ''} disabled>
-              <span class="checkbox-custom"></span>
-              Pre-inspection completed
-            </label>
-            <label class="hazard-checkbox-label">
-              <input type="checkbox" ${areaIsolated ? 'checked' : ''} disabled>
-              <span class="checkbox-custom"></span>
-              Area isolated
-            </label>
-          </div>
         </div>
       `;
     }
 
     if (Number(data.working_on_electrical_system) === 1) {
-      const deEnergized = Number(data.de_energized) === 1;
-      const lotoSecured = Number(data.if_no_loto) === 1;
       html += `
         <div class="active-hazard-card mb-3">
           <div class="active-hazard-header">
@@ -694,25 +684,11 @@ export function generatePermitHtml(data: any): string {
               </span>
             </div>
           </div>
-          <div class="active-hazard-checks">
-            <label class="hazard-checkbox-label">
-              <input type="checkbox" ${deEnergized ? 'checked' : ''} disabled>
-              <span class="checkbox-custom"></span>
-              Board de-energized
-            </label>
-            <label class="hazard-checkbox-label">
-              <input type="checkbox" ${lotoSecured ? 'checked' : ''} disabled>
-              <span class="checkbox-custom"></span>
-              LOTO plan implemented
-            </label>
-          </div>
         </div>
       `;
     }
 
     if (Number(data.working_hazardious_substen) === 1) {
-      const msdsSubmitted = Number(data.msds) === 1;
-      const spillKits = Number(data.reachable_case) === 1;
       html += `
         <div class="active-hazard-card mb-3">
           <div class="active-hazard-header">
@@ -733,25 +709,11 @@ export function generatePermitHtml(data: any): string {
               </span>
             </div>
           </div>
-          <div class="active-hazard-checks">
-            <label class="hazard-checkbox-label">
-              <input type="checkbox" ${msdsSubmitted ? 'checked' : ''} disabled>
-              <span class="checkbox-custom"></span>
-              MSDS submitted
-            </label>
-            <label class="hazard-checkbox-label">
-              <input type="checkbox" ${spillKits ? 'checked' : ''} disabled>
-              <span class="checkbox-custom"></span>
-              Spill kits reachable
-            </label>
-          </div>
         </div>
       `;
     }
 
     if (Number(data.working_at_height) === 1) {
-      const anchors = Number(data.lanyard_attachments) === 1;
-      const harness = Number(data.shock_absorbing) === 1;
       html += `
         <div class="active-hazard-card mb-3">
           <div class="active-hazard-header">
@@ -772,25 +734,11 @@ export function generatePermitHtml(data: any): string {
               </span>
             </div>
           </div>
-          <div class="active-hazard-checks">
-            <label class="hazard-checkbox-label">
-              <input type="checkbox" ${anchors ? 'checked' : ''} disabled>
-              <span class="checkbox-custom"></span>
-              Anchor points verified
-            </label>
-            <label class="hazard-checkbox-label">
-              <input type="checkbox" ${harness ? 'checked' : ''} disabled>
-              <span class="checkbox-custom"></span>
-              Fall prevention deployed
-            </label>
-          </div>
         </div>
       `;
     }
 
     if (Number(data.working_confined_spaces) === 1) {
-      const oxygen = Number(data.oxygen_meter) === 1;
-      const communication = Number(data.communication_emergency) === 1;
       html += `
         <div class="active-hazard-card mb-3">
           <div class="active-hazard-header">
@@ -810,18 +758,6 @@ export function generatePermitHtml(data: any): string {
                 </svg>
               </span>
             </div>
-          </div>
-          <div class="active-hazard-checks">
-            <label class="hazard-checkbox-label">
-              <input type="checkbox" ${oxygen ? 'checked' : ''} disabled>
-              <span class="checkbox-custom"></span>
-              Oxygen meter provided
-            </label>
-            <label class="hazard-checkbox-label">
-              <input type="checkbox" ${communication ? 'checked' : ''} disabled>
-              <span class="checkbox-custom"></span>
-              Communication in place
-            </label>
           </div>
         </div>
       `;
@@ -1051,8 +987,10 @@ export function generatePermitHtml(data: any): string {
       font-size: 13px;
       color: #64748b;
       font-weight: 600;
-      display: flex;
-      align-items: center;
+      display: inline-block;
+      vertical-align: middle;
+      word-wrap: break-word;
+      word-break: break-word;
     }
     .header-actions {
       display: flex;
@@ -1725,34 +1663,34 @@ export function generatePermitHtml(data: any): string {
     
     <!-- Top Dashboard Card (Header, Actions, Stepper) -->
     <div class="dashboard-card">
-      <div class="header-layout">
-        <div class="header-title-section">
-          <div class="back-btn" onclick="window.history.back()">
+      <div class="header-layout" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: nowrap; gap: 16px; width: 100%;">
+        <div class="header-title-section" style="display: flex; align-items: center; gap: 16px; min-width: 0; flex-grow: 1;">
+          <div class="back-btn" onclick="window.history.back()" style="flex-shrink: 0;">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px;">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </div>
-          <div class="header-details-wrap">
-            <h1 class="permit-title">Permit #${data.PermitNo || '-'}</h1>
-            <div class="badge-row">
+          <div class="header-details-wrap" style="min-width: 0; flex-grow: 1;">
+            <h1 class="permit-title" style="margin: 0;">Permit #${data.PermitNo || '-'}</h1>
+            <div class="badge-row" style="margin-top: 4px;">
               <span class="header-badge">${data.activityName || data.Activity || 'Activity'}</span>
               <span class="header-badge badge-risk">${getRiskLevel()} Risk</span>
               <span class="header-badge badge-status">${getStatusText()}</span>
-              <span class="location-pin-text">
+              <span class="location-pin-text" style="display: inline-block; vertical-align: middle;">
                 <img src="${locationPinDataUrl}" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;" />
-                ${data.room_names || data.Room_Nos || data.zone_name || '-'}
+                <span style="vertical-align: middle;">${formatRooms(data.room_names || data.Room_Nos || data.zone_name)}</span>
               </span>
             </div>
           </div>
         </div>
-        <div class="header-actions">
+        <div class="header-actions" style="flex-shrink: 0; display: flex; align-items: center; gap: 10px;">
           <button class="btn-action" onclick="test()">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 16px; height: 16px;">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
             PDF
           </button>
-          <div class="triple-dots">&#8942;</div>
+          <div class="triple-dots" style="padding: 8px;">&#8942;</div>
         </div>
       </div>
       
@@ -1881,7 +1819,7 @@ export function generatePermitHtml(data: any): string {
             </div>
             <div class="info-fullwidth">
               <div class="info-label">Specific Rooms</div>
-              <div class="info-value">${data.room_names || data.Room_Nos || '-'}</div>
+              <div class="info-value">${formatRooms(data.room_names || data.Room_Nos)}</div>
             </div>
             <div>
               <div class="info-label">Date</div>
@@ -2178,11 +2116,27 @@ export function generatePermitHtml(data: any): string {
       ${(() => {
       const isHotWorkActive = Number(data.Hot_work) === 1;
       const isWeldingActive = isHotWorkActive && Number(data.welding_activitiy) === 1;
+      if (!isHotWorkActive) {
+        return `
+          <div class="dashboard-card" style="border-left: 4px solid #ef4444; background-color: #fafafa; opacity: 0.9;">
+            <div class="detailed-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center;">
+                ${imgHotWorks ? `<img src="${imgHotWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px; filter: grayscale(100%);">` : ''}
+                <span style="color: #64748b;">Hotwork Checklist</span>
+              </div>
+              <span class="badge" style="background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">No</span>
+            </div>
+          </div>
+        `;
+      }
       return `
-        <div class="dashboard-card">
-          <div class="detailed-section-title">
-            ${imgHotWorks ? `<img src="${imgHotWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
-            Hotwork Checklist
+        <div class="dashboard-card" style="border-left: 4px solid #16a34a;">
+          <div class="detailed-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+              ${imgHotWorks ? `<img src="${imgHotWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
+              Hotwork Checklist
+            </div>
+            <span class="badge" style="background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">Yes</span>
           </div>
           <table class="detailed-table">
             <thead>
@@ -2194,7 +2148,7 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${hotWorkQuestions.map(q => renderCheckRow(q.text, isHotWorkActive ? data[q.id] : 0)).join('')}
+              ${hotWorkQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
 
@@ -2225,24 +2179,24 @@ export function generatePermitHtml(data: any): string {
               <div class="info-grid">
                 <div>
                   <div class="info-label">Low Risk Hotwork</div>
-                  <div class="info-value">${isHotWorkActive && Number(data.low_risk_hotwork) === 1 ? 'Yes' : 'No'}</div>
+                  <div class="info-value">${Number(data.low_risk_hotwork) === 1 ? 'Yes' : 'No'}</div>
                 </div>
                 <div>
                   <div class="info-label">High Risk Hotwork</div>
-                  <div class="info-value">${isHotWorkActive && Number(data.high_risk_hotwork) === 1 ? 'Yes' : 'No'}</div>
+                  <div class="info-value">${Number(data.high_risk_hotwork) === 1 ? 'Yes' : 'No'}</div>
                 </div>
                 <div>
                   <div class="info-label">Hot Work Checklist Filled</div>
-                  <div class="info-value">${isHotWorkActive && Number(data.hot_work_checklist_filled) === 1 ? 'Yes' : 'No'}</div>
+                  <div class="info-value">${Number(data.hot_work_checklist_filled) === 1 ? 'Yes' : 'No'}</div>
                 </div>
                 <div>
                   <div class="info-label">Fire Guard Present</div>
-                  <div class="info-value">${isHotWorkActive && Number(data.fire_guard_present) === 1 ? 'Yes' : 'No'}</div>
+                  <div class="info-value">${Number(data.fire_guard_present) === 1 ? 'Yes' : 'No'}</div>
                 </div>
               </div>
             </div>
             <div class="col-md-6 text-center">
-              ${isHotWorkActive && data.fire_image ? `
+              ${data.fire_image ? `
                 <div class="info-label">Fire Watch Image</div>
                 <img src="${getFireImageUrl(data.fire_image)}" style="max-width: 140px; height: auto; border-radius: 8px; border: 1px solid #cbd5e1; margin-top: 8px;">
               ` : ''}
@@ -2252,16 +2206,16 @@ export function generatePermitHtml(data: any): string {
           <div class="mt-4 border-top pt-3">
             <table class="detailed-table">
               <tbody>
-                ${renderCheckRow('Has the work area been inspected for smoldering materials or residual heat?', isHotWorkActive ? data.h_heat_source : 0)}
-                ${renderCheckRow('Have all tools and hot work equipment been safely removed from the work area?', isHotWorkActive ? data.h_workplace_check : 0)}
-                ${renderCheckRow('Has the area been cleaned and restored to its original safe condition?', isHotWorkActive ? data.h_fire_detectors : 0)}
+                ${renderCheckRow('Has the work area been inspected for smoldering materials or residual heat?', data.h_heat_source)}
+                ${renderCheckRow('Have all tools and hot work equipment been safely removed from the work area?', data.h_workplace_check)}
+                ${renderCheckRow('Has the area been cleaned and restored to its original safe condition?', data.h_fire_detectors)}
                 <tr>
                   <td>1hr Check time</td>
-                  <td colspan="3">${isHotWorkActive && data.h_start_time && data.h_start_time !== '1970' ? data.h_start_time : 'N/A'}</td>
+                  <td colspan="3">${data.h_start_time && data.h_start_time !== '1970' ? data.h_start_time : 'N/A'}</td>
                 </tr>
                 <tr>
                   <td>3hrs Check time</td>
-                  <td colspan="3">${isHotWorkActive && data.h_end_time && data.h_end_time !== '1970' ? data.h_end_time : 'N/A'}</td>
+                  <td colspan="3">${data.h_end_time && data.h_end_time !== '1970' ? data.h_end_time : 'N/A'}</td>
                 </tr>
               </tbody>
             </table>
@@ -2273,11 +2227,27 @@ export function generatePermitHtml(data: any): string {
       <!-- Temporary Site Electrical Systems Table -->
       ${(() => {
       const isElecActive = Number(data.working_on_electrical_system) === 1;
+      if (!isElecActive) {
+        return `
+          <div class="dashboard-card" style="border-left: 4px solid #ef4444; background-color: #fafafa; opacity: 0.9;">
+            <div class="detailed-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center;">
+                ${imgElectricalSystems ? `<img src="${imgElectricalSystems}" style="height: 32px; vertical-align: middle; margin-right: 8px; filter: grayscale(100%);">` : ''}
+                <span style="color: #64748b;">Temporary Site Electrical Systems</span>
+              </div>
+              <span class="badge" style="background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">No</span>
+            </div>
+          </div>
+        `;
+      }
       return `
-        <div class="dashboard-card">
-          <div class="detailed-section-title">
-            ${imgElectricalSystems ? `<img src="${imgElectricalSystems}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
-            Temporary Site Electrical Systems
+        <div class="dashboard-card" style="border-left: 4px solid #16a34a;">
+          <div class="detailed-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+              ${imgElectricalSystems ? `<img src="${imgElectricalSystems}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
+              Temporary Site Electrical Systems
+            </div>
+            <span class="badge" style="background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">Yes</span>
           </div>
           <table class="detailed-table">
             <thead>
@@ -2289,7 +2259,7 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${electricalQuestions.map(q => renderCheckRow(q.text, isElecActive ? data[q.id] : 0)).join('')}
+              ${electricalQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
         </div>
@@ -2299,11 +2269,27 @@ export function generatePermitHtml(data: any): string {
       <!-- Working with Hazardous Substances/Chemicals -->
       ${(() => {
       const isChemActive = Number(data.working_hazardious_substen) === 1;
+      if (!isChemActive) {
+        return `
+          <div class="dashboard-card" style="border-left: 4px solid #ef4444; background-color: #fafafa; opacity: 0.9;">
+            <div class="detailed-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center;">
+                ${imgSubstanceChemical ? `<img src="${imgSubstanceChemical}" style="height: 32px; vertical-align: middle; margin-right: 8px; filter: grayscale(100%);">` : ''}
+                <span style="color: #64748b;">Working with Hazardous Substances/Chemicals</span>
+              </div>
+              <span class="badge" style="background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">No</span>
+            </div>
+          </div>
+        `;
+      }
       return `
-        <div class="dashboard-card">
-          <div class="detailed-section-title">
-            ${imgSubstanceChemical ? `<img src="${imgSubstanceChemical}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
-            Working with Hazardous Substances/Chemicals
+        <div class="dashboard-card" style="border-left: 4px solid #16a34a;">
+          <div class="detailed-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+              ${imgSubstanceChemical ? `<img src="${imgSubstanceChemical}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
+              Working with Hazardous Substances/Chemicals
+            </div>
+            <span class="badge" style="background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">Yes</span>
           </div>
           <table class="detailed-table">
             <thead>
@@ -2315,7 +2301,7 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${chemicalQuestions.map(q => renderCheckRow(q.text, isChemActive ? data[q.id] : 0)).join('')}
+              ${chemicalQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
         </div>
@@ -2326,11 +2312,27 @@ export function generatePermitHtml(data: any): string {
       ${(() => {
       if (data.permit_type !== 'Commissioning') return '';
       const isPressureActive = Number(data.pressure_testing_of_equipment) === 1;
+      if (!isPressureActive) {
+        return `
+          <div class="dashboard-card" style="border-left: 4px solid #ef4444; background-color: #fafafa; opacity: 0.9;">
+            <div class="detailed-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center;">
+                ${imgTestingEquipment ? `<img src="${imgTestingEquipment}" style="height: 32px; vertical-align: middle; margin-right: 8px; filter: grayscale(100%);">` : ''}
+                <span style="color: #64748b;">Pressure Testing of Equipment</span>
+              </div>
+              <span class="badge" style="background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">No</span>
+            </div>
+          </div>
+        `;
+      }
       return `
-        <div class="dashboard-card">
-          <div class="detailed-section-title">
-            ${imgTestingEquipment ? `<img src="${imgTestingEquipment}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
-            Pressure Testing of Equipment
+        <div class="dashboard-card" style="border-left: 4px solid #16a34a;">
+          <div class="detailed-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+              ${imgTestingEquipment ? `<img src="${imgTestingEquipment}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
+              Pressure Testing of Equipment
+            </div>
+            <span class="badge" style="background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">Yes</span>
           </div>
           <table class="detailed-table">
             <thead>
@@ -2342,7 +2344,7 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${pressureQuestions.map(q => renderCheckRow(q.text, isPressureActive ? data[q.id] : 0)).join('')}
+              ${pressureQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
         </div>
@@ -2352,11 +2354,27 @@ export function generatePermitHtml(data: any): string {
       <!-- Working at Height -->
       ${(() => {
       const isHeightActive = Number(data.working_at_height) === 1;
+      if (!isHeightActive) {
+        return `
+          <div class="dashboard-card" style="border-left: 4px solid #ef4444; background-color: #fafafa; opacity: 0.9;">
+            <div class="detailed-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center;">
+                ${imgWorkingAtHight ? `<img src="${imgWorkingAtHight}" style="height: 32px; vertical-align: middle; margin-right: 8px; filter: grayscale(100%);">` : ''}
+                <span style="color: #64748b;">Working at Height</span>
+              </div>
+              <span class="badge" style="background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">No</span>
+            </div>
+          </div>
+        `;
+      }
       return `
-        <div class="dashboard-card">
-          <div class="detailed-section-title">
-            ${imgWorkingAtHight ? `<img src="${imgWorkingAtHight}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
-            Working at Height
+        <div class="dashboard-card" style="border-left: 4px solid #16a34a;">
+          <div class="detailed-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+              ${imgWorkingAtHight ? `<img src="${imgWorkingAtHight}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
+              Working at Height
+            </div>
+            <span class="badge" style="background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">Yes</span>
           </div>
           <table class="detailed-table">
             <thead>
@@ -2368,7 +2386,7 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${heightQuestions.map(q => renderCheckRow(q.text, isHeightActive ? data[q.id] : 0)).join('')}
+              ${heightQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
         </div>
@@ -2378,11 +2396,27 @@ export function generatePermitHtml(data: any): string {
       <!-- Working in Confined Space -->
       ${(() => {
       const isConfinedActive = Number(data.working_confined_spaces) === 1;
+      if (!isConfinedActive) {
+        return `
+          <div class="dashboard-card" style="border-left: 4px solid #ef4444; background-color: #fafafa; opacity: 0.9;">
+            <div class="detailed-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center;">
+                ${imgConfinedSpace ? `<img src="${imgConfinedSpace}" style="height: 32px; vertical-align: middle; margin-right: 8px; filter: grayscale(100%);">` : ''}
+                <span style="color: #64748b;">Working in Confined Space</span>
+              </div>
+              <span class="badge" style="background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">No</span>
+            </div>
+          </div>
+        `;
+      }
       return `
-        <div class="dashboard-card">
-          <div class="detailed-section-title">
-            ${imgConfinedSpace ? `<img src="${imgConfinedSpace}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
-            Working in Confined Space
+        <div class="dashboard-card" style="border-left: 4px solid #16a34a;">
+          <div class="detailed-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+              ${imgConfinedSpace ? `<img src="${imgConfinedSpace}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
+              Working in Confined Space
+            </div>
+            <span class="badge" style="background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">Yes</span>
           </div>
           <table class="detailed-table">
             <thead>
@@ -2394,7 +2428,7 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${confinedQuestions.map(q => renderCheckRow(q.text, isConfinedActive ? data[q.id] : 0)).join('')}
+              ${confinedQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
         </div>
@@ -2404,11 +2438,27 @@ export function generatePermitHtml(data: any): string {
       <!-- Excavation Works -->
       ${(() => {
       const isExcavationActive = Number(data.excavation_works) === 1;
+      if (!isExcavationActive) {
+        return `
+          <div class="dashboard-card" style="border-left: 4px solid #ef4444; background-color: #fafafa; opacity: 0.9;">
+            <div class="detailed-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center;">
+                ${imgExcavationWorks ? `<img src="${imgExcavationWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px; filter: grayscale(100%);">` : ''}
+                <span style="color: #64748b;">Excavation Works</span>
+              </div>
+              <span class="badge" style="background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">No</span>
+            </div>
+          </div>
+        `;
+      }
       return `
-        <div class="dashboard-card">
-          <div class="detailed-section-title">
-            ${imgExcavationWorks ? `<img src="${imgExcavationWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
-            Excavation Works
+        <div class="dashboard-card" style="border-left: 4px solid #16a34a;">
+          <div class="detailed-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+              ${imgExcavationWorks ? `<img src="${imgExcavationWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
+              Excavation Works
+            </div>
+            <span class="badge" style="background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">Yes</span>
           </div>
           <table class="detailed-table">
             <thead>
@@ -2420,7 +2470,7 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${excavationQuestions.map(q => renderCheckRow(q.text, isExcavationActive ? data[q.id] : 0)).join('')}
+              ${excavationQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
         </div>
@@ -2430,11 +2480,27 @@ export function generatePermitHtml(data: any): string {
       <!-- Crane and Lifting Operations -->
       ${(() => {
       const isLiftingActive = Number(data.using_cranes_or_lifting) === 1;
+      if (!isLiftingActive) {
+        return `
+          <div class="dashboard-card" style="border-left: 4px solid #ef4444; background-color: #fafafa; opacity: 0.9;">
+            <div class="detailed-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center;">
+                ${imgCranesLifting ? `<img src="${imgCranesLifting}" style="height: 32px; vertical-align: middle; margin-right: 8px; filter: grayscale(100%);">` : ''}
+                <span style="color: #64748b;">Crane and Lifting Operations</span>
+              </div>
+              <span class="badge" style="background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">No</span>
+            </div>
+          </div>
+        `;
+      }
       return `
-        <div class="dashboard-card">
-          <div class="detailed-section-title">
-            ${imgCranesLifting ? `<img src="${imgCranesLifting}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
-            Crane and Lifting Operations
+        <div class="dashboard-card" style="border-left: 4px solid #16a34a;">
+          <div class="detailed-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+              ${imgCranesLifting ? `<img src="${imgCranesLifting}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
+              Crane and Lifting Operations
+            </div>
+            <span class="badge" style="background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">Yes</span>
           </div>
           <table class="detailed-table">
             <thead>
@@ -2446,7 +2512,7 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${liftingQuestions.map(q => renderCheckRow(q.text, isLiftingActive ? data[q.id] : 0)).join('')}
+              ${liftingQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
         </div>
@@ -2460,14 +2526,36 @@ export function generatePermitHtml(data: any): string {
       const isEnergisingActive = isPowerActive && Number(data.energising_equipment) === 1;
       const isIsolatingActive = isPowerActive && Number(data.isolating_live) === 1;
       const isWorkingNearLiveActive = isPowerActive && Number(data.working_near_live) === 1;
+      if (!isPowerActive) {
+        return `
+          <div class="dashboard-card" style="border-left: 4px solid #ef4444; background-color: #fafafa; opacity: 0.9;">
+            <div class="detailed-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center;">
+                ${imgElectricalWorks ? `<img src="${imgElectricalWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px; filter: grayscale(100%);">` : ''}
+                <span style="color: #64748b;">Energising, Isolating & Working on Live Electrical Systems</span>
+              </div>
+              <span class="badge" style="background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">No</span>
+            </div>
+          </div>
+        `;
+      }
       return `
-        <div class="dashboard-card">
-          <div class="detailed-section-title">
-            ${imgElectricalWorks ? `<img src="${imgElectricalWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
-            Energising, Isolating & Working on Live Electrical Systems
+        <div class="dashboard-card" style="border-left: 4px solid #16a34a;">
+          <div class="detailed-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+              ${imgElectricalWorks ? `<img src="${imgElectricalWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
+              Energising, Isolating & Working on Live Electrical Systems
+            </div>
+            <span class="badge" style="background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">Yes</span>
           </div>
 
-          <div class="font-weight-bold mt-2 mb-2">Sub-Section: Energising Electrical Equipment</div>
+          <div class="font-weight-bold mt-2 mb-2" style="${isEnergisingActive ? '' : 'color: #64748b;'}">
+            Sub-Section: Energising Electrical Equipment
+            <span class="badge" style="margin-left: 6px; background-color: ${isEnergisingActive ? '#dcfce7' : '#fee2e2'}; color: ${isEnergisingActive ? '#16a34a' : '#ef4444'}; border: 1px solid ${isEnergisingActive ? '#bbf7d0' : '#fecaca'}; padding: 2px 8px; border-radius: 4px; font-size: 11px;">
+              ${isEnergisingActive ? 'Yes' : 'No'}
+            </span>
+          </div>
+          ${isEnergisingActive ? `
           <table class="detailed-table">
             <thead>
               <tr>
@@ -2478,11 +2566,18 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${energisingElecQuestions.map(q => renderCheckRow(q.text, isEnergisingActive ? data[q.id] : 0)).join('')}
+              ${energisingElecQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
+          ` : ''}
 
-          <div class="font-weight-bold mt-3 mb-2">Sub-Section: Isolating Live Electrical Systems for Maintenance or Modification</div>
+          <div class="font-weight-bold mt-3 mb-2" style="${isIsolatingActive ? '' : 'color: #64748b;'}">
+            Sub-Section: Isolating Live Electrical Systems for Maintenance or Modification
+            <span class="badge" style="margin-left: 6px; background-color: ${isIsolatingActive ? '#dcfce7' : '#fee2e2'}; color: ${isIsolatingActive ? '#16a34a' : '#ef4444'}; border: 1px solid ${isIsolatingActive ? '#bbf7d0' : '#fecaca'}; padding: 2px 8px; border-radius: 4px; font-size: 11px;">
+              ${isIsolatingActive ? 'Yes' : 'No'}
+            </span>
+          </div>
+          ${isIsolatingActive ? `
           <table class="detailed-table">
             <thead>
               <tr>
@@ -2493,11 +2588,18 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${isolatingElecQuestions.map(q => renderCheckRow(q.text, isIsolatingActive ? data[q.id] : 0)).join('')}
+              ${isolatingElecQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
+          ` : ''}
 
-          <div class="font-weight-bold mt-3 mb-2">Sub-Section: Working on OR near live electrical systems</div>
+          <div class="font-weight-bold mt-3 mb-2" style="${isWorkingNearLiveActive ? '' : 'color: #64748b;'}">
+            Sub-Section: Working on OR near live electrical systems
+            <span class="badge" style="margin-left: 6px; background-color: ${isWorkingNearLiveActive ? '#dcfce7' : '#fee2e2'}; color: ${isWorkingNearLiveActive ? '#16a34a' : '#ef4444'}; border: 1px solid ${isWorkingNearLiveActive ? '#bbf7d0' : '#fecaca'}; padding: 2px 8px; border-radius: 4px; font-size: 11px;">
+              ${isWorkingNearLiveActive ? 'Yes' : 'No'}
+            </span>
+          </div>
+          ${isWorkingNearLiveActive ? `
           <table class="detailed-table">
             <thead>
               <tr>
@@ -2508,22 +2610,39 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${workingNearLiveQuestions.map(q => renderCheckRow(q.text, isWorkingNearLiveActive ? data[q.id] : 0)).join('')}
+              ${workingNearLiveQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
+          ` : ''}
         </div>
-        `;
+      `;
     })()}
 
       <!-- Energisation of Mechanical equipment -->
       ${(() => {
       if (data.permit_type !== 'Commissioning') return '';
       const isPressurizeActive = Number(data.pressurization) === 1;
+      if (!isPressurizeActive) {
+        return `
+          <div class="dashboard-card" style="border-left: 4px solid #ef4444; background-color: #fafafa; opacity: 0.9;">
+            <div class="detailed-section-title" style="margin-bottom: 0; border-bottom: none; padding-bottom: 0; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div style="display: flex; align-items: center;">
+                ${imgMechanicalWorks ? `<img src="${imgMechanicalWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px; filter: grayscale(100%);">` : ''}
+                <span style="color: #64748b;">Energisation of Mechanical equipment</span>
+              </div>
+              <span class="badge" style="background-color: #fee2e2; color: #ef4444; border: 1px solid #fecaca; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">No</span>
+            </div>
+          </div>
+        `;
+      }
       return `
-        <div class="dashboard-card">
-          <div class="detailed-section-title">
-            ${imgMechanicalWorks ? `<img src="${imgMechanicalWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
-            Energisation of Mechanical equipment
+        <div class="dashboard-card" style="border-left: 4px solid #16a34a;">
+          <div class="detailed-section-title" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center;">
+              ${imgMechanicalWorks ? `<img src="${imgMechanicalWorks}" style="height: 32px; vertical-align: middle; margin-right: 8px;">` : ''}
+              Energisation of Mechanical equipment
+            </div>
+            <span class="badge" style="background-color: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 800;">Yes</span>
           </div>
           <table class="detailed-table">
             <thead>
@@ -2535,7 +2654,7 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${mechanicalQuestions.map(q => renderCheckRow(q.text, isPressurizeActive ? data[q.id] : 0)).join('')}
+              ${mechanicalQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
             </tbody>
           </table>
         </div>
