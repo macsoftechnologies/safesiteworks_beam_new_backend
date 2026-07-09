@@ -61,4 +61,8 @@ export class ZonesQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   zone?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
 }

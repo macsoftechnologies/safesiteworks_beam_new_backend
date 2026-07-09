@@ -34,7 +34,7 @@ const CACHE_KEYS = {
   byDept: (id: number) => `employees:dept:${id}`,
   bySubCont: (id: number) => `employees:subcont:${id}`,
   search: (dto: SearchEmployeeDto) =>
-    `employees:search:${dto.search ?? ''}:${dto.isExport ?? false}:${dto.page ?? 1}:${dto.limit ?? 10}`,
+    `employees:search:${dto.search ?? ''}:${dto.companyName ?? ''}:${dto.isExport ?? false}:${dto.page ?? 1}:${dto.limit ?? 10}`,
   username: (u: string) => `employees:username:${u}`,
 };
 
@@ -303,8 +303,16 @@ export class EmployeesService {
               { designation: searchPattern },
             ];
           }
+          if (dto.companyName) {
+            if (Array.isArray(where)) {
+              where = where.map(w => ({ ...w, companyName: dto.companyName }));
+            }
+          }
         } else {
-          where = subContId ? { subContId } : {};
+          const baseWhere: any = {};
+          if (subContId) baseWhere.subContId = subContId;
+          if (dto.companyName) baseWhere.companyName = dto.companyName;
+          where = baseWhere;
         }
 
         const findOptions: any = {

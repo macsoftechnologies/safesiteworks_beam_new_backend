@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Like } from 'typeorm';
 import { Zone } from './entities/zone.entity';
 import { CreateZoneDto, UpdateZoneDto, ZonesQueryDto } from './dtos/zone.dto';
 import { RedisCacheService } from 'src/redis/redid-cache.service';
@@ -22,9 +22,9 @@ export class ZonesService {
   }
 
   async findAll(query: ZonesQueryDto): Promise<any> {
-    const { page = 1, limit = 10, isExport = false, level, building_id, zone } = query;
+    const { page = 1, limit = 10, isExport = false, level, building_id, zone, status } = query;
     return this.redisCacheService.getOrSet(
-      `zones:list:${level ?? 'all'}:${building_id ?? 'all'}:${zone ?? 'all'}:${isExport}:${page}:${limit}`,
+      `zones:list:${level ?? 'all'}:${building_id ?? 'all'}:${zone ?? 'all'}:${status ?? 'all'}:${isExport}:${page}:${limit}`,
       async () => {
         const where: any = {};
         if (level) {
@@ -34,7 +34,10 @@ export class ZonesService {
           where.building_id = building_id;
         }
         if (zone) {
-          where.zone = zone;
+          where.zone = Like(`%${zone}%`);
+        }
+        if (status) {
+          where.status = status;
         }
 
         const findOptions: any = {

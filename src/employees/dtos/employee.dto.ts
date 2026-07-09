@@ -183,6 +183,7 @@ export class ReadUsernameDto {
 
 export class SearchEmployeeDto extends PaginationQueryDto {
   @IsOptional() @IsString() search?: string;
+  @IsOptional() @IsString() companyName?: string;
 }
 
 // ─── USER LOG ─────────────────────────────────────────────────────────────────
