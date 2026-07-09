@@ -3232,8 +3232,37 @@ export class RequestsService {
 
   // 11. Read counts (readCounts.php)
   async readCounts(loggedInUserId?: number): Promise<any> {
-    const subContractorId = await this.getSubcontractorIdForUser(loggedInUserId);
-    const cacheKey = subContractorId ? `requests:counts:subcon:${subContractorId}` : 'requests:counts';
+    const user = loggedInUserId ? await this.userRepo.findOne({ where: { id: loggedInUserId } }) : null;
+    const userTypes = (user?.userType || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    let subContractorId: number | null = null;
+    let limitToUserId: number | null = null;
+
+    if (user) {
+      if (userTypes.includes('Subcontractor')) {
+        subContractorId = user.typeId;
+      } else if (
+        userTypes.includes('Admin') ||
+        userTypes.includes('SuperAdmin') ||
+        userTypes.includes('Department') ||
+        userTypes.includes('Department1') ||
+        userTypes.includes('HSE')
+      ) {
+        // No filter for admin / department
+      } else {
+        limitToUserId = user.id;
+      }
+    }
+
+    const cacheKey = subContractorId
+      ? `requests:counts:subcon:${subContractorId}`
+      : limitToUserId
+      ? `requests:counts:user:${limitToUserId}`
+      : 'requests:counts';
+
     return this.redisCacheService.getOrSet(
       cacheKey,
       async () => {
@@ -3246,49 +3275,51 @@ export class RequestsService {
           )
           .select('COUNT(*)', 'totalCount')
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Draft' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Draft' THEN 1 ELSE 0 END)",
             'draftCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Hold' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Hold' THEN 1 ELSE 0 END)",
             'holdCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Pre-Approved' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Pre-Approved' THEN 1 ELSE 0 END)",
             'preApprovedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Approved' THEN 1 ELSE 0 END)",
             'approvedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Rejected' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Rejected' THEN 1 ELSE 0 END)",
             'rejectedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Opened' THEN 1 ELSE 0 END)",
             'openedCount',
           )
           .addSelect(
-            `SUM(CASE WHEN requests.requestStatus = 'Cancelled' 
+            `SUM(CASE WHEN requests.Request_status = 'Cancelled' 
             AND (rem.cancel_reason IS NULL OR rem.cancel_reason != 'Permit not opened so system cancelled automatically') 
             THEN 1 ELSE 0 END)`,
             'cancelledCount',
           )
           .addSelect(
-            `SUM(CASE WHEN requests.requestStatus = 'Cancelled' 
+            `SUM(CASE WHEN requests.Request_status = 'Cancelled' 
             AND rem.cancel_reason = 'Permit not opened so system cancelled automatically' 
             THEN 1 ELSE 0 END)`,
             'autoCancelledCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Closed' THEN 1 ELSE 0 END)",
             'closedCount',
           )
           .where('requests.status = 1');
 
         if (subContractorId) {
           qb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId });
+        } else if (limitToUserId) {
+          qb.andWhere('requests.userId = :limitToUserId', { limitToUserId });
         }
 
         const counts = await qb.getRawOne();
@@ -3316,14 +3347,45 @@ export class RequestsService {
 
   // 12. Read single status count (readRequestCount.php)
   async readRequestCount(status: string, loggedInUserId?: number): Promise<any> {
-    const subContractorId = await this.getSubcontractorIdForUser(loggedInUserId);
-    const cacheKey = subContractorId ? `requests:counts:${status}:subcon:${subContractorId}` : `requests:counts:${status}`;
+    const user = loggedInUserId ? await this.userRepo.findOne({ where: { id: loggedInUserId } }) : null;
+    const userTypes = (user?.userType || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    let subContractorId: number | null = null;
+    let limitToUserId: number | null = null;
+
+    if (user) {
+      if (userTypes.includes('Subcontractor')) {
+        subContractorId = user.typeId;
+      } else if (
+        userTypes.includes('Admin') ||
+        userTypes.includes('SuperAdmin') ||
+        userTypes.includes('Department') ||
+        userTypes.includes('Department1') ||
+        userTypes.includes('HSE')
+      ) {
+        // No filter
+      } else {
+        limitToUserId = user.id;
+      }
+    }
+
+    const cacheKey = subContractorId
+      ? `requests:counts:${status}:subcon:${subContractorId}`
+      : limitToUserId
+      ? `requests:counts:${status}:user:${limitToUserId}`
+      : `requests:counts:${status}`;
+
     return this.redisCacheService.getOrSet(
       cacheKey,
       async () => {
         const whereClause: any = { requestStatus: status, status: 1 };
         if (subContractorId) {
           whereClause.subContractorId = subContractorId;
+        } else if (limitToUserId) {
+          whereClause.userId = limitToUserId;
         }
         const count = await this.requestRepo.count({
           where: whereClause,
@@ -3342,7 +3404,31 @@ export class RequestsService {
 
   // 13. Read Graph counts per day (readGraph.php)
   async readGraph(WeekFirstday: string, WeekLastday: string, loggedInUserId?: number): Promise<any> {
-    const subContractorId = await this.getSubcontractorIdForUser(loggedInUserId);
+    const user = loggedInUserId ? await this.userRepo.findOne({ where: { id: loggedInUserId } }) : null;
+    const userTypes = (user?.userType || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    let subContractorId: number | null = null;
+    let limitToUserId: number | null = null;
+
+    if (user) {
+      if (userTypes.includes('Subcontractor')) {
+        subContractorId = user.typeId;
+      } else if (
+        userTypes.includes('Admin') ||
+        userTypes.includes('SuperAdmin') ||
+        userTypes.includes('Department') ||
+        userTypes.includes('Department1') ||
+        userTypes.includes('HSE')
+      ) {
+        // No filter
+      } else {
+        limitToUserId = user.id;
+      }
+    }
+
     const first = new Date(
       WeekFirstday.replace(' GMT+0530 (India Standard Time)', ''),
     );
@@ -3362,27 +3448,29 @@ export class RequestsService {
       const qb = this.requestRepo
         .createQueryBuilder('requests')
         .select(
-          "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
+          "SUM(CASE WHEN requests.Request_status = 'Approved' THEN 1 ELSE 0 END)",
           'approveCount',
         )
         .addSelect(
-          "SUM(CASE WHEN requests.requestStatus = 'Rejected' THEN 1 ELSE 0 END)",
+          "SUM(CASE WHEN requests.Request_status = 'Rejected' THEN 1 ELSE 0 END)",
           'rejectCount',
         )
         .addSelect(
-          "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
+          "SUM(CASE WHEN requests.Request_status = 'Opened' THEN 1 ELSE 0 END)",
           'openCount',
         )
         .addSelect(
-          "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
+          "SUM(CASE WHEN requests.Request_status = 'Closed' THEN 1 ELSE 0 END)",
           'closeCount',
         )
-        .where('requests.status = 1 AND requests.workingDate = :date', {
+        .where('requests.status = 1 AND requests.Working_Date = :date', {
           date: d,
         });
 
       if (subContractorId) {
         qb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId });
+      } else if (limitToUserId) {
+        qb.andWhere('requests.userId = :limitToUserId', { limitToUserId });
       }
 
       const counts = await qb.getRawOne();
@@ -3413,8 +3501,37 @@ export class RequestsService {
 
   // 14. Read Graph Counts summary today vs week (readGraphCounts.php)
   async readGraphCounts(loggedInUserId?: number): Promise<any> {
-    const subContractorId = await this.getSubcontractorIdForUser(loggedInUserId);
-    const cacheKey = subContractorId ? `requests:graph:counts:subcon:${subContractorId}` : 'requests:graph:counts';
+    const user = loggedInUserId ? await this.userRepo.findOne({ where: { id: loggedInUserId } }) : null;
+    const userTypes = (user?.userType || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    let subContractorId: number | null = null;
+    let limitToUserId: number | null = null;
+
+    if (user) {
+      if (userTypes.includes('Subcontractor')) {
+        subContractorId = user.typeId;
+      } else if (
+        userTypes.includes('Admin') ||
+        userTypes.includes('SuperAdmin') ||
+        userTypes.includes('Department') ||
+        userTypes.includes('Department1') ||
+        userTypes.includes('HSE')
+      ) {
+        // Admin/HSE/Department sees all
+      } else {
+        limitToUserId = user.id;
+      }
+    }
+
+    const cacheKey = subContractorId
+      ? `requests:graph:counts:subcon:${subContractorId}`
+      : limitToUserId
+      ? `requests:graph:counts:user:${limitToUserId}`
+      : 'requests:graph:counts';
+
     return this.redisCacheService.getOrSet(
       cacheKey,
       async () => {
@@ -3422,45 +3539,47 @@ export class RequestsService {
           .createQueryBuilder('requests')
           .select('COUNT(*)', 'totalCount')
           .addSelect(
-            "SUM(CASE WHEN requests.nightShift = '1' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.night_shift = '1' THEN 1 ELSE 0 END)",
             'nightshiftCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Draft' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Draft' THEN 1 ELSE 0 END)",
             'draftCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Hold' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Hold' THEN 1 ELSE 0 END)",
             'holdCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Pre-Approved' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Pre-Approved' THEN 1 ELSE 0 END)",
             'preApprovedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Approved' THEN 1 ELSE 0 END)",
             'approvedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Rejected' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Rejected' THEN 1 ELSE 0 END)",
             'rejectedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Opened' THEN 1 ELSE 0 END)",
             'openedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Cancelled' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Cancelled' THEN 1 ELSE 0 END)",
             'cancelledCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Closed' THEN 1 ELSE 0 END)",
             'closedCount',
           )
-          .where('requests.status = 1 AND requests.workingDate = CURDATE()');
+          .where('requests.status = 1 AND requests.Working_Date = CURDATE()');
 
         if (subContractorId) {
           todayQb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId });
+        } else if (limitToUserId) {
+          todayQb.andWhere('requests.userId = :limitToUserId', { limitToUserId });
         }
 
         const todayCounts = await todayQb.getRawOne();
@@ -3469,47 +3588,49 @@ export class RequestsService {
           .createQueryBuilder('requests')
           .select('COUNT(*)', 'totalCount')
           .addSelect(
-            "SUM(CASE WHEN requests.nightShift = '1' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.night_shift = '1' THEN 1 ELSE 0 END)",
             'nightshiftCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Draft' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Draft' THEN 1 ELSE 0 END)",
             'draftCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Hold' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Hold' THEN 1 ELSE 0 END)",
             'holdCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Pre-Approved' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Pre-Approved' THEN 1 ELSE 0 END)",
             'preApprovedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Approved' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Approved' THEN 1 ELSE 0 END)",
             'approvedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Rejected' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Rejected' THEN 1 ELSE 0 END)",
             'rejectedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Opened' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Opened' THEN 1 ELSE 0 END)",
             'openedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Cancelled' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Cancelled' THEN 1 ELSE 0 END)",
             'cancelledCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.requestStatus = 'Closed' THEN 1 ELSE 0 END)",
+            "SUM(CASE WHEN requests.Request_status = 'Closed' THEN 1 ELSE 0 END)",
             'closedCount',
           )
           .where(
-            'requests.status = 1 AND requests.workingDate >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)',
+            'requests.status = 1 AND requests.Working_Date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)',
           );
 
         if (subContractorId) {
           lastWeekQb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId });
+        } else if (limitToUserId) {
+          lastWeekQb.andWhere('requests.userId = :limitToUserId', { limitToUserId });
         }
 
         const lastWeekCounts = await lastWeekQb.getRawOne();
