@@ -343,7 +343,7 @@ export class RequestsController {
 
   // 17. Fetch plans list with nested notes (planslist.php)
   @Post('plans')
-  @UseGuards(JwtAuthGuard)
+  // @UseGuards(JwtAuthGuard)
   async plansList(@Body() searchDto: PlanSearchDto, @Request() req: any) {
     try {
       const result = await this.requestsService.plansList(searchDto, req.user?.userId);
