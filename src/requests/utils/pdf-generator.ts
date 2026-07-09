@@ -544,32 +544,6 @@ function drawNotesTable(doc: PDFKit.PDFDocument, notes: any[]) {
   doc.moveDown(0.6);
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// TOOLBOX TALK SIGNATURE TABLE
-// ═════════════════════════════════════════════════════════════════════════════
-function drawToolboxTable(doc: PDFKit.PDFDocument) {
-  const colW = CONTENT_W / 2;
-  ensureSpace(doc, 22);
-  // Date / Conducted-by header
-  let ry = doc.y;
-  doc.fillColor(C.rowEven).rect(MARGIN, ry, CONTENT_W, 20).fill();
-  doc.fillColor(C.primary).fontSize(8).font('Helvetica-Bold')
-    .text('Date / Time:', MARGIN + 4, ry + 6, { width: colW - 8, lineBreak: false })
-    .text('Toolbox Conducted by:', MARGIN + colW + 4, ry + 6, { width: colW - 8, lineBreak: false });
-  doc.y = ry + 22;
-
-  for (let i = 0; i < 12; i++) {
-    ensureSpace(doc, 20);
-    ry = doc.y;
-    if (i % 2 === 1) doc.fillColor(C.rowEven).rect(MARGIN, ry, CONTENT_W, 20).fill();
-    doc.strokeColor(C.lightGrey).lineWidth(0.4)
-      .moveTo(MARGIN, ry + 20).lineTo(PAGE_W - MARGIN, ry + 20).stroke()
-      .moveTo(MARGIN + colW, ry).lineTo(MARGIN + colW, ry + 20).stroke();
-    doc.fillColor(C.grey).fontSize(8).font('Helvetica')
-      .text('Name:', MARGIN + 4, ry + 6, { lineBreak: false });
-    doc.y = ry + 22;
-  }
-}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // STATUS BADGE
@@ -1090,11 +1064,7 @@ export function buildPermitPdf(data: any): Promise<Buffer> {
       // ════════════════════════════════════════════════════════════════════
       signaturesSection(doc, data);
 
-      // ════════════════════════════════════════════════════════════════════
-      // TOOLBOX TALK
-      // ════════════════════════════════════════════════════════════════════
-      sectionBar(doc, 'Details of Persons Attending Toolbox Talk');
-      drawToolboxTable(doc);
+
 
       doc.end();
     } catch (err) {

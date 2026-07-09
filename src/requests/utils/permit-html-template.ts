@@ -1900,41 +1900,6 @@ export function generatePermitHtml(data: any): string {
           ${notesHtml}
         </div>
 
-        <!-- Toolbox Talk Attendees -->
-        <div class="dashboard-card">
-          <div class="card-section-header">
-            <div class="card-section-title-wrap">
-              <span class="card-section-icon">
-                ${getCardHeaderIcon('users')}
-              </span>
-              <div>
-                <h2 class="card-section-title">Toolbox Talk Attendees</h2>
-                <p class="card-section-subtitle">Workers briefed and signed in</p>
-              </div>
-            </div>
-          </div>
-          <table class="compact-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Role</th>
-                <th>Signature Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Worker 1</td>
-                <td>Technician</td>
-                <td>${formatDateOnly(data.Working_Date)} 07:45 AM</td>
-              </tr>
-              <tr>
-                <td>Worker 2</td>
-                <td>Technician</td>
-                <td>${formatDateOnly(data.Working_Date)} 07:45 AM</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
 
       </div>
 
@@ -1986,32 +1951,7 @@ export function generatePermitHtml(data: any): string {
           ` : ''}
         </div>
 
-        <!-- Confirmations -->
-        <div class="dashboard-card">
-          <div class="card-section-header">
-            <div class="card-section-title-wrap">
-              <span class="card-section-icon">
-                ${getCardHeaderIcon('confirmations')}
-              </span>
-              <div>
-                <h2 class="card-section-title">Confirmations</h2>
-                <p class="card-section-subtitle">Pre-work safety checks</p>
-              </div>
-            </div>
-          </div>
-          <div class="confirmation-row">
-            <span class="confirmation-label">Area Inspected</span>
-            <span class="confirmation-badge badge-yes">Yes</span>
-          </div>
-          <div class="confirmation-row">
-            <span class="confirmation-label">Team Briefed</span>
-            <span class="confirmation-badge badge-yes">Yes</span>
-          </div>
-          <div class="confirmation-row">
-            <span class="confirmation-label">Equipment Checked</span>
-            <span class="confirmation-badge badge-yes">Yes</span>
-          </div>
-        </div>
+
 
         <!-- Attachments -->
         <div class="dashboard-card">
@@ -2661,26 +2601,7 @@ export function generatePermitHtml(data: any): string {
         `;
     })()}
 
-      <!-- Blank toolbox talk attendance row for printed signature collections -->
-      <div class="dashboard-card">
-        <div class="detailed-section-title">
-          Attendance Sign-in Log (For Printed Use)
-        </div>
-        <table class="detailed-table">
-          <tbody>
-            <tr>
-              <td class="font-weight-bold">Date/Time:</td>
-              <td class="font-weight-bold">Toolbox Conducted by:</td>
-            </tr>
-            ${Array.from({ length: 6 }).map(() => `
-              <tr>
-                <td>Name:</td>
-                <td>Signature:</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
+
 
       <!-- Approvals and Notes original signoffs -->
       <div class="dashboard-card">
