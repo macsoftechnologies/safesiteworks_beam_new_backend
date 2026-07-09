@@ -2694,6 +2694,47 @@ export class RequestsService {
   }
 
   async plansList(searchDto: PlanSearchDto, loggedInUserId?: number): Promise<any> {
+    const allowedKeys: (keyof PlanSearchDto)[] = [
+      'Date', 'Week', 'Year', 'Month', 'Site_Id', 'Building_Id', 'Sub_Contractor_Id',
+      'Room_Type', 'from_date', 'to_date', 'start_time', 'end_time', 'area',
+      'permit_type', 'permit_under', 'night_shift', 'new_date', 'new_end_time',
+      'hras', 'Request_status', 'Hot_work', 'working_on_electrical_system',
+      'working_hazardious_substen', 'using_cranes_or_lifting',
+      'pressure_tesing_of_equipment', 'working_at_height', 'working_confined_spaces',
+      'work_in_atex_area', 'securing_facilities', 'excavation_works',
+      'specific_gloves', 'eye_protection', 'fall_protection', 'hearing_protection',
+      'respiratory_protection', 'taskSpecificPPE', 'power_on', 'pressurization',
+      'fromDate', 'toDate', 'Start_Time', 'End_Time'
+    ];
+    const filteredSearchDto: PlanSearchDto = {};
+    for (const key of allowedKeys) {
+      if (searchDto && searchDto[key] !== undefined) {
+        filteredSearchDto[key] = searchDto[key] as any;
+      }
+    }
+
+    // Map alternate frontend keys to canonical DB query keys if provided
+    if (filteredSearchDto.fromDate && !filteredSearchDto.from_date) {
+      filteredSearchDto.from_date = filteredSearchDto.fromDate;
+    }
+    if (filteredSearchDto.toDate && !filteredSearchDto.to_date) {
+      filteredSearchDto.to_date = filteredSearchDto.toDate;
+    }
+    if (filteredSearchDto.Start_Time && !filteredSearchDto.start_time) {
+      filteredSearchDto.start_time = filteredSearchDto.Start_Time;
+    }
+    if (filteredSearchDto.End_Time && !filteredSearchDto.end_time) {
+      filteredSearchDto.end_time = filteredSearchDto.End_Time;
+    }
+
+    // Delete alternate keys to maintain Redis key serialization consistency
+    delete filteredSearchDto.fromDate;
+    delete filteredSearchDto.toDate;
+    delete filteredSearchDto.Start_Time;
+    delete filteredSearchDto.End_Time;
+
+    searchDto = filteredSearchDto;
+
     const subContractorId = await this.getSubcontractorIdForUser(loggedInUserId);
     const key = subContractorId
       ? `requests:plans:${JSON.stringify(searchDto)}:subcon:${subContractorId}`

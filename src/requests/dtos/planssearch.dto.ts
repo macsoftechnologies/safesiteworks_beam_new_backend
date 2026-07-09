@@ -178,4 +178,20 @@ export class PlanSearchDto {
     @IsNumber()
     @Type(() => Number)
     pressurization?: number;
+
+    @IsOptional()
+    @IsString()
+    fromDate?: string;
+
+    @IsOptional()
+    @IsString()
+    toDate?: string;
+
+    @IsOptional()
+    @IsString()
+    Start_Time?: string;
+
+    @IsOptional()
+    @IsString()
+    End_Time?: string;
 }
