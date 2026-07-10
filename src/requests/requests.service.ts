@@ -1909,13 +1909,45 @@ export class RequestsService {
   }
 
   // Bulk Status Update
+  private getNextDateString(dateStr: string | Date): string | null {
+    if (!dateStr) return null;
+    const dateStrNorm = typeof dateStr === 'object' ? dateStr.toISOString().split('T')[0] : String(dateStr);
+    const parts = dateStrNorm.split('-');
+    if (parts.length !== 3) return null;
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+
+    const dateObj = new Date(y, m, d);
+    dateObj.setDate(dateObj.getDate() + 1);
+
+    const nextY = dateObj.getFullYear();
+    const nextM = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const nextD = String(dateObj.getDate()).padStart(2, '0');
+    return `${nextY}-${nextM}-${nextD}`;
+  }
+
   async updateStatus(body: {
     id: string;
     Request_status?: string;
     status?: number;
     userId?: number;
+    Start_Time?: string;
+    End_Time?: string;
+    night_shift?: number;
+    new_end_time?: string;
   }): Promise<any> {
-    const { id, Request_status, status, userId } = body;
+    const {
+      id,
+      Request_status,
+      status,
+      userId,
+      Start_Time,
+      End_Time,
+      night_shift,
+      new_end_time,
+    } = body;
+
     if (!id) {
       throw new BadRequestException('Missing required field: id');
     }
@@ -1925,58 +1957,154 @@ export class RequestsService {
       .map((val) => Number(val.trim()))
       .filter((val) => !isNaN(val));
 
-    // 1. Pre-validate all updates to fail-fast before database write
-    const requestsToUpdate: RequestEntity[] = [];
+    const successfulUpdates: number[] = [];
+    const failedUpdates: { id: number; error: string }[] = [];
+
+    // Resolve the incoming status to the actual stored value
+    const resolvedStatus = this.resolveApprovalStatus(Request_status);
+
     for (const singleId of idsArray) {
       const existing = await this.requestRepo.findOne({
         where: { id: singleId },
       });
       if (!existing) {
-        throw new BadRequestException(`Request with ID ${singleId} not found`);
-      }
-      requestsToUpdate.push(existing);
-
-      let targetStatus = '';
-      if (Request_status !== undefined) {
-        targetStatus = Request_status;
-      } else if (status !== undefined) {
-        targetStatus = status === 1 ? 'Pending' : 'Cancelled';
+        failedUpdates.push({ id: singleId, error: 'Request not found' });
+        continue;
       }
 
-      if (targetStatus !== '') {
-        await this.validateStatusTransitionAndRole(existing, targetStatus, userId || 0);
+      try {
+        const updateData: Partial<RequestEntity> = {};
+
+        // 1. Process Status transition if requested
+        let targetStatus = '';
+        if (Request_status !== undefined) {
+          targetStatus = Request_status;
+        } else if (status !== undefined) {
+          targetStatus = status === 1 ? 'Pending' : 'Cancelled';
+        }
+
+        if (targetStatus !== '') {
+          await this.validateStatusTransitionAndRole(existing, targetStatus, userId || 0);
+          if (Request_status !== undefined) {
+            updateData.requestStatus = resolvedStatus;
+          }
+          if (status !== undefined) {
+            updateData.status = status;
+          }
+        }
+
+        // 2. Process Shift & Timing bulk edit if requested
+        const isTimeUpdate = Start_Time !== undefined || End_Time !== undefined || night_shift !== undefined || new_end_time !== undefined;
+        if (isTimeUpdate) {
+          let effectiveStartTime = Start_Time !== undefined && Start_Time !== "" ? Start_Time : existing.startTime;
+          let effectiveEndTime = End_Time !== undefined && End_Time !== "" ? End_Time : existing.endTime;
+
+          if (night_shift === 1) {
+            const valNewEndTime = new_end_time !== undefined && new_end_time !== "" ? new_end_time : existing.newEndTime;
+            if (valNewEndTime) {
+              if (effectiveStartTime && valNewEndTime >= effectiveStartTime) {
+                throw new BadRequestException('For night shift, new end time must be earlier than start time.');
+              }
+            }
+            updateData.nightShift = '1';
+            updateData.endTime = '23:59';
+            if (existing.workingDate) {
+              const nextDate = this.getNextDateString(existing.workingDate);
+              if (nextDate) {
+                updateData.newDate = nextDate;
+              }
+            }
+            if (new_end_time !== undefined) {
+              updateData.newEndTime = new_end_time;
+            }
+          } else if (night_shift === 0) {
+            if (effectiveStartTime && effectiveEndTime) {
+              if (effectiveStartTime >= effectiveEndTime) {
+                throw new BadRequestException('Start time must be earlier than End time.');
+              }
+            }
+            updateData.nightShift = '0';
+            if (End_Time !== undefined) {
+              updateData.endTime = End_Time;
+            }
+            updateData.newDate = null as any;
+            updateData.newEndTime = null as any;
+          } else {
+            // night_shift is not being changed, just updating start/end times
+            const currentNightShift = existing.nightShift === '1';
+            if (currentNightShift) {
+              const valNewEndTime = new_end_time !== undefined && new_end_time !== "" ? new_end_time : existing.newEndTime;
+              if (valNewEndTime) {
+                if (effectiveStartTime && valNewEndTime >= effectiveStartTime) {
+                  throw new BadRequestException('For night shift, new end time must be earlier than start time.');
+                }
+              }
+              updateData.endTime = '23:59';
+              if (new_end_time !== undefined) {
+                updateData.newEndTime = new_end_time;
+              }
+            } else {
+              if (effectiveStartTime && effectiveEndTime) {
+                if (effectiveStartTime >= effectiveEndTime) {
+                  throw new BadRequestException('Start time must be earlier than End time.');
+                }
+              }
+              if (End_Time !== undefined) {
+                updateData.endTime = End_Time;
+              }
+            }
+          }
+
+          if (Start_Time !== undefined) {
+            updateData.startTime = Start_Time;
+          }
+        }
+
+        // Apply update to DB if there's any data to change
+        if (Object.keys(updateData).length > 0) {
+          await this.requestRepo.update(existing.id, updateData);
+        }
+
+        // Create log if status changed
+        if (targetStatus !== '') {
+          await this.createLogs(
+            existing.id,
+            userId || 0,
+            resolvedStatus || (status === 1 ? 'Pending' : 'Cancelled'),
+            new Date(),
+            [],
+            0,
+          );
+        } else if (isTimeUpdate) {
+          await this.createLogs(
+            existing.id,
+            userId || 0,
+            existing.requestStatus || 'Updated',
+            new Date(),
+            [],
+            0,
+          );
+        }
+
+        successfulUpdates.push(existing.id);
+      } catch (err: any) {
+        failedUpdates.push({
+          id: existing.id,
+          error: err.message || 'Update failed validation',
+        });
       }
-    }
-
-    // 2. Resolve the incoming status to the actual stored value
-    //    CONM-*/COMM-* are UI-only prefixes that encode which approval stream is acting
-    const resolvedStatus = this.resolveApprovalStatus(Request_status);
-
-    // 3. Perform updates
-    for (const existing of requestsToUpdate) {
-      const updateData: Partial<RequestEntity> = {};
-      if (Request_status !== undefined)
-        updateData.requestStatus = resolvedStatus;
-      if (status !== undefined) updateData.status = status;
-
-      await this.requestRepo.update(existing.id, updateData);
-
-      // Create log with the resolved status
-      await this.createLogs(
-        existing.id,
-        userId || 0,
-        resolvedStatus || (status === 1 ? 'Pending' : 'Cancelled'),
-        new Date(),
-        [],
-        0,
-      );
     }
 
     await this.redisCacheService.deleteByPattern('requests:*');
 
+    const message = `Successfully updated permits: [${successfulUpdates.join(', ')}].` + 
+      (failedUpdates.length > 0 ? ` Failed/Skipped: ${failedUpdates.map((f) => `ID ${f.id} (${f.error})`).join('; ')}` : '');
+
     return {
-      status: 200,
-      message: 'Request Updated',
+      status: failedUpdates.length === idsArray.length ? 500 : 200,
+      message,
+      successfulIds: successfulUpdates,
+      failed: failedUpdates,
     };
   }
 
