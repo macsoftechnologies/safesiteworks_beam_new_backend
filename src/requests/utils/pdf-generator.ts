@@ -689,7 +689,7 @@ export function buildPermitPdf(data: any): Promise<Buffer> {
 
       const getStatus = () => {
         if (data.cancel_reason === 'Permit not opened so system cancelled automatically')
-          return 'Auto-Cancel';
+          return 'Auto-Cancelled';
         return safeVal(data.Request_status, 'Draft');
       };
 

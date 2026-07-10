@@ -87,7 +87,7 @@ export function generatePermitHtml(data: any): string {
 
   const getStatusText = () => {
     if (data.cancel_reason === 'Permit not opened so system cancelled automatically') {
-      return 'Auto-Cancel';
+      return 'Auto-Cancelled';
     }
     return data.Request_status || 'Draft';
   };

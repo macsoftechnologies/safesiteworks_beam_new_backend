@@ -3405,12 +3405,18 @@ export class RequestsService {
         { id: In(ids) },
         {
           requestStatus: 'Cancelled',
-          notes: 'Permit not opened so system cancelled automatically',
         },
       );
       affected = ids.length;
 
       for (const id of ids) {
+        let ext = await this.extraMiscRepo.findOne({ where: { requestId: id } });
+        if (!ext) {
+          ext = this.extraMiscRepo.create({ requestId: id });
+        }
+        ext.cancelReason = 'Permit not opened so system cancelled automatically';
+        await this.extraMiscRepo.save(ext);
+
         const log = this.logRepo.create({
           requestId: id,
           userId: 0,
