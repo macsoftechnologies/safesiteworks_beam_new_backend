@@ -596,6 +596,21 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
     if (downloadBar) downloadBar.style.display = 'none';
 
     const element = document.getElementById('root-content');
+    const originalMargin = element.style.margin;
+    const originalMaxWidth = element.style.maxWidth;
+    const originalWidth = element.style.width;
+    const originalBorderRadius = element.style.borderRadius;
+    const originalBoxShadow = element.style.boxShadow;
+    const originalBodyPadding = document.body.style.padding;
+
+    // Apply temporary layout overrides to align element to (0,0) with a fixed width matching windowWidth
+    element.style.margin = '0';
+    element.style.maxWidth = '900px';
+    element.style.width = '900px';
+    element.style.borderRadius = '0';
+    element.style.boxShadow = 'none';
+    document.body.style.padding = '0';
+
     const name = "Permit_Logs_" + "${permitNo}".trim() + ".pdf";
     const opt = {
       margin: [10, 10, 10, 10],
@@ -604,7 +619,7 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
       html2canvas: { 
         scale: 2, 
         useCORS: true,
-        windowWidth: 1200,
+        windowWidth: 900,
         scrollX: 0,
         scrollY: 0
       },
@@ -612,6 +627,14 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
     html2pdf().set(opt).from(element).save().then(function() {
+      // Restore original page styling
+      element.style.margin = originalMargin;
+      element.style.maxWidth = originalMaxWidth;
+      element.style.width = originalWidth;
+      element.style.borderRadius = originalBorderRadius;
+      element.style.boxShadow = originalBoxShadow;
+      document.body.style.padding = originalBodyPadding;
+
       if (downloadBar) downloadBar.style.display = 'flex';
     });
   }
