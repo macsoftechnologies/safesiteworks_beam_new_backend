@@ -1971,6 +1971,20 @@ export class RequestsService {
         failedUpdates.push({ id: singleId, error: 'Request not found' });
         continue;
       }
+      const statusLower = existing.requestStatus?.toLowerCase() || '';
+      if (
+        statusLower === 'rejected' ||
+        statusLower === 'cancelled' ||
+        statusLower === 'closed' ||
+        statusLower === 'auto-cancelled' ||
+        statusLower === 'auto cancelled'
+      ) {
+        failedUpdates.push({
+          id: singleId,
+          error: `Permit is in '${existing.requestStatus}' status and cannot be modified.`,
+        });
+        continue;
+      }
 
       try {
         const updateData: Partial<RequestEntity> = {};
