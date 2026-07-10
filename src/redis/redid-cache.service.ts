@@ -78,4 +78,12 @@ export class RedisCacheService {
       console.log(`🧹 CACHE CLEARED (Fallback)`);
     }
   }
+
+  async get<T>(key: string): Promise<T | undefined> {
+    return this.cacheManager.get<T>(key);
+  }
+
+  async set<T>(key: string, value: T, ttl?: number): Promise<void> {
+    await this.cacheManager.set(key, value, ttl);
+  }
 }

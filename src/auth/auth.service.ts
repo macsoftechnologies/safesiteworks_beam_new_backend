@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { OtpService } from './otp.service';
 import { Employee } from '../employees/entities/employee.entity';
+import { RedisCacheService } from '../redis/redid-cache.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { RegisterDto } from './dto/register.dto';
@@ -18,6 +19,7 @@ export class AuthService {
     private usersService: UsersService,
     private jwtService: JwtService,
     private otpService: OtpService,
+    private redisCacheService: RedisCacheService,
 
     @InjectRepository(Employee)
     private readonly employeeRepo: Repository<Employee>,
@@ -198,5 +200,28 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  /**
+   * Logout: blacklist JWT token in Redis
+   */
+  async logout(token: string) {
+    if (token) {
+      try {
+        const decoded: any = this.jwtService.decode(token);
+        if (decoded && decoded.exp) {
+          const remainingMs = (decoded.exp * 1000) - Date.now();
+          if (remainingMs > 0) {
+            await this.redisCacheService.set(`blacklist:${token}`, '1', remainingMs);
+          }
+        }
+      } catch (err) {
+        // Ignore decode errors
+      }
+    }
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Successfully logged out',
+    };
   }
 }

@@ -31,6 +31,14 @@ export class AuthController {
     return this.authService.changePassword(changePasswordDto);
   }
 
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  async logout(@Request() req) {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    return this.authService.logout(token);
+  }
+
   @Get('profile')
   @UseGuards(JwtAuthGuard)
   getProfile(@Request() req) {
