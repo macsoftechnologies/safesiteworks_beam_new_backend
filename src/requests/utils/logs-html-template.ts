@@ -181,6 +181,7 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
       gap: 20px;
       margin-bottom: 28px;
       position: relative;
+      page-break-inside: avoid;
     }
 
     .timeline-item:last-child {
@@ -394,6 +395,7 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
       padding: 15px;
       text-align: center;
       box-shadow: 0 4px 6px rgba(0,0,0,0.01);
+      page-break-inside: avoid;
     }
 
     .image-card img {
@@ -624,7 +626,7 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
         scrollY: 0
       },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      pagebreak: { mode: ['css', 'legacy'] }
     };
     html2pdf().set(opt).from(element).save().then(function() {
       // Restore original page styling
