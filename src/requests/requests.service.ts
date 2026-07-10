@@ -4836,7 +4836,7 @@ export class RequestsService {
       await this.createLogs(
         requestId,
         dto.userId ?? 0,
-        dto.Request_status ?? originalRequest.requestStatus ?? 'Pending',
+        dto.Request_status ?? newRequest.requestStatus ?? 'Hold',
         createdTime,
         [],
         0,
