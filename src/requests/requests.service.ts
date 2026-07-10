@@ -2210,23 +2210,35 @@ export class RequestsService {
       roomIdOrName.trim() === '0'
     )
       return null;
-    const term = roomIdOrName.trim();
-    const terms: Set<string> = new Set([term]); // Always include the raw value as a search term
 
-    if (/^\d+$/.test(term)) {
-      // Numeric input – look up the room name so we can also match by name
-      const room = await this.roomRepo.findOne({
-        where: { room_id: Number(term) },
-      });
-      if (room) terms.add(room.room_name);
-    } else {
-      // Name input – look up matching rooms so we can also match stored IDs
-      const rooms = await this.roomRepo
-        .createQueryBuilder('r')
-        .where('r.room_name LIKE :name', { name: `%${term}%` })
-        .getMany();
-      rooms.forEach((r) => terms.add(String(r.room_id)));
+    const parts = roomIdOrName.split(',').map((p) => p.trim()).filter(Boolean);
+    if (parts.length === 0) return null;
+
+    const terms: Set<string> = new Set();
+
+    for (const part of parts) {
+      terms.add(part); // Always include the raw part
+      if (/^\d+$/.test(part)) {
+        // Numeric input – look up the room name so we can also match by name
+        const room = await this.roomRepo.findOne({
+          where: { room_id: Number(part) },
+        });
+        if (room) {
+          terms.add(room.room_name);
+        }
+      } else {
+        // Name input – look up matching rooms so we can also match stored IDs
+        const rooms = await this.roomRepo
+          .createQueryBuilder('r')
+          .where('r.room_name LIKE :name', { name: `%${part}%` })
+          .getMany();
+        rooms.forEach((r) => {
+          terms.add(String(r.room_id));
+          terms.add(r.room_name);
+        });
+      }
     }
+
     return [...terms];
   }
 
