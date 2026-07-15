@@ -4803,7 +4803,16 @@ export class RequestsService {
 
       if (origExt) {
         const { requestId: _rid, id: _id, ...extData } = origExt as any;
-        await this.extraMiscRepo.save(this.extraMiscRepo.create({ ...extData, requestId }));
+        await this.extraMiscRepo.save(this.extraMiscRepo.create({
+          ...extData,
+          conMInitials: null,
+          conMInitials1: null,
+          coMMInitials: null,
+          rejectReason: null,
+          cancelReason: null,
+          closeNote: null,
+          requestId
+        }));
       } else {
         await this.extraMiscRepo.save(this.extraMiscRepo.create({ requestId }));
       }

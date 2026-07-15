@@ -28,7 +28,7 @@ import { SearchRequestDto } from './dtos/search-request.dto';
 import { CreateByCountDto } from './dtos/create-by-count.dto';
 import { generatePermitHtml } from './utils/permit-html-template';
 import { generateLogsHtml } from './utils/logs-html-template';
-import { buildPermitPdf, buildLogsPdf } from './utils/pdf-generator';
+import { buildPermitPdf, buildLogsPdf, generatePermitPdf, generateLogsPdf } from './utils/pdf-generator';
 import { PlanSearchDto } from './dtos/planssearch.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -398,7 +398,7 @@ export class RequestsController {
       if (!data) {
         return res.status(HttpStatus.NOT_FOUND).send('Permit not found');
       }
-      const pdfBuffer = await buildPermitPdf(data);
+      const pdfBuffer = await generatePermitPdf(data);
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="Permit_${permitNo}.pdf"`,
@@ -431,7 +431,7 @@ export class RequestsController {
       if (!details) {
         return res.status(HttpStatus.NOT_FOUND).send('Permit not found');
       }
-      const pdfBuffer = await buildLogsPdf(details.permitNo, details.logs);
+      const pdfBuffer = await generateLogsPdf(details.permitNo, details.logs, details.images);
       res.set({
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="Permit_Logs_${permitNo}.pdf"`,
