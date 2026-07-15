@@ -119,6 +119,19 @@ export function generatePermitHtml(data: any): string {
       return imageVal;
     }
     const filename = imageVal.split('/').pop() || imageVal;
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const localPath = path.join(process.cwd(), './uploads/requests', filename);
+      if (fs.existsSync(localPath)) {
+        const ext = path.extname(filename).toLowerCase().replace('.', '');
+        const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+        const base64Data = fs.readFileSync(localPath, { encoding: 'base64' });
+        return `data:${mime};base64,${base64Data}`;
+      }
+    } catch (e) {
+      // ignore and fallback
+    }
     return `/requests/${filename}`;
   };
 

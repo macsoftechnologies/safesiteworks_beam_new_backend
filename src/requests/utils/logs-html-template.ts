@@ -567,8 +567,22 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
   <div class="section-title">Uploaded Check-In/Check-Out Pictures</div>
   <div class="image-grid">
     ${images.map((img: any) => {
-    const srcUrl = `/requests/uploads/request/${img.imageName}`;
-    return `
+      const filename = img.imageName ? img.imageName.split('/').pop() : '';
+      let srcUrl = `/requests/${filename}`;
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const localPath = path.join(process.cwd(), './uploads/requests', filename);
+        if (fs.existsSync(localPath)) {
+          const ext = path.extname(filename).toLowerCase().replace('.', '');
+          const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+          const base64Data = fs.readFileSync(localPath, { encoding: 'base64' });
+          srcUrl = `data:${mime};base64,${base64Data}`;
+        }
+      } catch (e) {
+        // ignore and fallback
+      }
+      return `
       <div class="image-card">
         <img src="${srcUrl}" alt="Check In/Out Image" onerror="this.src='https://placehold.co/220x150?text=No+Image'">
         <div class="image-meta">
@@ -577,7 +591,7 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
         </div>
       </div>
       `;
-  }).join('')}
+    }).join('')}
   </div>` : ''}
 
   <!-- Footer Actions -->
