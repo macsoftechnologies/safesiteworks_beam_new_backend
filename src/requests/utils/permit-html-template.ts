@@ -1766,18 +1766,20 @@ export function generatePermitHtml(data: any): string {
       .permit-container {
         margin: 0;
         padding: 0;
-        max-width: 100%;
+        max-width: 100% !important;
+        width: 100% !important;
       }
       .dashboard-card {
-        box-shadow: none;
-        border: 1px solid #cbd5e1;
-        page-break-inside: avoid;
+        box-shadow: none !important;
+        border: 1px solid #cbd5e1 !important;
+        page-break-inside: avoid !important;
+        margin-bottom: 16px !important;
       }
       .confirm-pg-download-container {
-        display: none;
+        display: none !important;
       }
       .back-btn {
-        display: none;
+        display: none !important;
       }
     }
   </style>
@@ -1892,21 +1894,31 @@ export function generatePermitHtml(data: any): string {
           <div class="row mb-1">
             ${data.check_in_time ? `
               <div class="col-md-6 mb-3">
-                <div class="dashboard-card mb-0" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px;">
-                  <div class="info-label" style="color: #15803d; font-size: 11px;">Checked In</div>
-                  <div class="info-value mb-2" style="color: #166534; font-size: 14px;">${formatDateTime(data.check_in_time)}</div>
-                  <div class="info-label" style="color: #15803d; font-size: 10px;">User</div>
-                  <div class="info-value" style="color: #166534; font-size: 13px;">${data.check_in_user || '-'}</div>
+                <div class="dashboard-card mb-0" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac; border-left: 5px solid #22c55e; padding: 16px; box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div class="info-label" style="color: #15803d; font-size: 11px; font-weight: 800; margin: 0; letter-spacing: 0.5px;">Checked In</div>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="#22c55e" style="width: 20px; height: 20px; flex-shrink: 0;">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div class="info-value mb-2" style="color: #14532d; font-size: 15px; font-weight: 800;">${formatDateTime(data.check_in_time)}</div>
+                  <div class="info-label" style="color: #15803d; font-size: 10px; font-weight: 800;">User</div>
+                  <div class="info-value" style="color: #14532d; font-size: 13px; font-weight: 700;">${data.check_in_user || '-'}</div>
                 </div>
               </div>
             ` : ''}
             ${(data.Request_status === 'Closed' && data.check_out_time) ? `
               <div class="col-md-6 mb-3">
-                <div class="dashboard-card mb-0" style="background-color: #fef2f2; border: 1px solid #fecaca; padding: 16px;">
-                  <div class="info-label" style="color: #b91c1c; font-size: 11px;">Checked Out</div>
-                  <div class="info-value mb-2" style="color: #991b1b; font-size: 14px;">${formatDateTime(data.check_out_time)}</div>
-                  <div class="info-label" style="color: #b91c1c; font-size: 10px;">User</div>
-                  <div class="info-value" style="color: #991b1b; font-size: 13px;">${data.check_out_user || '-'}</div>
+                <div class="dashboard-card mb-0" style="background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border: 1px solid #fca5a5; border-left: 5px solid #ef4444; padding: 16px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div class="info-label" style="color: #b91c1c; font-size: 11px; font-weight: 800; margin: 0; letter-spacing: 0.5px;">Checked Out</div>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="#ef4444" style="width: 20px; height: 20px; flex-shrink: 0;">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                    </svg>
+                  </div>
+                  <div class="info-value mb-2" style="color: #7f1d1d; font-size: 15px; font-weight: 800;">${formatDateTime(data.check_out_time)}</div>
+                  <div class="info-label" style="color: #b91c1c; font-size: 10px; font-weight: 800;">User</div>
+                  <div class="info-value" style="color: #7f1d1d; font-size: 13px; font-weight: 700;">${data.check_out_user || '-'}</div>
                 </div>
               </div>
             ` : ''}
@@ -1947,6 +1959,14 @@ export function generatePermitHtml(data: any): string {
               <div class="info-value">${formatRooms(data.room_names || data.Room_Nos)}</div>
             </div>
             <div>
+              <div class="info-label">Permit Type</div>
+              <div class="info-value">${data.permit_type || '-'}</div>
+            </div>
+            <div>
+              <div class="info-label">Permit Under</div>
+              <div class="info-value">${data.permit_under || 'Construction'}</div>
+            </div>
+            <div>
               <div class="info-label">Date</div>
               <div class="info-value">${formatDateOnly(data.Working_Date)}</div>
             </div>
@@ -1958,6 +1978,25 @@ export function generatePermitHtml(data: any): string {
               <div class="info-label">Shift Type</div>
               <div class="info-value">${Number(data.night_shift) === 1 ? 'Night Shift' : 'Day Shift'}</div>
             </div>
+            ${Number(data.night_shift) === 1 ? `
+            <div class="info-fullwidth" style="margin-top: 4px;">
+              <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border: 1px solid #4338ca; border-left: 5px solid #818cf8; border-radius: 8px; padding: 14px 16px; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2); display: flex; gap: 32px; align-items: flex-start;">
+                <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#818cf8" style="width: 22px; height: 22px; flex-shrink: 0;">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                  </svg>
+                  <div>
+                    <div style="font-size: 10px; font-weight: 800; color: #a5b4fc; letter-spacing: 0.5px; margin-bottom: 3px;">NEW DATE (Night Shift)</div>
+                    <div style="font-size: 14px; font-weight: 800; color: #e0e7ff;">${formatDateOnly(data.new_date)}</div>
+                  </div>
+                </div>
+                <div style="flex: 1; border-left: 1px solid #4338ca; padding-left: 24px;">
+                  <div style="font-size: 10px; font-weight: 800; color: #a5b4fc; letter-spacing: 0.5px; margin-bottom: 3px;">NEW END TIME</div>
+                  <div style="font-size: 14px; font-weight: 800; color: #e0e7ff;">${formatTimeOnly(data.new_end_time)}</div>
+                </div>
+              </div>
+            </div>
+            ` : ''}
           </div>
         </div>
 
@@ -2774,45 +2813,9 @@ export function generatePermitHtml(data: any): string {
   <!-- BootStrap & pdf generation scripts -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script>
     function test() {
-      // Hide buttons and controls before capture to keep the PDF clean
-      const downloadContainer = document.querySelector('.confirm-pg-download-container');
-      const headerActions = document.querySelector('.header-actions');
-      const backBtn = document.querySelector('.back-btn');
-      
-      if (downloadContainer) downloadContainer.style.display = 'none';
-      if (headerActions) headerActions.style.display = 'none';
-      if (backBtn) backBtn.style.display = 'none';
-
-      var element = document.getElementById('root');
-      var name = "${data.PermitNo || 'Permit'}" + ".pdf";
-      var opt = {
-        margin: [10, 10, 10, 10],
-        filename: name,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true,
-          windowWidth: 1280,
-          scrollX: 0,
-          scrollY: 0
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: 'a4',
-          orientation: 'portrait'
-        },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-      };
-      
-      html2pdf().set(opt).from(element).save().then(function() {
-        // Restore controls visibility once download is completed
-        if (downloadContainer) downloadContainer.style.display = 'block';
-        if (headerActions) headerActions.style.display = 'flex';
-        if (backBtn) backBtn.style.display = 'flex';
-      });
+      window.location.href = "/requests/permit-design/${data.PermitNo}/pdf";
     }
   </script>
 </body>

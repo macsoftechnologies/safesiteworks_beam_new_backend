@@ -4990,8 +4990,13 @@ export class RequestsService {
       if (!sub) return;
       for (const column of repo.metadata.columns) {
         if (column.propertyName !== 'requestId') {
-          const val = sub[column.propertyName];
-          flatObj[column.databaseName] = val !== undefined && val !== null ? val : '';
+          let val = sub[column.propertyName];
+          if (val === undefined) {
+            val = sub[column.databaseName];
+          }
+          const finalVal = val !== undefined && val !== null ? val : '';
+          flatObj[column.databaseName] = finalVal;
+          flatObj[column.propertyName] = finalVal;
         }
       }
     };
@@ -5012,6 +5017,39 @@ export class RequestsService {
 
     if (flatObj.course_of_actions !== undefined) {
       flatObj.course_of_action = flatObj.course_of_actions;
+    }
+    if (flatObj.course_of_action !== undefined) {
+      flatObj.course_of_actions = flatObj.course_of_action;
+    }
+    if (flatObj.hazardous_substances !== undefined) {
+      flatObj.hazardaus_substances = flatObj.hazardous_substances;
+    }
+    if (flatObj.hazardaus_substances !== undefined) {
+      flatObj.hazardous_substances = flatObj.hazardaus_substances;
+    }
+    if (flatObj.vendor_supplies !== undefined) {
+      flatObj.vendor_supplier = flatObj.vendor_supplies;
+    }
+    if (flatObj.vendor_supplier !== undefined) {
+      flatObj.vendor_supplies = flatObj.vendor_supplier;
+    }
+    if (flatObj.isolating_responsible !== undefined) {
+      flatObj.isolating_resposible = flatObj.isolating_responsible;
+    }
+    if (flatObj.isolating_resposible !== undefined) {
+      flatObj.isolating_responsible = flatObj.isolating_resposible;
+    }
+    if (flatObj.pnematic_hydrostatic !== undefined) {
+      flatObj.pneumatic_hydrostatic = flatObj.pnematic_hydrostatic;
+    }
+    if (flatObj.pneumatic_hydrostatic !== undefined) {
+      flatObj.pnematic_hydrostatic = flatObj.pneumatic_hydrostatic;
+    }
+    if (flatObj.specific_risks_based_on_task !== undefined) {
+      flatObj.spesific_risks_based_on_task = flatObj.specific_risks_based_on_task;
+    }
+    if (flatObj.spesific_risks_based_on_task !== undefined) {
+      flatObj.specific_risks_based_on_task = flatObj.spesific_risks_based_on_task;
     }
 
     // Fetch Opened (check-in) log

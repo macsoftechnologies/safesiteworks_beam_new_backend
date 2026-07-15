@@ -14,8 +14,6 @@ const PUPPETEER_ARGS = [
   '--disable-setuid-sandbox',
   '--disable-dev-shm-usage',
   '--disable-gpu',
-  '--no-zygote',
-  '--single-process',
 ];
 
 /**
@@ -29,10 +27,11 @@ export async function generatePermitPdf(data: any): Promise<Buffer> {
   });
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' as any });
+    await page.setContent(html, { waitUntil: 'load' });
+    // Hide the download button so it never appears in the generated PDF
+    await page.addStyleTag({ content: '.confirm-pg-download-container, .back-btn { display: none !important; }' });
     const pdfBuffer = await page.pdf({
       width: '330mm',
-      height: '483mm',
       printBackground: true,
       margin: { top: '15mm', bottom: '15mm', left: '5mm', right: '5mm' },
       preferCSSPageSize: false,
@@ -58,7 +57,9 @@ export async function generateLogsPdf(
   });
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' as any });
+    await page.setContent(html, { waitUntil: 'load' });
+    // Hide the download button so it never appears in the generated PDF
+    await page.addStyleTag({ content: '.download-bar { display: none !important; }' });
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
