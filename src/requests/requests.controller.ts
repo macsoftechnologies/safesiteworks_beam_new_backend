@@ -27,7 +27,7 @@ import { UpdateRequestDto } from './dtos/update-request.dto';
 import { SearchRequestDto } from './dtos/search-request.dto';
 import { CreateByCountDto } from './dtos/create-by-count.dto';
 import { generateLogsHtml } from './utils/logs-html-template';
-import { buildPermitPdf, buildLogsPdf, generatePermitPdf, generateLogsPdf } from './utils/pdf-generator';
+import { generatePermitPdf, generateLogsPdf } from './utils/pdf-generator';
 import { PlanSearchDto } from './dtos/planssearch.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { generatePermitHtml } from './utils/permit-html-template';
