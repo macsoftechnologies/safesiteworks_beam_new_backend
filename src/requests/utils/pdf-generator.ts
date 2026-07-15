@@ -3,13 +3,29 @@ import { generatePermitHtml } from './permit-html-template';
 import { generateLogsHtml } from './logs-html-template';
 
 /**
+ * Shared Puppeteer launch args hardened for headless Linux servers.
+ * - --no-sandbox / --disable-setuid-sandbox: required when running as root
+ * - --disable-dev-shm-usage: prevents crashes on low /dev/shm memory (Docker, VPS)
+ * - --disable-gpu: not needed in headless mode, avoids GL errors
+ * - --no-zygote / --single-process: avoids process spawning issues on restricted envs
+ */
+const PUPPETEER_ARGS = [
+  '--no-sandbox',
+  '--disable-setuid-sandbox',
+  '--disable-dev-shm-usage',
+  '--disable-gpu',
+  '--no-zygote',
+  '--single-process',
+];
+
+/**
  * Generates a permit PDF via Puppeteer/headless Chrome from the HTML template.
  */
 export async function generatePermitPdf(data: any): Promise<Buffer> {
   const html = generatePermitHtml(data);
   const browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    args: PUPPETEER_ARGS,
   });
   try {
     const page = await browser.newPage();
@@ -38,7 +54,7 @@ export async function generateLogsPdf(
   const html = generateLogsHtml(permitNo, logs, images);
   const browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    args: PUPPETEER_ARGS,
   });
   try {
     const page = await browser.newPage();
