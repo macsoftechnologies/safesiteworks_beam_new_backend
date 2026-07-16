@@ -356,14 +356,32 @@ export function generatePermitHtml(data: any): string {
     iconType: string;
   }[] = [];
 
-  // Step 1: Draft or Hold
-  const firstStepLabel = logDraft ? 'Draft' : 'Hold';
-  const firstStepLog = logDraft || logHold;
-  trackingSteps.push({
-    label: firstStepLabel,
-    log: firstStepLog,
-    iconType: firstStepLabel.toLowerCase(),
-  });
+  // Determine if the tracking starts from Hold (no Draft log, or first log is Hold)
+  const startsWithHold = logsList.length > 0 &&
+    logsList[0].requestType &&
+    logsList[0].requestType.toLowerCase().trim() === 'hold';
+
+  if (startsWithHold) {
+    // Starts with Hold: Hide Draft, show Hold as the first step
+    trackingSteps.push({
+      label: 'Hold',
+      log: logHold || (requestStatus.toLowerCase() === 'hold' ? { createdTime: data.createdTime || new Date(), user: { username: 'System' } } : undefined),
+      iconType: 'hold',
+    });
+  } else {
+    // Starts with Draft (compulsory first step)
+    trackingSteps.push({
+      label: 'Draft',
+      log: logDraft || (requestStatus.toLowerCase() === 'draft' || logsList.length === 0 ? { createdTime: data.createdTime || new Date(), user: { username: 'System' } } : undefined),
+      iconType: 'draft',
+    });
+    // Add Hold status after Draft
+    trackingSteps.push({
+      label: 'Hold',
+      log: logHold || (requestStatus.toLowerCase() === 'hold' ? { createdTime: new Date(), user: { username: 'System' } } : undefined),
+      iconType: 'hold',
+    });
+  }
 
   // Check Pre-Approved
   if (logPreApproved || requestStatus.toLowerCase() === 'pre-approved') {
@@ -390,9 +408,16 @@ export function generatePermitHtml(data: any): string {
     });
 
     // Check if Cancelled after approved
-    if (logCancelled || requestStatus.toLowerCase() === 'cancelled') {
+    if (
+      logCancelled ||
+      requestStatus.toLowerCase() === 'cancelled' ||
+      requestStatus.toLowerCase() === 'auto-cancelled'
+    ) {
+      const isAutoCancelled =
+        requestStatus.toLowerCase() === 'auto-cancelled' ||
+        (logCancelled && Number(logCancelled.system) === 1);
       trackingSteps.push({
-        label: 'Cancelled',
+        label: isAutoCancelled ? 'Auto-Cancelled' : 'Cancelled',
         log: logCancelled,
         iconType: 'cancelled',
       });
@@ -437,7 +462,7 @@ export function generatePermitHtml(data: any): string {
     if (step.label === 'Rejected') {
       return `${baseClass} step-rejected`;
     }
-    if (step.label === 'Cancelled') {
+    if (step.label === 'Cancelled' || step.label === 'Auto-Cancelled') {
       return `${baseClass} step-cancelled`;
     }
     return baseClass;
@@ -576,7 +601,7 @@ export function generatePermitHtml(data: any): string {
       ? `
         <div class="step-meta" style="font-size: 10px; color: #64748b; margin-top: 6px; line-height: 1.3; font-weight: 500; word-break: break-all; max-width: 100px;">
           <div>${formatDateTime(step.log.createdTime)}</div>
-          <div style="font-weight: 600; color: #475569; margin-top: 1px;">By: ${step.log.user?.username || `User #${step.log.userId}` || ''}</div>
+          <div style="font-weight: 600; color: #475569; margin-top: 1px;">By: ${Number(step.log.system) === 1 ? 'System' : (step.log.user?.username || `User #${step.log.userId}` || '')}</div>
         </div>
       `
       : '';
@@ -1987,10 +2012,7 @@ export function generatePermitHtml(data: any): string {
               <div class="info-label">Time</div>
               <div class="info-value">${formatTimeOnly(data.Start_Time)} - ${formatTimeOnly(data.End_Time)}</div>
             </div>
-            <div>
-              <div class="info-label">Shift Type</div>
-              <div class="info-value">${Number(data.night_shift) === 1 ? 'Night Shift' : 'Day Shift'}</div>
-            </div>
+            
             ${Number(data.night_shift) === 1 ? `
             <div class="info-fullwidth" style="margin-top: 4px;">
               <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border: 1px solid #4338ca; border-left: 5px solid #818cf8; border-radius: 8px; padding: 14px 16px; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2); display: flex; gap: 32px; align-items: flex-start;">
@@ -2032,12 +2054,40 @@ export function generatePermitHtml(data: any): string {
               <div class="info-value" style="font-weight: 700; color: #0f172a; margin-bottom: 8px;">${data.description_of_activity || data.descriptionOfActivity || '-'}</div>
             </div>
             <div>
-              <div class="info-label">Contractor</div>
-              <div class="info-value">${data.subContractorName || data.Company_Name || '-'}</div>
+              <div class="info-label">Project Name</div>
+              <div class="info-value">${data.Company_Name || '-'}</div>
+            </div>
+            <div>
+              <div class="info-label">Sub-Contractor</div>
+              <div class="info-value">${data.new_sub_contractor || data.subContractorName || data.Company_Name || '-'}</div>
+            </div>
+            <div>
+              <div class="info-label">Activity</div>
+              <div class="info-value">${data.Activity || data.activityName || '-'}</div>
+            </div>
+            <div>
+              <div class="info-label">Type of Activity</div>
+              <div class="info-value">${data.work_type || data.activityName || data.Activity || '-'}</div>
+            </div>
+            <div>
+              <div class="info-label">RAMS Number</div>
+              <div class="info-value">${data.rams_number || '-'}</div>
+            </div>
+            <div>
+              <div class="info-label">Permit Type</div>
+              <div class="info-value">${data.permit_type || '-'}</div>
+            </div>
+            <div>
+              <div class="info-label">Permit Under</div>
+              <div class="info-value">${data.permit_under || 'Construction'}</div>
             </div>
             <div>
               <div class="info-label">Supervisor</div>
               <div class="info-value">${data.Foreman || '-'}</div>
+            </div>
+            <div>
+              <div class="info-label">Supervisor Phone Number</div>
+              <div class="info-value">${data.Foreman_Phone_Number || '-'}</div>
             </div>
             <div class="info-fullwidth">
               <div class="info-label">Tools Used</div>
@@ -2048,6 +2098,39 @@ export function generatePermitHtml(data: any): string {
               <div class="info-value">${data.Machinery || '-'}</div>
             </div>
           </div>
+        </div>
+
+        <!-- Details of Persons Attending Toolbox Talk Table -->
+        <div class="dashboard-card">
+          <div class="card-section-header" style="margin-bottom: 16px; border-bottom: none; padding-bottom: 0;">
+            <div class="card-section-title-wrap">
+              <span class="card-section-icon" style="color: #4f46e5;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 20px; height: 20px;">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                </svg>
+              </span>
+              <div>
+                <h2 class="card-section-title" style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #1e293b;">Details of Persons Attending Toolbox Talk</h2>
+              </div>
+            </div>
+          </div>
+          
+          <table style="width: 100%; border-collapse: collapse; font-family: 'Mulish', sans-serif; font-size: 13px; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; page-break-inside: avoid;">
+            <thead>
+              <tr style="background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0;">
+                <th style="width: 50%; padding: 12px 16px; font-weight: 600; text-align: left; border-right: 1px solid #e2e8f0; color: #475569;">Date/Time:</th>
+                <th style="width: 50%; padding: 12px 16px; font-weight: 600; text-align: left; color: #475569;">Toolbox Conducted by:</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${Array.from({ length: 8 }).map((_, i) => `
+                <tr style="background-color: ${i % 2 === 0 ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">
+                  <td style="padding: 14px 16px; border-right: 1px solid #e2e8f0; color: #94a3b8; font-weight: 500; height: 45px; vertical-align: middle;">Name:</td>
+                  <td style="padding: 14px 16px; color: #94a3b8; font-weight: 500; height: 45px; vertical-align: middle;">Signature:</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
         </div>
 
         <!-- Safety Precautions & Notes -->
@@ -2322,6 +2405,14 @@ export function generatePermitHtml(data: any): string {
 
           <div class="mt-4 border-top pt-3">
             <table class="detailed-table">
+              <thead>
+                <tr>
+                  <th>Closing Workplace Check</th>
+                  <th class="check-cell">Yes</th>
+                  <th class="check-cell">No</th>
+                  <th class="check-cell">N/A</th>
+                </tr>
+              </thead>
               <tbody>
                 ${renderCheckRow('Has the work area been inspected for smoldering materials or residual heat?', data.h_heat_source)}
                 ${renderCheckRow('Have all tools and hot work equipment been safely removed from the work area?', data.h_workplace_check)}

@@ -3378,23 +3378,10 @@ export class RequestsService {
     const query = `
       SELECT id FROM requests
       WHERE Request_status = 'Approved'
-      AND (
-        (
-          night_shift = '0'
-          AND Working_Date = ?
-          AND TIMESTAMP(Working_Date, Start_Time) - INTERVAL 5 HOUR <= ?
-        )
-        OR
-        (
-          night_shift = '1'
-          AND Working_Date < ?
-          AND TIMESTAMP(DATE_ADD(Working_Date, INTERVAL 1 DAY), Start_Time) + INTERVAL 4 HOUR >= ?
-        )
-      )
+      AND Working_Date <= ?
+      AND TIMESTAMP(Working_Date, Start_Time) + INTERVAL 4 HOUR <= ?
     `;
     const toCancel = await this.requestRepo.query(query, [
-      curDateStr,
-      curDateTimeStr,
       curDateStr,
       curDateTimeStr,
     ]);
@@ -3419,7 +3406,6 @@ export class RequestsService {
 
         const log = this.logRepo.create({
           requestId: id,
-          userId: 0,
           requestType: 'Cancelled',
           createdTime: nowCph,
           system: 1,
@@ -4819,7 +4805,16 @@ export class RequestsService {
 
       if (origFire) {
         const { requestId: _rid, id: _id, ...fireData } = origFire as any;
-        await this.fireHotworkRepo.save(this.fireHotworkRepo.create({ ...fireData, requestId }));
+        await this.fireHotworkRepo.save(this.fireHotworkRepo.create({
+          ...fireData,
+          hHeatSource: null,
+          hWorkplaceCheck: null,
+          hFireDetectors: null,
+          hStartTime: null,
+          hEndTime: null,
+          fireImage: null,
+          requestId
+        }));
       } else {
         await this.fireHotworkRepo.save(this.fireHotworkRepo.create({ requestId }));
       }
