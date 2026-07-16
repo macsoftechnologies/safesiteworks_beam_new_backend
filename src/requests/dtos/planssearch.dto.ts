@@ -194,4 +194,14 @@ export class PlanSearchDto {
     @IsOptional()
     @IsString()
     End_Time?: string;
+
+    @IsOptional()
+    Zone_Id?: any;
+
+    @IsOptional()
+    @IsString()
+    zone?: string;
+
+    @IsOptional()
+    zoneIds?: any;
 }

@@ -49,13 +49,15 @@ export class SearchRequestDto {
   @IsOptional()
   Room_Nos?: string;
 
-  @IsNumber()
   @IsOptional()
-  Zone_Id?: number;
+  Zone_Id?: any;
 
   @IsString()
   @IsOptional()
   zone?: string;
+
+  @IsOptional()
+  zoneIds?: any;
 
   @IsNumber()
   @IsOptional()

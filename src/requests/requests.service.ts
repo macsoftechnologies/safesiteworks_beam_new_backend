@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, Brackets } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RedisCacheService } from 'src/redis/redid-cache.service';
@@ -2480,20 +2480,70 @@ export class RequestsService {
           }
         }
 
-        if (
-          dto.Zone_Id !== undefined &&
-          dto.Zone_Id !== null &&
-          Number(dto.Zone_Id) !== 0
-        ) {
-          qb.andWhere('requests.Zone_Id = :zoneId', { zoneId: dto.Zone_Id });
+        let selectedZoneIds: number[] = [];
+        if (dto.zoneIds) {
+          if (Array.isArray(dto.zoneIds)) {
+            selectedZoneIds = dto.zoneIds.map(Number).filter(Boolean);
+          } else if (typeof dto.zoneIds === 'string') {
+            selectedZoneIds = dto.zoneIds.split(',').map(s => Number(s.trim())).filter(Boolean);
+          }
+        } else if (dto.Zone_Id) {
+          if (typeof dto.Zone_Id === 'string') {
+            selectedZoneIds = (dto.Zone_Id as string).split(',').map(s => Number(s.trim())).filter(Boolean);
+          } else if (typeof dto.Zone_Id === 'number') {
+            selectedZoneIds = [dto.Zone_Id];
+          } else if (Array.isArray(dto.Zone_Id)) {
+            selectedZoneIds = (dto.Zone_Id as any[]).map(Number).filter(Boolean);
+          }
         }
 
-        if (
-          dto.zone !== undefined &&
-          dto.zone !== null &&
-          dto.zone.trim() !== ''
-        ) {
-          qb.andWhere('requests.zone LIKE :zone', { zone: `%${dto.zone.trim()}%` });
+        if (selectedZoneIds.length > 0) {
+          const zones = await this.zoneRepo.findBy({ id: In(selectedZoneIds) });
+          const zoneNames = zones.map(z => z.zone).filter(Boolean);
+          
+          const rooms = await this.roomRepo.find({
+            where: { zone_id: In(selectedZoneIds) },
+            select: { room_id: true, room_name: true }
+          });
+          const roomIds = rooms.map(r => String(r.room_id));
+          const roomNames = rooms.map(r => r.room_name).filter(Boolean);
+
+          qb.andWhere(new Brackets(innerQb => {
+            innerQb.where('requests.Zone_Id IN (:...selectedZoneIds)', { selectedZoneIds });
+            
+            zoneNames.forEach((zName, index) => {
+              innerQb.orWhere(`requests.zone LIKE :zName_${index}`, { [`zName_${index}`]: `%${zName}%` });
+            });
+            
+            const roomConds: string[] = [];
+            const roomParams: any = {};
+            if (roomIds.length > 0) {
+              const escapedIds = roomIds.map(id => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+              roomConds.push(`requests.Room_Nos REGEXP :roomIdsRegex`);
+              roomParams.roomIdsRegex = `(^|,)(` + escapedIds + `)(,|$)`;
+            }
+            if (roomNames.length > 0) {
+              const escapedNames = roomNames.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+              roomConds.push(`requests.Room_Nos REGEXP :roomNamesRegex`);
+              roomParams.roomNamesRegex = `(^|,)(` + escapedNames + `)(,|$)`;
+            }
+            
+            if (roomConds.length > 0) {
+              innerQb.orWhere(new Brackets(roomQb => {
+                roomQb.where('(requests.Zone_Id IS NULL OR requests.Zone_Id = 0)');
+                roomQb.andWhere("(requests.zone IS NULL OR requests.zone = '')");
+                roomQb.andWhere(`(${roomConds.join(' OR ')})`, roomParams);
+              }));
+            }
+          }));
+        } else {
+          if (
+            dto.zone !== undefined &&
+            dto.zone !== null &&
+            dto.zone.trim() !== ''
+          ) {
+            qb.andWhere('requests.zone LIKE :zone', { zone: `%${dto.zone.trim()}%` });
+          }
         }
 
         // Room_Nos: support both numeric room ID and room name string
@@ -2878,7 +2928,7 @@ export class RequestsService {
       'work_in_atex_area', 'securing_facilities', 'excavation_works',
       'specific_gloves', 'eye_protection', 'fall_protection', 'hearing_protection',
       'respiratory_protection', 'taskSpecificPPE', 'power_on', 'pressurization',
-      'fromDate', 'toDate', 'Start_Time', 'End_Time'
+      'fromDate', 'toDate', 'Start_Time', 'End_Time', 'Zone_Id', 'zone', 'zoneIds'
     ];
     const filteredSearchDto: PlanSearchDto = {};
     for (const key of allowedKeys) {
@@ -3042,6 +3092,72 @@ export class RequestsService {
             } else {
               qb.andWhere('requests.Request_status = :requestStatus', { requestStatus: singleStatus });
             }
+          }
+        }
+
+        let selectedZoneIds: number[] = [];
+        if (searchDto.zoneIds) {
+          if (Array.isArray(searchDto.zoneIds)) {
+            selectedZoneIds = searchDto.zoneIds.map(Number).filter(Boolean);
+          } else if (typeof searchDto.zoneIds === 'string') {
+            selectedZoneIds = searchDto.zoneIds.split(',').map(s => Number(s.trim())).filter(Boolean);
+          }
+        } else if (searchDto.Zone_Id) {
+          if (typeof searchDto.Zone_Id === 'string') {
+            selectedZoneIds = (searchDto.Zone_Id as string).split(',').map(s => Number(s.trim())).filter(Boolean);
+          } else if (typeof searchDto.Zone_Id === 'number') {
+            selectedZoneIds = [searchDto.Zone_Id];
+          } else if (Array.isArray(searchDto.Zone_Id)) {
+            selectedZoneIds = (searchDto.Zone_Id as any[]).map(Number).filter(Boolean);
+          }
+        }
+
+        if (selectedZoneIds.length > 0) {
+          const zones = await this.zoneRepo.findBy({ id: In(selectedZoneIds) });
+          const zoneNames = zones.map(z => z.zone).filter(Boolean);
+          
+          const rooms = await this.roomRepo.find({
+            where: { zone_id: In(selectedZoneIds) },
+            select: { room_id: true, room_name: true }
+          });
+          const roomIds = rooms.map(r => String(r.room_id));
+          const roomNames = rooms.map(r => r.room_name).filter(Boolean);
+
+          qb.andWhere(new Brackets(innerQb => {
+            innerQb.where('requests.Zone_Id IN (:...selectedZoneIds)', { selectedZoneIds });
+            
+            zoneNames.forEach((zName, index) => {
+              innerQb.orWhere(`requests.zone LIKE :zName_${index}`, { [`zName_${index}`]: `%${zName}%` });
+            });
+            
+            const roomConds: string[] = [];
+            const roomParams: any = {};
+            if (roomIds.length > 0) {
+              const escapedIds = roomIds.map(id => id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+              roomConds.push(`requests.Room_Nos REGEXP :roomIdsRegex`);
+              roomParams.roomIdsRegex = `(^|,)(` + escapedIds + `)(,|$)`;
+            }
+            if (roomNames.length > 0) {
+              const escapedNames = roomNames.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+              roomConds.push(`requests.Room_Nos REGEXP :roomNamesRegex`);
+              roomParams.roomNamesRegex = `(^|,)(` + escapedNames + `)(,|$)`;
+            }
+            
+            if (roomConds.length > 0) {
+              innerQb.orWhere(new Brackets(roomQb => {
+                roomQb.where('(requests.Zone_Id IS NULL OR requests.Zone_Id = 0)');
+                roomQb.andWhere("(requests.zone IS NULL OR requests.zone = '')");
+                roomQb.andWhere(`(${roomConds.join(' OR ')})`, roomParams);
+              }));
+            }
+          }));
+        } else {
+          if (
+            searchDto.zone !== undefined &&
+            searchDto.zone !== null &&
+            searchDto.zone.trim() !== ''
+          ) {
+            qb.andWhere('requests.zone LIKE :zone', { zone: `%${searchDto.zone.trim()}%` });
           }
         }
 
