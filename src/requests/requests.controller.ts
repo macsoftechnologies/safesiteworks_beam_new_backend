@@ -140,10 +140,7 @@ export class RequestsController {
       const result = await this.requestsService.update(Number(id), updateDto, ramsFiles, imageFiles);
       return result;
     } catch (error) {
-      return {
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: error.message || 'Request update failed',
-      };
+      throw error;
     }
   }
 
@@ -171,10 +168,18 @@ export class RequestsController {
       const result = await this.requestsService.updateStatus(body);
       return result;
     } catch (error) {
-      return {
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: error.message || 'Status update failed',
-      };
+      throw error;
+    }
+  }
+
+  // 4b. Bulk Update Safety Precautions
+  @Put('safety/change')
+  async updateSafety(@Body() body: { id: string; safety: string }) {
+    try {
+      const result = await this.requestsService.updateSafety(body);
+      return result;
+    } catch (error) {
+      throw error;
     }
   }
 

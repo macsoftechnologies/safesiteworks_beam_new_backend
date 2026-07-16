@@ -2122,6 +2122,21 @@ export class RequestsService {
     };
   }
 
+  async updateSafety(body: { id: string; safety: string }): Promise<any> {
+    const { id, safety } = body;
+    if (!id) {
+      throw new BadRequestException('Missing required field: id');
+    }
+    const idsArray = id
+      .split(',')
+      .map((val) => Number(val.trim()))
+      .filter((val) => !isNaN(val));
+
+    await this.requestRepo.update(idsArray, { safetyPrecautions: safety });
+    await this.redisCacheService.deleteByPattern('requests:*');
+    return { success: true, updatedCount: idsArray.length };
+  }
+
   /**
    * Resolves CONM-prefixed and COMM-prefixed statuses (sent from the UI approval buttons)
    * into the actual requestStatus value to be stored in the database.
