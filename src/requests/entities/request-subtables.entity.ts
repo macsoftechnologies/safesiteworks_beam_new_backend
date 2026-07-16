@@ -437,6 +437,9 @@ export class RequestHeight {
   @Column({ name: 'avoid_hazards', type: 'int', nullable: true })
   avoidHazards?: number;
 
+  @Column({ name: 'height_training', type: 'int', nullable: true })
+  heightTraining?: number;
+
   @Column({ name: 'height_equipments', type: 'int', nullable: true })
   heightEquipments?: number;
 

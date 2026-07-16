@@ -689,6 +689,7 @@ export class RequestsService {
         lanyardAttachments: dto.lanyard_attachments || 0,
         rescuePlan: dto.rescue_plan || 0,
         avoidHazards: dto.avoid_hazards || 0,
+        heightTraining: dto.height_training || 0,
         heightEquipments: dto.height_equipments || 0,
         supervision: dto.supervision || 0,
         shockAbsorbing: dto.shock_absorbing || 0,
@@ -1769,6 +1770,7 @@ export class RequestsService {
       lanyardAttachments: dto.lanyard_attachments,
       rescuePlan: dto.rescue_plan,
       avoidHazards: dto.avoid_hazards,
+      heightTraining: dto.height_training,
       heightEquipments: dto.height_equipments,
       supervision: dto.supervision,
       shockAbsorbing: dto.shock_absorbing,
@@ -4406,7 +4408,7 @@ export class RequestsService {
         checkCheckbox('lanyard_attachments', subTables?.hgt?.lanyardAttachments);
         checkCheckbox('rescue_plan', subTables?.hgt?.rescuePlan);
         checkCheckbox('avoid_hazards', subTables?.hgt?.avoidHazards);
-        checkCheckbox('height_training', undefined);
+        checkCheckbox('height_training', subTables?.hgt?.heightTraining);
         checkCheckbox('supervision', subTables?.hgt?.supervision);
         checkCheckbox('shock_absorbing', subTables?.hgt?.shockAbsorbing);
         checkCheckbox('height_equipments', subTables?.hgt?.heightEquipments);
