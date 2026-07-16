@@ -737,7 +737,10 @@ export class RequestsService {
         pipeworkMic: dto.pipework_mic || 0,
         lotoPlanAttached: dto.loto_plan_attached || 0,
         exclusionZoneCalculated: dto.exclusion_zone_calculated || 0,
-        pnematicHydrostatic: dto.pnematic_hydrostatic || 0,
+        pnematicHydrostatic:
+          dto.pnematic_hydrostatic !== undefined
+            ? dto.pnematic_hydrostatic
+            : dto.pneumatic_hydrostatic || 0,
         pressureOfTheTest: dto.pressure_of_the_test || '',
         safetyValvesCalibrated: dto.safety_valves_calibrated || 0,
         pressurePneumatic: dto.pressure_pneumatic || '',
