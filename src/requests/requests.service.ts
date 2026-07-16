@@ -2508,6 +2508,8 @@ export class RequestsService {
           const roomIds = rooms.map(r => String(r.room_id));
           const roomNames = rooms.map(r => r.room_name).filter(Boolean);
 
+          const zoneBuildingIds = zones.map(z => z.building_id).filter(id => id !== undefined && id !== null && id !== 0);
+
           qb.andWhere(new Brackets(innerQb => {
             innerQb.where('requests.Zone_Id IN (:...selectedZoneIds)', { selectedZoneIds });
             
@@ -2532,6 +2534,9 @@ export class RequestsService {
               innerQb.orWhere(new Brackets(roomQb => {
                 roomQb.where('(requests.Zone_Id IS NULL OR requests.Zone_Id = 0)');
                 roomQb.andWhere("(requests.zone IS NULL OR requests.zone = '')");
+                if (zoneBuildingIds.length > 0) {
+                  roomQb.andWhere('requests.Building_Id IN (:...zoneBuildingIds)', { zoneBuildingIds });
+                }
                 roomQb.andWhere(`(${roomConds.join(' OR ')})`, roomParams);
               }));
             }
@@ -3123,6 +3128,8 @@ export class RequestsService {
           const roomIds = rooms.map(r => String(r.room_id));
           const roomNames = rooms.map(r => r.room_name).filter(Boolean);
 
+          const zoneBuildingIds = zones.map(z => z.building_id).filter(id => id !== undefined && id !== null && id !== 0);
+
           qb.andWhere(new Brackets(innerQb => {
             innerQb.where('requests.Zone_Id IN (:...selectedZoneIds)', { selectedZoneIds });
             
@@ -3147,6 +3154,9 @@ export class RequestsService {
               innerQb.orWhere(new Brackets(roomQb => {
                 roomQb.where('(requests.Zone_Id IS NULL OR requests.Zone_Id = 0)');
                 roomQb.andWhere("(requests.zone IS NULL OR requests.zone = '')");
+                if (zoneBuildingIds.length > 0) {
+                  roomQb.andWhere('requests.Building_Id IN (:...zoneBuildingIds)', { zoneBuildingIds });
+                }
                 roomQb.andWhere(`(${roomConds.join(' OR ')})`, roomParams);
               }));
             }
