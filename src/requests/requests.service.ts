@@ -3588,6 +3588,13 @@ export class RequestsService {
           system: 1,
         });
         await this.logRepo.save(log);
+
+        this.notificationsService.triggerNotification(
+          id,
+          'Approved',
+          'Auto-Cancelled',
+          0,
+        ).catch((err) => console.error('Notification error on auto-cancel:', err));
       }
       await this.redisCacheService.deleteByPattern('requests:*');
     }

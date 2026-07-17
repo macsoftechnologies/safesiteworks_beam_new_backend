@@ -46,7 +46,10 @@ export class NotificationsService {
 
       // Normalize statuses
       const normPrev = previousStatus ? previousStatus.toLowerCase().trim() : null;
-      const normNew = newStatus ? newStatus.toLowerCase().trim() : 'pending';
+      let normNew = newStatus ? newStatus.toLowerCase().trim() : 'pending';
+      if (normNew === 'auto cancelled') {
+        normNew = 'auto-cancelled';
+      }
 
       // If status hasn't changed, skip
       if (normPrev === normNew) {
@@ -101,6 +104,10 @@ export class NotificationsService {
       } else if (normNew === 'cancelled') {
         title = 'Permit Request Cancelled';
         message = `Work permit request cancelled by ${actorName}.`;
+        recipientRole = 'all_company';
+      } else if (normNew === 'auto-cancelled') {
+        title = 'Permit Automatically Cancelled';
+        message = `Work permit request was automatically cancelled by the system because it was not opened in time.`;
         recipientRole = 'all_company';
       } else if (normNew === 'rejected') {
         title = 'Permit Request Rejected';
