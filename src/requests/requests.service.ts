@@ -5,6 +5,7 @@ import { Repository, In, Brackets } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RedisCacheService } from 'src/redis/redid-cache.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 import { RequestEntity } from './entities/request.entity';
 import {
@@ -117,6 +118,7 @@ export class RequestsService {
     @InjectRepository(ElectricalWork)
     private readonly electricalWorkRepo: Repository<ElectricalWork>,
     private readonly redisCacheService: RedisCacheService,
+    private readonly notificationsService: NotificationsService,
   ) { }
 
   private areEqual(val1: any, val2: any): boolean {
@@ -495,6 +497,15 @@ export class RequestsService {
 
     const savedRequest = await this.requestRepo.save(requestObj);
     const requestId = savedRequest.id;
+
+    if (savedRequest.requestStatus) {
+      this.notificationsService.triggerNotification(
+        savedRequest.id,
+        null,
+        savedRequest.requestStatus,
+        savedRequest.userId ?? 0,
+      ).catch((err) => console.error('Notification error:', err));
+    }
 
     // 2. Insert into all 13 sub-tables
     await this.chemicalRepo.save(
@@ -1581,6 +1592,18 @@ export class RequestsService {
       await this.requestRepo.update(id, toUpdate);
     }
 
+    if (isStatusChanged) {
+      const newStatus = dto.Request_status !== undefined && dto.Request_status !== ''
+        ? dto.Request_status
+        : (dto.status === 1 ? 'Pending' : 'Cancelled');
+      this.notificationsService.triggerNotification(
+        id,
+        existing.requestStatus,
+        newStatus,
+        dto.userId ?? 0,
+      ).catch((err) => console.error('Notification error:', err));
+    }
+
     // 2. Update sub-tables
     const updateSubTable = async (
       repo: Repository<any>,
@@ -2086,14 +2109,22 @@ export class RequestsService {
 
         // Create log if status changed
         if (targetStatus !== '') {
+          const finalStatus = resolvedStatus || (status === 1 ? 'Pending' : 'Cancelled');
           await this.createLogs(
             existing.id,
             userId || 0,
-            resolvedStatus || (status === 1 ? 'Pending' : 'Cancelled'),
+            finalStatus,
             new Date(),
             [],
             0,
           );
+
+          this.notificationsService.triggerNotification(
+            existing.id,
+            existing.requestStatus,
+            finalStatus,
+            userId || 0,
+          ).catch((err) => console.error('Notification error:', err));
         } else if (isTimeUpdate) {
           await this.createLogs(
             existing.id,
@@ -4889,6 +4920,15 @@ export class RequestsService {
       const saved = await this.requestRepo.save(newRequest);
       const requestId = saved.id;
       createdIds.push(requestId);
+
+      if (saved.requestStatus) {
+        this.notificationsService.triggerNotification(
+          saved.id,
+          null,
+          saved.requestStatus,
+          saved.userId ?? 0,
+        ).catch((err) => console.error('Notification error:', err));
+      }
 
       // Copy sub-tables from original
       if (origChem) {

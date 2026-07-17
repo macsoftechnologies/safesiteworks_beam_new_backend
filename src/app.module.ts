@@ -37,6 +37,9 @@ import { RequestsModule } from './requests/requests.module';
 import { RequestEntity } from './requests/entities/request.entity';
 import { RoleModule } from './role/role.module';
 import { Role } from './role/entities/role.entity';
+import { NotificationsModule } from './notifications/notifications.module';
+import { Notification } from './notifications/entities/notification.entity';
+import { NotificationSetting } from './notifications/entities/notification-setting.entity';
 import {
   RequestChemicalHazard,
   RequestConfined,
@@ -101,6 +104,8 @@ import { RamsFile, RequestNote, UploadImage, RequestLog, RequestLogData } from '
         RequestLog,
         RequestLogData,
         Role,
+        Notification,
+        NotificationSetting,
       ],
       synchronize: false,
     }),
@@ -120,6 +125,7 @@ import { RamsFile, RequestNote, UploadImage, RequestLog, RequestLogData } from '
     PrecautionModule,
     RequestsModule,
     RoleModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
 })

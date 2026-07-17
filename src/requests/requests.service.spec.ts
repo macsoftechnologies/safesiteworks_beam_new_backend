@@ -74,6 +74,7 @@ describe('RequestsService - Validation and Zone Logic', () => {
       {} as any, // mechanicalWorkRepo
       {} as any, // electricalWorkRepo
       mockRedisCacheService, // redisCacheService
+      { triggerNotification: jest.fn().mockResolvedValue(undefined) } as any, // notificationsService
     );
   });
 

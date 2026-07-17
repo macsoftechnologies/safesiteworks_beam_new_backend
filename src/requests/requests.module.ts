@@ -34,6 +34,7 @@ import { Department } from '../department/entities/department.entity';
 import { Precaution } from '../precaution/entities/precaution.entity';
 import { MechanicalWork } from '../mechanical/entities/mechanical.entity';
 import { ElectricalWork } from '../electrical/entities/electrical.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { ElectricalWork } from '../electrical/entities/electrical.entity';
       MechanicalWork,
       ElectricalWork,
     ]),
+    NotificationsModule,
   ],
   controllers: [RequestsController],
   providers: [RequestsService],
