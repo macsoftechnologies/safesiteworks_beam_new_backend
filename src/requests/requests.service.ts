@@ -5424,8 +5424,26 @@ export class RequestsService {
     let rejected = 0;
     let draft = 0;
     let autoCancel = 0;
+    let preApproved = 0;
+    let unknown = 0;
 
-    const getStatus = (r: any) => (r.Request_status || r.requestStatus || '').toString().toLowerCase().trim();
+    // Helper — normalise the status string from any DB column variation
+    const normaliseStatus = (r: any): string =>
+      (r.Request_status || r.requestStatus || '').toString().toLowerCase().trim();
+
+    const classifyStatus = (st: string) => {
+      if (st === 'opened' || st === 'open' || st === 'pending') opened++;
+      else if (st === 'pre-approved' || st === 'preapproved' || st === 'pre approved') preApproved++;
+      else if (st === 'approved') approved++;
+      else if (st === 'hold' || st === 'onhold' || st === 'on hold' || st === 'on-hold') hold++;
+      else if (st === 'rejected' || st === 'reject') rejected++;
+      else if (st === 'draft') draft++;
+      else if (
+        st.includes('cancel') || st.includes('auto cancel') ||
+        st === 'autocancelled' || st === 'auto-cancel' || st === 'autocanceled'
+      ) autoCancel++;
+      else unknown++; // do NOT fall back into opened
+    };
 
     const companyStats = new Map<string, { name: string; code: string; permits: number; rooms: Set<string>; color: string }>();
     const palette = ['#e11d48', '#4b5563', '#15803d', '#b91c1c', '#be123c', '#0369a1', '#6b7280', '#d97706', '#991b1b', '#1e3a8a', '#0284c7', '#10b981', '#78350f', '#ea580c'];
@@ -5434,14 +5452,8 @@ export class RequestsService {
     const roomCompanyMap = new Map<string, Set<string>>();
 
     allRequests.forEach((req) => {
-      const st = getStatus(req);
-      if (st === 'opened' || st === 'open') opened++;
-      else if (st === 'approved' || st === 'pre-approved') approved++;
-      else if (st === 'hold' || st === 'onhold' || st === 'on hold') hold++;
-      else if (st === 'rejected' || st === 'reject') rejected++;
-      else if (st === 'draft') draft++;
-      else if (st.includes('cancel')) autoCancel++;
-      else opened++;
+      const st = normaliseStatus(req);
+      classifyStatus(st);
 
       let compName = (req as any).Company_Name || req.companyName;
       const subId = (req as any).Sub_Contractor_Id || req.subContractorId;
@@ -5503,11 +5515,13 @@ export class RequestsService {
       metrics: {
         total,
         opened,
+        preApproved,
         approved,
         hold,
         rejected,
         draft,
         autoCancel,
+        unknown,
         activeRooms: roomCompanyMap.size,
         activeCompanies: companyStats.size,
         clashes,
@@ -5777,11 +5791,27 @@ export class RequestsService {
     let construction = 0;
 
     let opened = 0;
+    let preApproved = 0;
     let approved = 0;
     let hold = 0;
     let rejected = 0;
     let draft = 0;
     let autoCancel = 0;
+    let unknown = 0;
+
+    const classifyBuildingStatus = (st: string) => {
+      if (st === 'opened' || st === 'open' || st === 'pending') opened++;
+      else if (st === 'pre-approved' || st === 'preapproved' || st === 'pre approved') preApproved++;
+      else if (st === 'approved') approved++;
+      else if (st === 'hold' || st === 'onhold' || st === 'on hold' || st === 'on-hold') hold++;
+      else if (st === 'rejected' || st === 'reject') rejected++;
+      else if (st === 'draft') draft++;
+      else if (
+        st.includes('cancel') || st === 'autocancelled' ||
+        st === 'auto-cancel' || st === 'autocanceled'
+      ) autoCancel++;
+      else unknown++;
+    };
 
     let nonHra = 0;
     let hra = 0;
@@ -5811,13 +5841,7 @@ export class RequestsService {
       else construction++;
 
       const st = getStatus(req);
-      if (st === 'opened' || st === 'open') opened++;
-      else if (st === 'approved' || st === 'pre-approved') approved++;
-      else if (st === 'hold' || st === 'onhold' || st === 'on hold') hold++;
-      else if (st === 'rejected' || st === 'reject') rejected++;
-      else if (st === 'draft') draft++;
-      else if (st.includes('cancel')) autoCancel++;
-      else opened++;
+      classifyBuildingStatus(st);
 
       const combined = getCombinedActivity(req);
       const isHotWork = isHW(req, combined);
@@ -5880,8 +5904,8 @@ export class RequestsService {
         zData.companies.add(canonical.code);
         zData.permits++;
         if (isAnyHra) zData.hra = true;
-        if (st === 'hold' || st === 'onhold') zData.onHold = true;
-        if (st === 'approved' || st === 'pre-approved') zData.preOk++;
+        if (st === 'hold' || st === 'onhold' || st === 'on-hold') zData.onHold = true;
+        if (st === 'approved' || st === 'pre-approved' || st === 'preapproved') zData.preOk++;
 
         if (isWorkHeight) zData.hraActivities.add('Working At Height');
         if (isHazardous) zData.hraActivities.add('Working Hazardous Substances');
@@ -5923,12 +5947,14 @@ export class RequestsService {
           construction: construction,
         },
         permitStatuses: {
-          opened: opened,
-          approved: approved,
-          hold: hold,
-          rejected: rejected,
-          draft: draft,
-          autoCancel: autoCancel,
+          opened,
+          preApproved,
+          approved,
+          hold,
+          rejected,
+          draft,
+          autoCancel,
+          unknown,
         },
         activityRiskTypes: {
           nonHra: nonHra,
