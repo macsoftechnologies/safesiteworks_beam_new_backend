@@ -5393,32 +5393,24 @@ export class RequestsService {
     let buildingIdVal = typeof filterPayload === 'object' ? (filterPayload?.buildingId || filterPayload?.building) : filterPayload;
     let bNum = Number(buildingIdVal);
 
+    // status = 1 means active; status = 0 means soft-deleted — the WHERE clause below excludes them
     const query = this.requestRepo.createQueryBuilder('req')
-      .where('req.status = :st', { st: 1 })
-      .andWhere('(req.requestStatus IS NULL OR (LOWER(req.requestStatus) NOT LIKE :del1 AND LOWER(req.requestStatus) NOT LIKE :del2))', {
-        del1: '%deleted%',
-        del2: '%soft_deleted%',
-      });
+      .where('req.status = :st', { st: 1 });
 
     if (rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
-      query.andWhere(
-        '(req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName) OR req.roomType LIKE :bNameStr' +
-        (!isNaN(bNum) && bNum > 0 ? ' OR req.buildingId = :bId' : '') + ')',
-        {
-          bName: `%${rawBuilding}%`,
-          bNameStr: `%${rawBuilding}%`,
-          bId: isNaN(bNum) ? -1 : bNum,
-        },
-      );
+      if (!isNaN(bNum) && bNum > 0) {
+        // Numeric buildingId — filter exactly
+        query.andWhere('req.buildingId = :bId', { bId: bNum });
+      } else {
+        // Building name string — resolve via buildings table
+        query.andWhere(
+          'req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName)',
+          { bName: `%${rawBuilding}%` },
+        );
+      }
     }
 
-    const fetchedRequests = await query.getMany();
-    const isSoftDeleted = (r: any) => {
-      if (Number(r.status) === 0 || Number(r.status) === 2 || Number(r.is_deleted) === 1 || Number(r.isDeleted) === 1) return true;
-      const st = (r.Request_status || r.requestStatus || '').toString().toLowerCase().trim();
-      return st.includes('deleted') || st.includes('soft_deleted') || st.includes('trash');
-    };
-    const allRequests = fetchedRequests.filter((r) => !isSoftDeleted(r));
+    const allRequests = await query.getMany();
 
     const allSubcontractors = await this.subcontractorRepo.find();
 
@@ -5509,22 +5501,18 @@ export class RequestsService {
 
     return {
       metrics: {
-        total: total || 1073,
-        opened: opened || 49,
-        approved: approved || 20,
-        hold: hold || 298,
-        rejected: rejected || 33,
-        draft: draft || 7,
-        autoCancel: autoCancel || 69,
-        activeRooms: roomCompanyMap.size || 46,
-        activeCompanies: companyStats.size || 11,
-        clashes: clashes || 19,
+        total,
+        opened,
+        approved,
+        hold,
+        rejected,
+        draft,
+        autoCancel,
+        activeRooms: roomCompanyMap.size,
+        activeCompanies: companyStats.size,
+        clashes,
       },
-      overviewCompanies: overviewCompanies.length ? overviewCompanies : [
-        { name: 'Zøllner', code: 'ZN', permits: 215, rooms: 3, clashes: 3, color: '#10b981' },
-        { name: 'Nordkysten', code: 'NK', permits: 134, rooms: 7, clashes: 5, color: '#3b82f6' },
-        { name: 'TSCHERNING', code: 'TSC', permits: 128, rooms: 13, clashes: 11, color: '#b45309' },
-      ],
+      overviewCompanies,
     };
   }
 
@@ -5535,32 +5523,31 @@ export class RequestsService {
     let buildingIdVal = typeof filterPayload === 'object' ? (filterPayload?.buildingId || filterPayload?.building) : filterPayload;
     let bNum = Number(buildingIdVal);
 
+    // status = 1 means active; status = 0 means soft-deleted — excluded by WHERE below
     const query = this.requestRepo.createQueryBuilder('req')
-      .where('req.status = :st', { st: 1 })
-      .andWhere('(req.requestStatus IS NULL OR (LOWER(req.requestStatus) NOT LIKE :del1 AND LOWER(req.requestStatus) NOT LIKE :del2))', {
-        del1: '%deleted%',
-        del2: '%soft_deleted%',
-      });
+      .where('req.status = :st', { st: 1 });
 
     if (rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
-      query.andWhere(
-        '(req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName) OR req.roomType LIKE :bNameStr' +
-        (!isNaN(bNum) && bNum > 0 ? ' OR req.buildingId = :bId' : '') + ')',
-        {
-          bName: `%${rawBuilding}%`,
-          bNameStr: `%${rawBuilding}%`,
-          bId: isNaN(bNum) ? -1 : bNum,
-        },
-      );
+      if (!isNaN(bNum) && bNum > 0) {
+        query.andWhere('req.buildingId = :bId', { bId: bNum });
+      } else {
+        query.andWhere(
+          'req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName)',
+          { bName: `%${rawBuilding}%` },
+        );
+      }
     }
 
     if (floorName && floorName.trim() !== '' && floorName.toLowerCase() !== 'overview') {
       const fNum = Number(floorName);
-      query.andWhere(
-        '(req.floorId IN (SELECT f.fl_id FROM floors f WHERE f.floor_name LIKE :fName)' +
-        (!isNaN(fNum) ? ' OR req.floorId = :fId' : '') + ')',
-        { fName: `%${floorName}%`, fId: isNaN(fNum) ? -1 : fNum },
-      );
+      if (!isNaN(fNum) && fNum > 0) {
+        query.andWhere('req.floorId = :fId', { fId: fNum });
+      } else {
+        query.andWhere(
+          'req.floorId IN (SELECT f.fl_id FROM floors f WHERE f.floor_name LIKE :fName)',
+          { fName: `%${floorName}%` },
+        );
+      }
     }
 
     if (roomName && roomName.trim() !== '') {
@@ -5570,13 +5557,7 @@ export class RequestsService {
       );
     }
 
-    const fetchedRequests = await query.getMany();
-    const isSoftDeleted = (r: any) => {
-      if (Number(r.status) === 0 || Number(r.status) === 2 || Number(r.is_deleted) === 1 || Number(r.isDeleted) === 1) return true;
-      const st = (r.Request_status || r.requestStatus || '').toString().toLowerCase().trim();
-      return st.includes('deleted') || st.includes('soft_deleted') || st.includes('trash');
-    };
-    const allRequests = fetchedRequests.filter((r) => !isSoftDeleted(r));
+    const allRequests = await query.getMany();
 
     const allSubcontractors = await this.subcontractorRepo.find();
     const allRooms = await this.roomRepo.find();
@@ -5797,6 +5778,7 @@ export class RequestsService {
 
     let opened = 0;
     let approved = 0;
+    let hold = 0;
     let rejected = 0;
     let draft = 0;
     let autoCancel = 0;
@@ -5831,6 +5813,7 @@ export class RequestsService {
       const st = getStatus(req);
       if (st === 'opened' || st === 'open') opened++;
       else if (st === 'approved' || st === 'pre-approved') approved++;
+      else if (st === 'hold' || st === 'onhold' || st === 'on hold') hold++;
       else if (st === 'rejected' || st === 'reject') rejected++;
       else if (st === 'draft') draft++;
       else if (st.includes('cancel')) autoCancel++;
@@ -5942,6 +5925,7 @@ export class RequestsService {
         permitStatuses: {
           opened: opened,
           approved: approved,
+          hold: hold,
           rejected: rejected,
           draft: draft,
           autoCancel: autoCancel,
