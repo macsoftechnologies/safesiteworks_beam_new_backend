@@ -29,6 +29,7 @@ import { CreateByCountDto } from './dtos/create-by-count.dto';
 import { generateLogsHtml } from './utils/logs-html-template';
 import { generatePermitPdf, generateLogsPdf } from './utils/pdf-generator';
 import { PlanSearchDto } from './dtos/planssearch.dto';
+import { DashboardFilterDto } from './dtos/dashboard-filter.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { generatePermitHtml } from './utils/permit-html-template';
 
@@ -473,6 +474,23 @@ export class RequestsController {
   ) {
     try {
       const data = await this.requestsService.getDashboardBuilding(building, floor);
+      return {
+        status: HttpStatus.OK,
+        data,
+      };
+    } catch (error) {
+      return {
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message || 'Failed to retrieve dashboard building metrics',
+      };
+    }
+  }
+
+  @Post('dashboard/building')
+  @HttpCode(HttpStatus.OK)
+  async postDashboardBuilding(@Body() filterDto: DashboardFilterDto) {
+    try {
+      const data = await this.requestsService.getDashboardBuilding(filterDto);
       return {
         status: HttpStatus.OK,
         data,

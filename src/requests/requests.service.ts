@@ -5494,7 +5494,10 @@ export class RequestsService {
     };
   }
 
-  async getDashboardBuilding(buildingName?: string, floorName?: string) {
+  async getDashboardBuilding(filterPayload?: any, floorNameParam?: string) {
+    let buildingName = typeof filterPayload === 'string' ? filterPayload : filterPayload?.building;
+    let floorName = typeof filterPayload === 'string' ? floorNameParam : filterPayload?.floor;
+
     const query = this.requestRepo.createQueryBuilder('req')
       .where('req.status = :st', { st: 1 });
 
@@ -5505,10 +5508,83 @@ export class RequestsService {
       );
     }
 
-    const requests = await query.getMany();
+    const allRequests = await query.getMany();
     const allSubcontractors = await this.subcontractorRepo.find();
     const subMap = new Map<number, Subcontractor>();
     allSubcontractors.forEach((s) => subMap.set(s.id, s));
+
+    const filteredRequests = allRequests.filter((req) => {
+      if (typeof filterPayload !== 'object' || !filterPayload) return true;
+
+      if (filterPayload.permitTypes) {
+        const pType = (req.permitType || '').toLowerCase();
+        const isComm = pType.includes('commissioning');
+        const isConst = !isComm;
+        if (isComm && filterPayload.permitTypes.commissioning === false) return false;
+        if (isConst && filterPayload.permitTypes.construction === false) return false;
+      }
+
+      if (filterPayload.permitStatuses) {
+        const st = (req.requestStatus || '').toLowerCase().trim();
+        const isOpen = st === 'opened' || st === 'open';
+        const isAppr = st === 'approved' || st === 'pre-approved';
+        const isRej = st === 'rejected' || st === 'reject';
+        const isDraft = st === 'draft';
+        const isAuto = st.includes('cancel');
+
+        if (isOpen && filterPayload.permitStatuses.opened === false) return false;
+        if (isAppr && filterPayload.permitStatuses.approved === false) return false;
+        if (isRej && filterPayload.permitStatuses.rejected === false) return false;
+        if (isDraft && filterPayload.permitStatuses.draft === false) return false;
+        if (isAuto && filterPayload.permitStatuses.autoCancel === false) return false;
+      }
+
+      if (filterPayload.selectedCompanies && Array.isArray(filterPayload.selectedCompanies) && filterPayload.selectedCompanies.length > 0) {
+        let compName = req.companyName;
+        if (req.subContractorId && subMap.has(req.subContractorId)) {
+          compName = subMap.get(req.subContractorId)?.subContractorName || compName;
+        }
+        if (!compName) compName = 'Unknown';
+
+        let code = compName.split(' ').map((w) => w[0]).join('').substring(0, 3).toUpperCase();
+        if (!filterPayload.selectedCompanies.includes(compName) && !filterPayload.selectedCompanies.includes(code)) {
+          return false;
+        }
+      }
+
+      if (filterPayload.activityRiskTypes) {
+        const act = (req.activity || '').toLowerCase();
+        const saf = (req.safetyPrecautions || '').toLowerCase();
+        const combined = `${act} ${saf}`;
+
+        const isHotWork = combined.includes('hot work') || combined.includes('fire');
+        const isElec = combined.includes('electrical') || combined.includes('voltage');
+        const isHaz = combined.includes('chemical') || combined.includes('substance') || combined.includes('hazard');
+        const isHeight = combined.includes('height') || combined.includes('ladder') || combined.includes('scaffold');
+        const isConfined = combined.includes('confined');
+        const isExcavation = combined.includes('excavation') || combined.includes('digging');
+        const isCrane = combined.includes('crane') || combined.includes('lifting');
+        const isPressure = combined.includes('pressure') || combined.includes('testing');
+
+        const isAnyHra = isHotWork || isElec || isHaz || isHeight || isConfined || isExcavation || isCrane || isPressure;
+
+        if (isAnyHra) {
+          if (filterPayload.activityRiskTypes.hra === false) return false;
+          if (isHotWork && filterPayload.activityRiskTypes.hotWork === false) return false;
+          if (isElec && filterPayload.activityRiskTypes.electrical === false) return false;
+          if (isHaz && filterPayload.activityRiskTypes.hazardousSubstances === false) return false;
+          if (isHeight && filterPayload.activityRiskTypes.workingAtHeight === false) return false;
+          if (isConfined && filterPayload.activityRiskTypes.confinedSpaces === false) return false;
+          if (isExcavation && filterPayload.activityRiskTypes.excavation === false) return false;
+          if (isCrane && filterPayload.activityRiskTypes.cranesLifting === false) return false;
+          if (isPressure && filterPayload.activityRiskTypes.pressureTesting === false) return false;
+        } else {
+          if (filterPayload.activityRiskTypes.nonHra === false) return false;
+        }
+      }
+
+      return true;
+    });
 
     const companyMap = new Map<string, { name: string; code: string; count: number; color: string }>();
     const palette = ['#e11d48', '#4b5563', '#15803d', '#b91c1c', '#be123c', '#0369a1', '#6b7280', '#d97706', '#991b1b', '#1e3a8a', '#0284c7', '#10b981', '#78350f', '#ea580c'];
@@ -5545,7 +5621,7 @@ export class RequestsService {
       hraActivities: Set<string>;
     }>();
 
-    requests.forEach((req) => {
+    filteredRequests.forEach((req) => {
       let compName = req.companyName;
       if (req.subContractorId && subMap.has(req.subContractorId)) {
         compName = subMap.get(req.subContractorId)?.subContractorName || compName;
@@ -5629,6 +5705,7 @@ export class RequestsService {
       hra: z.hra,
       onHold: z.onHold,
       preOk: z.preOk,
+      permits: z.permits,
       sub: `${z.companies.size} companies | ${z.permits} permits`,
     }));
 
@@ -5648,27 +5725,27 @@ export class RequestsService {
       companies: Array.from(companyMap.values()),
       counts: {
         permitTypes: {
-          commissioning: commissioning || 3,
-          construction: construction || 157,
+          commissioning: commissioning,
+          construction: construction,
         },
         permitStatuses: {
-          opened: opened || 49,
-          approved: approved || 2,
-          rejected: rejected || 33,
-          draft: draft || 7,
-          autoCancel: autoCancel || 69,
+          opened: opened,
+          approved: approved,
+          rejected: rejected,
+          draft: draft,
+          autoCancel: autoCancel,
         },
         activityRiskTypes: {
-          nonHra: nonHra || 6,
-          hra: hra || 235,
-          hotWork: hotWork || 16,
-          electrical: electrical || 6,
-          hazardousSubstances: hazardousSubstances || 82,
-          workingAtHeight: workingAtHeight || 114,
-          confinedSpaces: confinedSpaces || 5,
-          excavation: excavation || 0,
-          cranesLifting: cranesLifting || 11,
-          pressureTesting: pressureTesting || 1,
+          nonHra: nonHra,
+          hra: hra,
+          hotWork: hotWork,
+          electrical: electrical,
+          hazardousSubstances: hazardousSubstances,
+          workingAtHeight: workingAtHeight,
+          confinedSpaces: confinedSpaces,
+          excavation: excavation,
+          cranesLifting: cranesLifting,
+          pressureTesting: pressureTesting,
         },
       },
       roomsToReview,
