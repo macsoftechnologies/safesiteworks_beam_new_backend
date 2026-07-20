@@ -5555,6 +5555,58 @@ export class RequestsService {
 
     const allRequests = await query.getMany();
     const allSubcontractors = await this.subcontractorRepo.find();
+    const allRooms = await this.roomRepo.find();
+    const allZones = await this.zoneRepo.find();
+
+    const roomLookup = new Map<number, { roomName: string; zoneName: string }>();
+    const zoneLookup = new Map<number, string>();
+    allZones.forEach((z) => zoneLookup.set(z.id, z.zone));
+
+    allRooms.forEach((r) => {
+      const zName = r.zone_id && zoneLookup.has(r.zone_id) ? zoneLookup.get(r.zone_id)! : '';
+      roomLookup.set(r.room_id, {
+        roomName: r.room_name,
+        zoneName: zName,
+      });
+    });
+
+    const getRoomDisplayName = (req: any): string => {
+      const rawRoomNos = (req as any).Room_Nos || req.roomNos || '';
+      const rawZoneName = (req as any).zone_name || (req as any).zone?.zone || (typeof req.zone === 'string' ? req.zone : '') || '';
+
+      if (rawRoomNos) {
+        const parts = String(rawRoomNos).split(',').map((s) => s.trim()).filter(Boolean);
+        const resolvedNames: string[] = [];
+
+        parts.forEach((part) => {
+          if (/^\d+$/.test(part)) {
+            const rId = Number(part);
+            if (roomLookup.has(rId)) {
+              const rData = roomLookup.get(rId)!;
+              const title = rData.zoneName ? `${rData.zoneName} - ${rData.roomName}` : rData.roomName;
+              resolvedNames.push(title);
+            } else {
+              const fallbackZone = rawZoneName && rawZoneName !== 'ZONE 1' ? `${rawZoneName} - ` : '';
+              resolvedNames.push(`${fallbackZone}Room ${part}`);
+            }
+          } else {
+            const fallbackZone = rawZoneName && rawZoneName !== 'ZONE 1' && !part.startsWith(rawZoneName) ? `${rawZoneName} - ` : '';
+            resolvedNames.push(`${fallbackZone}${part}`);
+          }
+        });
+
+        if (resolvedNames.length > 0) {
+          return resolvedNames.join(', ');
+        }
+      }
+
+      if (rawZoneName && rawZoneName !== 'ZONE 1') {
+        return rawZoneName;
+      }
+
+      return (req as any).room_names || 'General Area';
+    };
+
     const subMap = new Map<number, Subcontractor>();
     allSubcontractors.forEach((s) => subMap.set(s.id, s));
 
@@ -5752,7 +5804,7 @@ export class RequestsService {
       const isPressure = isPress(req, combined);
       const isAnyHra = isHotWork || isElectrical || isHazardous || isWorkHeight || isConfined || isExcavation || isCranes || isPressure;
 
-      const zName = (req as any).Room_Nos || req.roomNos || req.zone || (req as any).room_names || 'ZONE 1';
+      const zName = getRoomDisplayName(req);
       if (!zoneMap.has(zName)) {
         zoneMap.set(zName, {
           zone: zName,
