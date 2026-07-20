@@ -5517,22 +5517,23 @@ export class RequestsService {
   }
 
   async getDashboardBuilding(filterPayload?: any, floorNameParam?: string) {
-    let buildingName = typeof filterPayload === 'string' ? filterPayload : filterPayload?.building || filterPayload?.buildingId;
+    let rawBuilding = typeof filterPayload === 'string' ? filterPayload : (filterPayload?.building || filterPayload?.buildingId);
     let floorName = typeof filterPayload === 'string' ? floorNameParam : filterPayload?.floor || filterPayload?.floorId;
     let roomName = typeof filterPayload === 'object' ? (filterPayload?.room || filterPayload?.rooms) : undefined;
+    let buildingIdVal = typeof filterPayload === 'object' ? (filterPayload?.buildingId || filterPayload?.building) : filterPayload;
+    let bNum = Number(buildingIdVal);
 
     const query = this.requestRepo.createQueryBuilder('req')
       .where('req.status = :st', { st: 1 });
 
-    if (buildingName && buildingName.trim() !== '') {
-      const bNum = Number(buildingName);
+    if (rawBuilding && String(rawBuilding).trim() !== '') {
       query.andWhere(
         '(req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName) OR req.roomType LIKE :bNameStr' +
         (!isNaN(bNum) ? ' OR req.buildingId = :bId' : '') + ')',
         {
-          bName: `%${buildingName}%`,
-          bNameStr: `%${buildingName}%`,
-          bId: bNum,
+          bName: `%${rawBuilding}%`,
+          bNameStr: `%${rawBuilding}%`,
+          bId: isNaN(bNum) ? -1 : bNum,
         },
       );
     }
@@ -5578,20 +5579,15 @@ export class RequestsService {
         const parts = String(rawRoomNos).split(',').map((s) => s.trim()).filter(Boolean);
         const resolvedNames: string[] = [];
 
-        parts.forEach((part) => {
-          if (/^\d+$/.test(part)) {
-            const rId = Number(part);
-            if (roomLookup.has(rId)) {
-              const rData = roomLookup.get(rId)!;
-              const title = rData.zoneName ? `${rData.zoneName} - ${rData.roomName}` : rData.roomName;
-              resolvedNames.push(title);
-            } else {
-              const fallbackZone = rawZoneName && rawZoneName !== 'ZONE 1' ? `${rawZoneName} - ` : '';
-              resolvedNames.push(`${fallbackZone}Room ${part}`);
-            }
+        parts.forEach((p) => {
+          const rId = Number(p);
+          if (!isNaN(rId) && roomLookup.has(rId)) {
+            const rInfo = roomLookup.get(rId)!;
+            const prefix = rInfo.zoneName ? `${rInfo.zoneName} - ` : (rawZoneName ? `${rawZoneName} - ` : '');
+            resolvedNames.push(`${prefix}${rInfo.roomName}`);
           } else {
-            const fallbackZone = rawZoneName && rawZoneName !== 'ZONE 1' && !part.startsWith(rawZoneName) ? `${rawZoneName} - ` : '';
-            resolvedNames.push(`${fallbackZone}${part}`);
+            const prefix = rawZoneName ? `${rawZoneName} - ` : '';
+            resolvedNames.push(`${prefix}${p}`);
           }
         });
 
@@ -5699,9 +5695,13 @@ export class RequestsService {
 
       if (filterPayload.selectedCompanies && Array.isArray(filterPayload.selectedCompanies) && filterPayload.selectedCompanies.length > 0) {
         const canonical = getCanonicalCompany(req);
-        if (!filterPayload.selectedCompanies.includes(canonical.name) && !filterPayload.selectedCompanies.includes(canonical.code)) {
-          return false;
-        }
+        const matches = filterPayload.selectedCompanies.some((sc: string) => {
+          const scClean = String(sc).trim().toLowerCase();
+          const nameClean = canonical.name.toLowerCase();
+          const codeClean = canonical.code.toLowerCase();
+          return nameClean === scClean || codeClean === scClean || nameClean.includes(scClean) || scClean.includes(nameClean);
+        });
+        if (!matches) return false;
       }
 
       if (filterPayload.activityRiskTypes) {
