@@ -5393,16 +5393,16 @@ export class RequestsService {
     let buildingIdVal = typeof filterPayload === 'object' ? (filterPayload?.buildingId || filterPayload?.building) : filterPayload;
     let bNum = Number(buildingIdVal);
 
-    // status = 1 means active; status = 0 means soft-deleted — the WHERE clause below excludes them
+    // status = 1 means active; status = 0 means soft-deleted — excluded by WHERE below
     const query = this.requestRepo.createQueryBuilder('req')
+      .leftJoin('request_extra_misc', 'rem', 'rem.request_id = req.id')
+      .addSelect('rem.cancel_reason', 'rem_cancelReason')
       .where('req.status = :st', { st: 1 });
 
     if (rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
       if (!isNaN(bNum) && bNum > 0) {
-        // Numeric buildingId — filter exactly
         query.andWhere('req.buildingId = :bId', { bId: bNum });
       } else {
-        // Building name string — resolve via buildings table
         query.andWhere(
           'req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName)',
           { bName: `%${rawBuilding}%` },
@@ -5410,7 +5410,11 @@ export class RequestsService {
       }
     }
 
-    const allRequests = await query.getMany();
+    const rawResults = await query.getRawAndEntities();
+    const allRequests = rawResults.entities.map((e, i) => ({
+      ...e,
+      _cancelReason: rawResults.raw[i]?.rem_cancelReason ?? null,
+    }));
 
     const allSubcontractors = await this.subcontractorRepo.find();
 
@@ -5424,23 +5428,33 @@ export class RequestsService {
     let rejected = 0;
     let draft = 0;
     let autoCancel = 0;
+    let cancelled = 0;
+    let closed = 0;
     let preApproved = 0;
     let unknown = 0;
+
+    // The exact cancel_reason string the system writes when auto-cancelling
+    const AUTO_CANCEL_MSG = 'Permit not opened so system cancelled automatically';
 
     // Helper — normalise the status string from any DB column variation
     const normaliseStatus = (r: any): string =>
       (r.Request_status || r.requestStatus || '').toString().toLowerCase().trim();
 
-    const classifyStatus = (st: string) => {
+    const classifyStatus = (st: string, cancelReason?: string | null) => {
       if (st === 'opened' || st === 'open' || st === 'pending') opened++;
       else if (st === 'pre-approved' || st === 'preapproved' || st === 'pre approved') preApproved++;
       else if (st === 'approved') approved++;
       else if (st === 'hold' || st === 'onhold' || st === 'on hold' || st === 'on-hold') hold++;
       else if (st === 'rejected' || st === 'reject') rejected++;
       else if (st === 'draft') draft++;
+      else if (st === 'closed' || st === 'close') closed++;
+      else if (st === 'cancelled' || st === 'cancel') {
+        // Split by cancel_reason: system auto-cancel vs manual cancel
+        if (cancelReason && cancelReason.trim() === AUTO_CANCEL_MSG) autoCancel++;
+        else cancelled++;
+      }
       else if (
-        st.includes('cancel') || st.includes('auto cancel') ||
-        st === 'autocancelled' || st === 'auto-cancel' || st === 'autocanceled'
+        st === 'auto-cancelled' || st === 'autocancelled' || st === 'autocanceled' || st === 'auto cancel'
       ) autoCancel++;
       else unknown++; // do NOT fall back into opened
     };
@@ -5453,7 +5467,7 @@ export class RequestsService {
 
     allRequests.forEach((req) => {
       const st = normaliseStatus(req);
-      classifyStatus(st);
+      classifyStatus(st, (req as any)._cancelReason);
 
       let compName = (req as any).Company_Name || req.companyName;
       const subId = (req as any).Sub_Contractor_Id || req.subContractorId;
@@ -5520,6 +5534,8 @@ export class RequestsService {
         hold,
         rejected,
         draft,
+        cancelled,
+        closed,
         autoCancel,
         unknown,
         activeRooms: roomCompanyMap.size,
@@ -5539,6 +5555,8 @@ export class RequestsService {
 
     // status = 1 means active; status = 0 means soft-deleted — excluded by WHERE below
     const query = this.requestRepo.createQueryBuilder('req')
+      .leftJoin('request_extra_misc', 'rem', 'rem.request_id = req.id')
+      .addSelect('rem.cancel_reason', 'rem_cancelReason')
       .where('req.status = :st', { st: 1 });
 
     if (rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
@@ -5571,7 +5589,11 @@ export class RequestsService {
       );
     }
 
-    const allRequests = await query.getMany();
+    const rawBuildingResults = await query.getRawAndEntities();
+    const allRequests = rawBuildingResults.entities.map((e, i) => ({
+      ...e,
+      _cancelReason: rawBuildingResults.raw[i]?.rem_cancelReason ?? null,
+    }));
 
     const allSubcontractors = await this.subcontractorRepo.find();
     const allRooms = await this.roomRepo.find();
@@ -5797,18 +5819,26 @@ export class RequestsService {
     let rejected = 0;
     let draft = 0;
     let autoCancel = 0;
+    let cancelled = 0;
+    let closed = 0;
     let unknown = 0;
 
-    const classifyBuildingStatus = (st: string) => {
+    const AUTO_CANCEL_MSG = 'Permit not opened so system cancelled automatically';
+
+    const classifyBuildingStatus = (st: string, cancelReason?: string | null) => {
       if (st === 'opened' || st === 'open' || st === 'pending') opened++;
       else if (st === 'pre-approved' || st === 'preapproved' || st === 'pre approved') preApproved++;
       else if (st === 'approved') approved++;
       else if (st === 'hold' || st === 'onhold' || st === 'on hold' || st === 'on-hold') hold++;
       else if (st === 'rejected' || st === 'reject') rejected++;
       else if (st === 'draft') draft++;
+      else if (st === 'closed' || st === 'close') closed++;
+      else if (st === 'cancelled' || st === 'cancel') {
+        if (cancelReason && cancelReason.trim() === AUTO_CANCEL_MSG) autoCancel++;
+        else cancelled++;
+      }
       else if (
-        st.includes('cancel') || st === 'autocancelled' ||
-        st === 'auto-cancel' || st === 'autocanceled'
+        st === 'auto-cancelled' || st === 'autocancelled' || st === 'autocanceled' || st === 'auto cancel'
       ) autoCancel++;
       else unknown++;
     };
@@ -5841,7 +5871,7 @@ export class RequestsService {
       else construction++;
 
       const st = getStatus(req);
-      classifyBuildingStatus(st);
+      classifyBuildingStatus(st, (req as any)._cancelReason);
 
       const combined = getCombinedActivity(req);
       const isHotWork = isHW(req, combined);
@@ -5953,6 +5983,8 @@ export class RequestsService {
           hold,
           rejected,
           draft,
+          cancelled,
+          closed,
           autoCancel,
           unknown,
         },
