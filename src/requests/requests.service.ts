@@ -5389,25 +5389,37 @@ export class RequestsService {
   // ── Executive Dashboard APIs ──
   // ── Executive Dashboard APIs ──
   async getDashboardOverview(filterPayload?: any) {
-    let buildingName = typeof filterPayload === 'string' ? filterPayload : filterPayload?.building || filterPayload?.buildingId;
+    let rawBuilding = typeof filterPayload === 'string' ? filterPayload : (filterPayload?.building || filterPayload?.buildingId);
+    let buildingIdVal = typeof filterPayload === 'object' ? (filterPayload?.buildingId || filterPayload?.building) : filterPayload;
+    let bNum = Number(buildingIdVal);
 
     const query = this.requestRepo.createQueryBuilder('req')
-      .where('req.status = :st', { st: 1 });
+      .where('req.status = :st', { st: 1 })
+      .andWhere('(req.requestStatus IS NULL OR (LOWER(req.requestStatus) NOT LIKE :del1 AND LOWER(req.requestStatus) NOT LIKE :del2))', {
+        del1: '%deleted%',
+        del2: '%soft_deleted%',
+      });
 
-    if (buildingName && buildingName.trim() !== '') {
-      const bNum = Number(buildingName);
+    if (rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
       query.andWhere(
         '(req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName) OR req.roomType LIKE :bNameStr' +
-        (!isNaN(bNum) ? ' OR req.buildingId = :bId' : '') + ')',
+        (!isNaN(bNum) && bNum > 0 ? ' OR req.buildingId = :bId' : '') + ')',
         {
-          bName: `%${buildingName}%`,
-          bNameStr: `%${buildingName}%`,
-          bId: bNum,
+          bName: `%${rawBuilding}%`,
+          bNameStr: `%${rawBuilding}%`,
+          bId: isNaN(bNum) ? -1 : bNum,
         },
       );
     }
 
-    const allRequests = await query.getMany();
+    const fetchedRequests = await query.getMany();
+    const isSoftDeleted = (r: any) => {
+      if (Number(r.status) === 0 || Number(r.status) === 2 || Number(r.is_deleted) === 1 || Number(r.isDeleted) === 1) return true;
+      const st = (r.Request_status || r.requestStatus || '').toString().toLowerCase().trim();
+      return st.includes('deleted') || st.includes('soft_deleted') || st.includes('trash');
+    };
+    const allRequests = fetchedRequests.filter((r) => !isSoftDeleted(r));
+
     const allSubcontractors = await this.subcontractorRepo.find();
 
     const subMap = new Map<number, Subcontractor>();
@@ -5524,12 +5536,16 @@ export class RequestsService {
     let bNum = Number(buildingIdVal);
 
     const query = this.requestRepo.createQueryBuilder('req')
-      .where('req.status = :st', { st: 1 });
+      .where('req.status = :st', { st: 1 })
+      .andWhere('(req.requestStatus IS NULL OR (LOWER(req.requestStatus) NOT LIKE :del1 AND LOWER(req.requestStatus) NOT LIKE :del2))', {
+        del1: '%deleted%',
+        del2: '%soft_deleted%',
+      });
 
-    if (rawBuilding && String(rawBuilding).trim() !== '') {
+    if (rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
       query.andWhere(
         '(req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName) OR req.roomType LIKE :bNameStr' +
-        (!isNaN(bNum) ? ' OR req.buildingId = :bId' : '') + ')',
+        (!isNaN(bNum) && bNum > 0 ? ' OR req.buildingId = :bId' : '') + ')',
         {
           bName: `%${rawBuilding}%`,
           bNameStr: `%${rawBuilding}%`,
@@ -5554,7 +5570,14 @@ export class RequestsService {
       );
     }
 
-    const allRequests = await query.getMany();
+    const fetchedRequests = await query.getMany();
+    const isSoftDeleted = (r: any) => {
+      if (Number(r.status) === 0 || Number(r.status) === 2 || Number(r.is_deleted) === 1 || Number(r.isDeleted) === 1) return true;
+      const st = (r.Request_status || r.requestStatus || '').toString().toLowerCase().trim();
+      return st.includes('deleted') || st.includes('soft_deleted') || st.includes('trash');
+    };
+    const allRequests = fetchedRequests.filter((r) => !isSoftDeleted(r));
+
     const allSubcontractors = await this.subcontractorRepo.find();
     const allRooms = await this.roomRepo.find();
     const allZones = await this.zoneRepo.find();
