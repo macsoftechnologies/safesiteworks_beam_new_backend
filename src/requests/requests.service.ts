@@ -5621,26 +5621,7 @@ export class RequestsService {
       hraActivities: Set<string>;
     }>();
 
-    filteredRequests.forEach((req) => {
-      let compName = req.companyName;
-      if (req.subContractorId && subMap.has(req.subContractorId)) {
-        compName = subMap.get(req.subContractorId)?.subContractorName || compName;
-      }
-      if (!compName) compName = 'Unknown';
-      let code = compName.split(' ').map((w) => w[0]).join('').substring(0, 3).toUpperCase();
-      if (!code) code = 'UNK';
-
-      if (!companyMap.has(compName)) {
-        companyMap.set(compName, {
-          name: compName,
-          code,
-          count: 0,
-          color: palette[colorIdx % palette.length],
-        });
-        colorIdx++;
-      }
-      companyMap.get(compName)!.count++;
-
+    allRequests.forEach((req) => {
       const pType = (req.permitType || '').toLowerCase();
       if (pType.includes('commissioning')) commissioning++;
       else construction++;
@@ -5669,6 +5650,33 @@ export class RequestsService {
 
       if (isHra) hra++;
       else nonHra++;
+    });
+
+    filteredRequests.forEach((req) => {
+      let compName = req.companyName;
+      if (req.subContractorId && subMap.has(req.subContractorId)) {
+        compName = subMap.get(req.subContractorId)?.subContractorName || compName;
+      }
+      if (!compName) compName = 'Unknown';
+      let code = compName.split(' ').map((w) => w[0]).join('').substring(0, 3).toUpperCase();
+      if (!code) code = 'UNK';
+
+      if (!companyMap.has(compName)) {
+        companyMap.set(compName, {
+          name: compName,
+          code,
+          count: 0,
+          color: palette[colorIdx % palette.length],
+        });
+        colorIdx++;
+      }
+      companyMap.get(compName)!.count++;
+
+      const st = (req.requestStatus || '').toLowerCase().trim();
+      const act = (req.activity || '').toLowerCase();
+      const saf = (req.safetyPrecautions || '').toLowerCase();
+      const combined = `${act} ${saf}`;
+      let isHra = combined.includes('hot work') || combined.includes('fire') || combined.includes('electrical') || combined.includes('chemical') || combined.includes('height') || combined.includes('confined') || combined.includes('excavation') || combined.includes('crane') || combined.includes('pressure');
 
       const zName = req.zone || req.roomNos || 'ZONE 1';
       if (!zoneMap.has(zName)) {

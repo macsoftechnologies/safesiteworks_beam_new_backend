@@ -469,11 +469,13 @@ export class RequestsController {
   // Executive Dashboard Building/Floor Metrics
   @Get('dashboard/building')
   async getDashboardBuilding(
+    @Query() filterDto: DashboardFilterDto,
     @Query('building') building?: string,
     @Query('floor') floor?: string,
   ) {
     try {
-      const data = await this.requestsService.getDashboardBuilding(building, floor);
+      const payload = Object.keys(filterDto || {}).length > 0 ? filterDto : { building, floor };
+      const data = await this.requestsService.getDashboardBuilding(payload);
       return {
         status: HttpStatus.OK,
         data,
