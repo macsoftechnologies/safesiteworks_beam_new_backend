@@ -448,6 +448,43 @@ export class RequestsController {
     }
   }
 
+  // Executive Dashboard Overview Metrics
+  @Get('dashboard/overview')
+  async getDashboardOverview() {
+    try {
+      const data = await this.requestsService.getDashboardOverview();
+      return {
+        status: HttpStatus.OK,
+        data,
+      };
+    } catch (error) {
+      return {
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message || 'Failed to retrieve dashboard overview',
+      };
+    }
+  }
+
+  // Executive Dashboard Building/Floor Metrics
+  @Get('dashboard/building')
+  async getDashboardBuilding(
+    @Query('building') building?: string,
+    @Query('floor') floor?: string,
+  ) {
+    try {
+      const data = await this.requestsService.getDashboardBuilding(building, floor);
+      return {
+        status: HttpStatus.OK,
+        data,
+      };
+    } catch (error) {
+      return {
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message || 'Failed to retrieve dashboard building metrics',
+      };
+    }
+  }
+
   // 20. Fetch Request details by ID
   @Get(':id')
   async getRequestDetailsById(@Param('id') id: string) {
