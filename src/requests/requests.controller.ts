@@ -451,9 +451,12 @@ export class RequestsController {
 
   // Executive Dashboard Overview Metrics
   @Get('dashboard/overview')
-  async getDashboardOverview() {
+  async getDashboardOverview(
+    @Query('building') building?: string,
+    @Query('buildingId') buildingId?: string,
+  ) {
     try {
-      const data = await this.requestsService.getDashboardOverview();
+      const data = await this.requestsService.getDashboardOverview({ building: building || buildingId });
       return {
         status: HttpStatus.OK,
         data,
@@ -501,6 +504,45 @@ export class RequestsController {
       return {
         status: HttpStatus.INTERNAL_SERVER_ERROR,
         message: error.message || 'Failed to retrieve dashboard building metrics',
+      };
+    }
+  }
+
+  @Get('dashboard/floor')
+  async getDashboardFloor(
+    @Query() filterDto: DashboardFilterDto,
+    @Query('building') building?: string,
+    @Query('floor') floor?: string,
+    @Query('room') room?: string,
+  ) {
+    try {
+      const payload = Object.keys(filterDto || {}).length > 0 ? filterDto : { building, floor, room };
+      const data = await this.requestsService.getDashboardBuilding(payload);
+      return {
+        status: HttpStatus.OK,
+        data,
+      };
+    } catch (error) {
+      return {
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message || 'Failed to retrieve dashboard floor metrics',
+      };
+    }
+  }
+
+  @Post('dashboard/floor')
+  @HttpCode(HttpStatus.OK)
+  async postDashboardFloor(@Body() filterDto: DashboardFilterDto) {
+    try {
+      const data = await this.requestsService.getDashboardBuilding(filterDto);
+      return {
+        status: HttpStatus.OK,
+        data,
+      };
+    } catch (error) {
+      return {
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message || 'Failed to retrieve dashboard floor metrics',
       };
     }
   }

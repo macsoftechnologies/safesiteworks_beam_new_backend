@@ -5387,8 +5387,27 @@ export class RequestsService {
   }
 
   // ── Executive Dashboard APIs ──
-  async getDashboardOverview() {
-    const allRequests = await this.requestRepo.find({ where: { status: 1 } });
+  // ── Executive Dashboard APIs ──
+  async getDashboardOverview(filterPayload?: any) {
+    let buildingName = typeof filterPayload === 'string' ? filterPayload : filterPayload?.building || filterPayload?.buildingId;
+
+    const query = this.requestRepo.createQueryBuilder('req')
+      .where('req.status = :st', { st: 1 });
+
+    if (buildingName && buildingName.trim() !== '') {
+      const bNum = Number(buildingName);
+      query.andWhere(
+        '(req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName) OR req.roomType LIKE :bNameStr' +
+        (!isNaN(bNum) ? ' OR req.buildingId = :bId' : '') + ')',
+        {
+          bName: `%${buildingName}%`,
+          bNameStr: `%${buildingName}%`,
+          bId: bNum,
+        },
+      );
+    }
+
+    const allRequests = await query.getMany();
     const allSubcontractors = await this.subcontractorRepo.find();
 
     const subMap = new Map<number, Subcontractor>();
@@ -5402,6 +5421,8 @@ export class RequestsService {
     let draft = 0;
     let autoCancel = 0;
 
+    const getStatus = (r: any) => (r.Request_status || r.requestStatus || '').toString().toLowerCase().trim();
+
     const companyStats = new Map<string, { name: string; code: string; permits: number; rooms: Set<string>; color: string }>();
     const palette = ['#e11d48', '#4b5563', '#15803d', '#b91c1c', '#be123c', '#0369a1', '#6b7280', '#d97706', '#991b1b', '#1e3a8a', '#0284c7', '#10b981', '#78350f', '#ea580c'];
     let colorIdx = 0;
@@ -5409,7 +5430,7 @@ export class RequestsService {
     const roomCompanyMap = new Map<string, Set<string>>();
 
     allRequests.forEach((req) => {
-      const st = (req.requestStatus || '').toLowerCase().trim();
+      const st = getStatus(req);
       if (st === 'opened' || st === 'open') opened++;
       else if (st === 'approved' || st === 'pre-approved') approved++;
       else if (st === 'hold' || st === 'onhold' || st === 'on hold') hold++;
@@ -5418,13 +5439,14 @@ export class RequestsService {
       else if (st.includes('cancel')) autoCancel++;
       else opened++;
 
-      let compName = req.companyName;
-      if (req.subContractorId && subMap.has(req.subContractorId)) {
-        compName = subMap.get(req.subContractorId)?.subContractorName || compName;
+      let compName = (req as any).Company_Name || req.companyName;
+      const subId = (req as any).Sub_Contractor_Id || req.subContractorId;
+      if (subId && subMap.has(Number(subId))) {
+        compName = subMap.get(Number(subId))?.subContractorName || compName;
       }
       if (!compName) compName = 'Unknown';
 
-      let code = compName.split(' ').map((w) => w[0]).join('').substring(0, 3).toUpperCase();
+      let code = compName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
       if (!code) code = 'UNK';
 
       if (!companyStats.has(compName)) {
@@ -5441,7 +5463,7 @@ export class RequestsService {
       const compData = companyStats.get(compName)!;
       compData.permits++;
 
-      const roomKey = req.roomNos || req.zone || 'General Area';
+      const roomKey = (req as any).Room_Nos || req.roomNos || req.zone || 'General Area';
       if (roomKey) {
         compData.rooms.add(roomKey);
         if (!roomCompanyMap.has(roomKey)) {
@@ -5495,8 +5517,9 @@ export class RequestsService {
   }
 
   async getDashboardBuilding(filterPayload?: any, floorNameParam?: string) {
-    let buildingName = typeof filterPayload === 'string' ? filterPayload : filterPayload?.building;
-    let floorName = typeof filterPayload === 'string' ? floorNameParam : filterPayload?.floor;
+    let buildingName = typeof filterPayload === 'string' ? filterPayload : filterPayload?.building || filterPayload?.buildingId;
+    let floorName = typeof filterPayload === 'string' ? floorNameParam : filterPayload?.floor || filterPayload?.floorId;
+    let roomName = typeof filterPayload === 'object' ? (filterPayload?.room || filterPayload?.rooms) : undefined;
 
     const query = this.requestRepo.createQueryBuilder('req')
       .where('req.status = :st', { st: 1 });
@@ -5511,6 +5534,21 @@ export class RequestsService {
           bNameStr: `%${buildingName}%`,
           bId: bNum,
         },
+      );
+    }
+
+    if (floorName && floorName.trim() !== '') {
+      const fNum = Number(floorName);
+      query.andWhere(
+        '(req.floorId = :fId OR req.floorId IN (SELECT f.floor_id FROM floors f WHERE f.floor_name LIKE :fName))',
+        { fName: `%${floorName}%`, fId: isNaN(fNum) ? -1 : fNum },
+      );
+    }
+
+    if (roomName && roomName.trim() !== '') {
+      query.andWhere(
+        '(req.roomNos LIKE :rName OR req.zone LIKE :rName)',
+        { rName: `%${roomName}%` },
       );
     }
 
