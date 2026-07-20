@@ -5608,7 +5608,50 @@ export class RequestsService {
     };
 
     const subMap = new Map<number, Subcontractor>();
-    allSubcontractors.forEach((s) => subMap.set(s.id, s));
+    const normSubMap = new Map<string, Subcontractor>();
+    allSubcontractors.forEach((s) => {
+      subMap.set(s.id, s);
+      if (s.subContractorName) {
+        normSubMap.set(s.subContractorName.trim().toLowerCase(), s);
+      }
+    });
+
+    const getCanonicalCompany = (req: any): { name: string; code: string; logo?: string } => {
+      const subId = (req as any).Sub_Contractor_Id || req.subContractorId;
+      let subObj: Subcontractor | undefined;
+
+      if (subId && subMap.has(Number(subId))) {
+        subObj = subMap.get(Number(subId));
+      }
+
+      if (!subObj) {
+        const rawName = ((req as any).Company_Name || req.companyName || '').toString().trim();
+        if (rawName && normSubMap.has(rawName.toLowerCase())) {
+          subObj = normSubMap.get(rawName.toLowerCase());
+        }
+      }
+
+      if (subObj) {
+        const cleanName = (subObj.subContractorName || '').trim();
+        let code = cleanName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
+        if (!code) code = 'UNK';
+        return {
+          name: cleanName,
+          code,
+          logo: subObj.logo || undefined,
+        };
+      }
+
+      const rawComp = ((req as any).Company_Name || req.companyName || 'Unknown').toString().trim();
+      const cleanName = rawComp || 'Unknown';
+      let code = cleanName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
+      if (!code) code = 'UNK';
+      return {
+        name: cleanName,
+        code,
+        logo: undefined,
+      };
+    };
 
     const getStatus = (r: any) => (r.Request_status || r.requestStatus || '').toString().toLowerCase().trim();
     const getPermitType = (r: any) => (r.permit_type || r.permitType || '').toString().toLowerCase().trim();
@@ -5655,15 +5698,8 @@ export class RequestsService {
       }
 
       if (filterPayload.selectedCompanies && Array.isArray(filterPayload.selectedCompanies) && filterPayload.selectedCompanies.length > 0) {
-        let compName = (req as any).Company_Name || req.companyName;
-        const subId = (req as any).Sub_Contractor_Id || req.subContractorId;
-        if (subId && subMap.has(Number(subId))) {
-          compName = subMap.get(Number(subId))?.subContractorName || compName;
-        }
-        if (!compName) compName = 'Unknown';
-
-        let code = compName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
-        if (!filterPayload.selectedCompanies.includes(compName) && !filterPayload.selectedCompanies.includes(code)) {
+        const canonical = getCanonicalCompany(req);
+        if (!filterPayload.selectedCompanies.includes(canonical.name) && !filterPayload.selectedCompanies.includes(canonical.code)) {
           return false;
         }
       }
@@ -5699,12 +5735,12 @@ export class RequestsService {
       return true;
     });
 
-    const companyMap = new Map<string, { name: string; code: string; count: number; color: string }>();
+    const companyMap = new Map<string, { name: string; code: string; count: number; color: string; logo?: string }>();
     const palette = ['#e11d48', '#4b5563', '#15803d', '#b91c1c', '#be123c', '#0369a1', '#6b7280', '#d97706', '#991b1b', '#1e3a8a', '#0284c7', '#10b981', '#78350f', '#ea580c'];
     let colorIdx = 0;
 
     allSubcontractors.forEach((s) => {
-      const cName = s.subContractorName;
+      const cName = (s.subContractorName || '').trim();
       if (cName && !companyMap.has(cName)) {
         let code = cName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
         if (!code) code = 'UNK';
@@ -5713,25 +5749,21 @@ export class RequestsService {
           code,
           count: 0,
           color: palette[colorIdx % palette.length],
+          logo: s.logo || undefined,
         });
         colorIdx++;
       }
     });
 
     allRequests.forEach((req) => {
-      let compName = (req as any).Company_Name || req.companyName;
-      const subId = (req as any).Sub_Contractor_Id || req.subContractorId;
-      if (subId && subMap.has(Number(subId))) {
-        compName = subMap.get(Number(subId))?.subContractorName || compName;
-      }
-      if (compName && !companyMap.has(compName)) {
-        let code = compName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
-        if (!code) code = 'UNK';
-        companyMap.set(compName, {
-          name: compName,
-          code,
+      const canonical = getCanonicalCompany(req);
+      if (canonical.name && !companyMap.has(canonical.name)) {
+        companyMap.set(canonical.name, {
+          name: canonical.name,
+          code: canonical.code,
           count: 0,
           color: palette[colorIdx % palette.length],
+          logo: canonical.logo,
         });
         colorIdx++;
       }
@@ -5806,17 +5838,10 @@ export class RequestsService {
     });
 
     filteredRequests.forEach((req) => {
-      let compName = (req as any).Company_Name || req.companyName;
-      const subId = (req as any).Sub_Contractor_Id || req.subContractorId;
-      if (subId && subMap.has(Number(subId))) {
-        compName = subMap.get(Number(subId))?.subContractorName || compName;
-      }
-      if (!compName) compName = 'Unknown';
-      let code = compName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
-      if (!code) code = 'UNK';
+      const canonical = getCanonicalCompany(req);
 
-      if (companyMap.has(compName)) {
-        companyMap.get(compName)!.count++;
+      if (companyMap.has(canonical.name)) {
+        companyMap.get(canonical.name)!.count++;
       }
 
       const st = getStatus(req);
@@ -5846,7 +5871,7 @@ export class RequestsService {
           });
         }
         const zData = zoneMap.get(zName)!;
-        zData.companies.add(code);
+        zData.companies.add(canonical.code);
         zData.permits++;
         if (isAnyHra) zData.hra = true;
         if (st === 'hold' || st === 'onhold') zData.onHold = true;
