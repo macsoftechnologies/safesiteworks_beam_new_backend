@@ -5513,11 +5513,29 @@ export class RequestsService {
     const subMap = new Map<number, Subcontractor>();
     allSubcontractors.forEach((s) => subMap.set(s.id, s));
 
+    const getStatus = (r: any) => (r.Request_status || r.requestStatus || '').toString().toLowerCase().trim();
+    const getPermitType = (r: any) => (r.permit_type || r.permitType || '').toString().toLowerCase().trim();
+    const getCombinedActivity = (r: any) => {
+      const act = (r.Activity || r.activity || r.activityName || '').toString().toLowerCase();
+      const saf = (r.Safety_Precautions || r.safetyPrecautions || '').toString().toLowerCase();
+      const desc = (r.description_of_activity || r.descriptionOfActivity || '').toString().toLowerCase();
+      return `${act} ${saf} ${desc}`;
+    };
+
+    const isHW = (r: any, comb: string) => Number(r.Hot_work) === 1 || Number(r.hot_work) === 1 || comb.includes('hot work') || comb.includes('fire');
+    const isElec = (r: any, comb: string) => Number(r.working_on_electrical_system) === 1 || comb.includes('electrical') || comb.includes('voltage');
+    const isHaz = (r: any, comb: string) => Number(r.working_hazardious_substen) === 1 || Number(r.hazardous_substances) === 1 || comb.includes('chemical') || comb.includes('substance') || comb.includes('hazard');
+    const isHeight = (r: any, comb: string) => Number(r.working_at_height) === 1 || comb.includes('height') || comb.includes('ladder') || comb.includes('scaffold');
+    const isConf = (r: any, comb: string) => Number(r.working_confined_spaces) === 1 || comb.includes('confined');
+    const isExc = (r: any, comb: string) => Number(r.excavation_works) === 1 || comb.includes('excavation') || comb.includes('digging');
+    const isCrane = (r: any, comb: string) => Number(r.using_cranes_or_lifting) === 1 || comb.includes('crane') || comb.includes('lifting');
+    const isPress = (r: any, comb: string) => Number(r.pressure_testing_of_equipment) === 1 || comb.includes('pressure') || comb.includes('testing');
+
     const filteredRequests = allRequests.filter((req) => {
       if (typeof filterPayload !== 'object' || !filterPayload) return true;
 
       if (filterPayload.permitTypes) {
-        const pType = (req.permitType || '').toLowerCase();
+        const pType = getPermitType(req);
         const isComm = pType.includes('commissioning');
         const isConst = !isComm;
         if (isComm && filterPayload.permitTypes.commissioning === false) return false;
@@ -5525,7 +5543,7 @@ export class RequestsService {
       }
 
       if (filterPayload.permitStatuses) {
-        const st = (req.requestStatus || '').toLowerCase().trim();
+        const st = getStatus(req);
         const isOpen = st === 'opened' || st === 'open';
         const isAppr = st === 'approved' || st === 'pre-approved';
         const isRej = st === 'rejected' || st === 'reject';
@@ -5540,43 +5558,41 @@ export class RequestsService {
       }
 
       if (filterPayload.selectedCompanies && Array.isArray(filterPayload.selectedCompanies) && filterPayload.selectedCompanies.length > 0) {
-        let compName = req.companyName;
-        if (req.subContractorId && subMap.has(req.subContractorId)) {
-          compName = subMap.get(req.subContractorId)?.subContractorName || compName;
+        let compName = (req as any).Company_Name || req.companyName;
+        const subId = (req as any).Sub_Contractor_Id || req.subContractorId;
+        if (subId && subMap.has(Number(subId))) {
+          compName = subMap.get(Number(subId))?.subContractorName || compName;
         }
         if (!compName) compName = 'Unknown';
 
-        let code = compName.split(' ').map((w) => w[0]).join('').substring(0, 3).toUpperCase();
+        let code = compName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
         if (!filterPayload.selectedCompanies.includes(compName) && !filterPayload.selectedCompanies.includes(code)) {
           return false;
         }
       }
 
       if (filterPayload.activityRiskTypes) {
-        const act = (req.activity || '').toLowerCase();
-        const saf = (req.safetyPrecautions || '').toLowerCase();
-        const combined = `${act} ${saf}`;
+        const combined = getCombinedActivity(req);
+        const isHotWork = isHW(req, combined);
+        const isElectrical = isElec(req, combined);
+        const isHazardous = isHaz(req, combined);
+        const isWorkHeight = isHeight(req, combined);
+        const isConfined = isConf(req, combined);
+        const isExcavation = isExc(req, combined);
+        const isCranes = isCrane(req, combined);
+        const isPressure = isPress(req, combined);
 
-        const isHotWork = combined.includes('hot work') || combined.includes('fire');
-        const isElec = combined.includes('electrical') || combined.includes('voltage');
-        const isHaz = combined.includes('chemical') || combined.includes('substance') || combined.includes('hazard');
-        const isHeight = combined.includes('height') || combined.includes('ladder') || combined.includes('scaffold');
-        const isConfined = combined.includes('confined');
-        const isExcavation = combined.includes('excavation') || combined.includes('digging');
-        const isCrane = combined.includes('crane') || combined.includes('lifting');
-        const isPressure = combined.includes('pressure') || combined.includes('testing');
-
-        const isAnyHra = isHotWork || isElec || isHaz || isHeight || isConfined || isExcavation || isCrane || isPressure;
+        const isAnyHra = isHotWork || isElectrical || isHazardous || isWorkHeight || isConfined || isExcavation || isCranes || isPressure;
 
         if (isAnyHra) {
           if (filterPayload.activityRiskTypes.hra === false) return false;
           if (isHotWork && filterPayload.activityRiskTypes.hotWork === false) return false;
-          if (isElec && filterPayload.activityRiskTypes.electrical === false) return false;
-          if (isHaz && filterPayload.activityRiskTypes.hazardousSubstances === false) return false;
-          if (isHeight && filterPayload.activityRiskTypes.workingAtHeight === false) return false;
+          if (isElectrical && filterPayload.activityRiskTypes.electrical === false) return false;
+          if (isHazardous && filterPayload.activityRiskTypes.hazardousSubstances === false) return false;
+          if (isWorkHeight && filterPayload.activityRiskTypes.workingAtHeight === false) return false;
           if (isConfined && filterPayload.activityRiskTypes.confinedSpaces === false) return false;
           if (isExcavation && filterPayload.activityRiskTypes.excavation === false) return false;
-          if (isCrane && filterPayload.activityRiskTypes.cranesLifting === false) return false;
+          if (isCranes && filterPayload.activityRiskTypes.cranesLifting === false) return false;
           if (isPressure && filterPayload.activityRiskTypes.pressureTesting === false) return false;
         } else {
           if (filterPayload.activityRiskTypes.nonHra === false) return false;
@@ -5622,11 +5638,11 @@ export class RequestsService {
     }>();
 
     allRequests.forEach((req) => {
-      const pType = (req.permitType || '').toLowerCase();
+      const pType = getPermitType(req);
       if (pType.includes('commissioning')) commissioning++;
       else construction++;
 
-      const st = (req.requestStatus || '').toLowerCase().trim();
+      const st = getStatus(req);
       if (st === 'opened' || st === 'open') opened++;
       else if (st === 'approved' || st === 'pre-approved') approved++;
       else if (st === 'rejected' || st === 'reject') rejected++;
@@ -5634,31 +5650,38 @@ export class RequestsService {
       else if (st.includes('cancel')) autoCancel++;
       else opened++;
 
-      const act = (req.activity || '').toLowerCase();
-      const saf = (req.safetyPrecautions || '').toLowerCase();
-      const combined = `${act} ${saf}`;
+      const combined = getCombinedActivity(req);
+      const isHotWork = isHW(req, combined);
+      const isElectrical = isElec(req, combined);
+      const isHazardous = isHaz(req, combined);
+      const isWorkHeight = isHeight(req, combined);
+      const isConfined = isConf(req, combined);
+      const isExcavation = isExc(req, combined);
+      const isCranes = isCrane(req, combined);
+      const isPressure = isPress(req, combined);
 
-      let isHra = false;
-      if (combined.includes('hot work') || combined.includes('fire')) { hotWork++; isHra = true; }
-      if (combined.includes('electrical') || combined.includes('voltage')) { electrical++; isHra = true; }
-      if (combined.includes('chemical') || combined.includes('substance') || combined.includes('hazard')) { hazardousSubstances++; isHra = true; }
-      if (combined.includes('height') || combined.includes('ladder') || combined.includes('scaffold')) { workingAtHeight++; isHra = true; }
-      if (combined.includes('confined')) { confinedSpaces++; isHra = true; }
-      if (combined.includes('excavation') || combined.includes('digging')) { excavation++; isHra = true; }
-      if (combined.includes('crane') || combined.includes('lifting')) { cranesLifting++; isHra = true; }
-      if (combined.includes('pressure') || combined.includes('testing')) { pressureTesting++; isHra = true; }
+      if (isHotWork) hotWork++;
+      if (isElectrical) electrical++;
+      if (isHazardous) hazardousSubstances++;
+      if (isWorkHeight) workingAtHeight++;
+      if (isConfined) confinedSpaces++;
+      if (isExcavation) excavation++;
+      if (isCranes) cranesLifting++;
+      if (isPressure) pressureTesting++;
 
-      if (isHra) hra++;
+      const isAnyHra = isHotWork || isElectrical || isHazardous || isWorkHeight || isConfined || isExcavation || isCranes || isPressure;
+      if (isAnyHra) hra++;
       else nonHra++;
     });
 
     filteredRequests.forEach((req) => {
-      let compName = req.companyName;
-      if (req.subContractorId && subMap.has(req.subContractorId)) {
-        compName = subMap.get(req.subContractorId)?.subContractorName || compName;
+      let compName = (req as any).Company_Name || req.companyName;
+      const subId = (req as any).Sub_Contractor_Id || req.subContractorId;
+      if (subId && subMap.has(Number(subId))) {
+        compName = subMap.get(Number(subId))?.subContractorName || compName;
       }
       if (!compName) compName = 'Unknown';
-      let code = compName.split(' ').map((w) => w[0]).join('').substring(0, 3).toUpperCase();
+      let code = compName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
       if (!code) code = 'UNK';
 
       if (!companyMap.has(compName)) {
@@ -5672,13 +5695,19 @@ export class RequestsService {
       }
       companyMap.get(compName)!.count++;
 
-      const st = (req.requestStatus || '').toLowerCase().trim();
-      const act = (req.activity || '').toLowerCase();
-      const saf = (req.safetyPrecautions || '').toLowerCase();
-      const combined = `${act} ${saf}`;
-      let isHra = combined.includes('hot work') || combined.includes('fire') || combined.includes('electrical') || combined.includes('chemical') || combined.includes('height') || combined.includes('confined') || combined.includes('excavation') || combined.includes('crane') || combined.includes('pressure');
+      const st = getStatus(req);
+      const combined = getCombinedActivity(req);
+      const isHotWork = isHW(req, combined);
+      const isElectrical = isElec(req, combined);
+      const isHazardous = isHaz(req, combined);
+      const isWorkHeight = isHeight(req, combined);
+      const isConfined = isConf(req, combined);
+      const isExcavation = isExc(req, combined);
+      const isCranes = isCrane(req, combined);
+      const isPressure = isPress(req, combined);
+      const isAnyHra = isHotWork || isElectrical || isHazardous || isWorkHeight || isConfined || isExcavation || isCranes || isPressure;
 
-      const zName = req.zone || req.roomNos || 'ZONE 1';
+      const zName = (req as any).Room_Nos || req.roomNos || req.zone || (req as any).room_names || 'ZONE 1';
       if (!zoneMap.has(zName)) {
         zoneMap.set(zName, {
           zone: zName,
@@ -5694,16 +5723,16 @@ export class RequestsService {
       const zData = zoneMap.get(zName)!;
       zData.companies.add(code);
       zData.permits++;
-      if (isHra) zData.hra = true;
+      if (isAnyHra) zData.hra = true;
       if (st === 'hold' || st === 'onhold') zData.onHold = true;
       if (st === 'approved' || st === 'pre-approved') zData.preOk++;
 
-      if (combined.includes('height')) zData.hraActivities.add('Working At Height');
-      if (combined.includes('chemical') || combined.includes('hazard')) zData.hraActivities.add('Working Hazardous Substances');
-      if (combined.includes('crane')) zData.hraActivities.add('Using Cranes Or Lifting');
-      if (combined.includes('hot work')) zData.hraActivities.add('Hot Work');
-      if (combined.includes('confined')) zData.hraActivities.add('Working Confined Spaces');
-      if (combined.includes('electrical')) zData.hraActivities.add('Working On Electrical System');
+      if (isWorkHeight) zData.hraActivities.add('Working At Height');
+      if (isHazardous) zData.hraActivities.add('Working Hazardous Substances');
+      if (isCranes) zData.hraActivities.add('Using Cranes Or Lifting');
+      if (isHotWork) zData.hraActivities.add('Hot Work');
+      if (isConfined) zData.hraActivities.add('Working Confined Spaces');
+      if (isElectrical) zData.hraActivities.add('Working On Electrical System');
     });
 
     const roomsToReview = Array.from(zoneMap.values()).map((z) => ({
