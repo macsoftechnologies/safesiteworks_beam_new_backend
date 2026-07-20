@@ -5570,7 +5570,7 @@ export class RequestsService {
       });
     });
 
-    const getRoomDisplayName = (req: any): string => {
+    const getIndividualRoomDisplayNames = (req: any): string[] => {
       const rawRoomNos = (req as any).Room_Nos || req.roomNos || '';
       const rawZoneName = (req as any).zone_name || (req as any).zone?.zone || (typeof req.zone === 'string' ? req.zone : '') || '';
 
@@ -5596,15 +5596,15 @@ export class RequestsService {
         });
 
         if (resolvedNames.length > 0) {
-          return resolvedNames.join(', ');
+          return resolvedNames;
         }
       }
 
       if (rawZoneName && rawZoneName !== 'ZONE 1') {
-        return rawZoneName;
+        return [rawZoneName];
       }
 
-      return (req as any).room_names || 'General Area';
+      return [(req as any).room_names || 'General Area'];
     };
 
     const subMap = new Map<number, Subcontractor>();
@@ -5703,6 +5703,40 @@ export class RequestsService {
     const palette = ['#e11d48', '#4b5563', '#15803d', '#b91c1c', '#be123c', '#0369a1', '#6b7280', '#d97706', '#991b1b', '#1e3a8a', '#0284c7', '#10b981', '#78350f', '#ea580c'];
     let colorIdx = 0;
 
+    allSubcontractors.forEach((s) => {
+      const cName = s.subContractorName;
+      if (cName && !companyMap.has(cName)) {
+        let code = cName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
+        if (!code) code = 'UNK';
+        companyMap.set(cName, {
+          name: cName,
+          code,
+          count: 0,
+          color: palette[colorIdx % palette.length],
+        });
+        colorIdx++;
+      }
+    });
+
+    allRequests.forEach((req) => {
+      let compName = (req as any).Company_Name || req.companyName;
+      const subId = (req as any).Sub_Contractor_Id || req.subContractorId;
+      if (subId && subMap.has(Number(subId))) {
+        compName = subMap.get(Number(subId))?.subContractorName || compName;
+      }
+      if (compName && !companyMap.has(compName)) {
+        let code = compName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
+        if (!code) code = 'UNK';
+        companyMap.set(compName, {
+          name: compName,
+          code,
+          count: 0,
+          color: palette[colorIdx % palette.length],
+        });
+        colorIdx++;
+      }
+    });
+
     let commissioning = 0;
     let construction = 0;
 
@@ -5781,16 +5815,9 @@ export class RequestsService {
       let code = compName.split(' ').map((w: string) => w[0]).join('').substring(0, 3).toUpperCase();
       if (!code) code = 'UNK';
 
-      if (!companyMap.has(compName)) {
-        companyMap.set(compName, {
-          name: compName,
-          code,
-          count: 0,
-          color: palette[colorIdx % palette.length],
-        });
-        colorIdx++;
+      if (companyMap.has(compName)) {
+        companyMap.get(compName)!.count++;
       }
-      companyMap.get(compName)!.count++;
 
       const st = getStatus(req);
       const combined = getCombinedActivity(req);
@@ -5804,32 +5831,34 @@ export class RequestsService {
       const isPressure = isPress(req, combined);
       const isAnyHra = isHotWork || isElectrical || isHazardous || isWorkHeight || isConfined || isExcavation || isCranes || isPressure;
 
-      const zName = getRoomDisplayName(req);
-      if (!zoneMap.has(zName)) {
-        zoneMap.set(zName, {
-          zone: zName,
-          companies: new Set<string>(),
-          clash: false,
-          hra: false,
-          onHold: false,
-          preOk: 0,
-          permits: 0,
-          hraActivities: new Set<string>(),
-        });
-      }
-      const zData = zoneMap.get(zName)!;
-      zData.companies.add(code);
-      zData.permits++;
-      if (isAnyHra) zData.hra = true;
-      if (st === 'hold' || st === 'onhold') zData.onHold = true;
-      if (st === 'approved' || st === 'pre-approved') zData.preOk++;
+      const roomList = getIndividualRoomDisplayNames(req);
+      roomList.forEach((zName) => {
+        if (!zoneMap.has(zName)) {
+          zoneMap.set(zName, {
+            zone: zName,
+            companies: new Set<string>(),
+            clash: false,
+            hra: false,
+            onHold: false,
+            preOk: 0,
+            permits: 0,
+            hraActivities: new Set<string>(),
+          });
+        }
+        const zData = zoneMap.get(zName)!;
+        zData.companies.add(code);
+        zData.permits++;
+        if (isAnyHra) zData.hra = true;
+        if (st === 'hold' || st === 'onhold') zData.onHold = true;
+        if (st === 'approved' || st === 'pre-approved') zData.preOk++;
 
-      if (isWorkHeight) zData.hraActivities.add('Working At Height');
-      if (isHazardous) zData.hraActivities.add('Working Hazardous Substances');
-      if (isCranes) zData.hraActivities.add('Using Cranes Or Lifting');
-      if (isHotWork) zData.hraActivities.add('Hot Work');
-      if (isConfined) zData.hraActivities.add('Working Confined Spaces');
-      if (isElectrical) zData.hraActivities.add('Working On Electrical System');
+        if (isWorkHeight) zData.hraActivities.add('Working At Height');
+        if (isHazardous) zData.hraActivities.add('Working Hazardous Substances');
+        if (isCranes) zData.hraActivities.add('Using Cranes Or Lifting');
+        if (isHotWork) zData.hraActivities.add('Hot Work');
+        if (isConfined) zData.hraActivities.add('Working Confined Spaces');
+        if (isElectrical) zData.hraActivities.add('Working On Electrical System');
+      });
     });
 
     const roomsToReview = Array.from(zoneMap.values()).map((z) => ({
