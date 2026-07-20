@@ -6008,9 +6008,61 @@ export class RequestsService {
       else nonHra++;
     });
 
+    let targetFloorId: number | null = !isNaN(Number(floorName)) && Number(floorName) > 0 ? Number(floorName) : null;
+    if (!targetFloorId && floorName && String(floorName).trim() !== '' && String(floorName).toLowerCase() !== 'overview') {
+      const fObj = allFloors.find((f) => f.floor_name.toLowerCase().trim() === String(floorName).toLowerCase().trim());
+      if (fObj) targetFloorId = fObj.fl_id;
+    }
+
+    let relevantDbRooms = targetFloorId
+      ? allRooms.filter((r) => Number(r.fl_id) === Number(targetFloorId))
+      : allRooms;
+
+    let targetBuildingId: number | null = !isNaN(bNum) && bNum > 0 ? bNum : null;
+    if (targetBuildingId && (!relevantDbRooms || relevantDbRooms.length === 0)) {
+      relevantDbRooms = allRooms.filter((r) => Number(r.building_id) === Number(targetBuildingId));
+    }
+
+    const dbZoneMap = new Map<string, {
+      zone: string;
+      companies: Set<string>;
+      clash: boolean;
+      hra: boolean;
+      onHold: boolean;
+      preOk: number;
+      permits: number;
+      hraActivities: Set<string>;
+    }>();
+
+    const dbRoomKeyLookup = new Map<string, string>();
+
+    relevantDbRooms.forEach((r) => {
+      const rName = (r.room_name || '').trim();
+      if (rName) {
+        const zName = r.zone_id && zoneLookup.has(r.zone_id) ? `${zoneLookup.get(r.zone_id)!} - ${rName}` : rName;
+        const mainKey = zName;
+
+        if (!dbZoneMap.has(mainKey)) {
+          dbZoneMap.set(mainKey, {
+            zone: mainKey,
+            companies: new Set<string>(),
+            clash: false,
+            hra: false,
+            onHold: false,
+            preOk: 0,
+            permits: 0,
+            hraActivities: new Set<string>(),
+          });
+        }
+
+        dbRoomKeyLookup.set(String(r.room_id), mainKey);
+        dbRoomKeyLookup.set(rName.toLowerCase(), mainKey);
+        dbRoomKeyLookup.set(zName.toLowerCase(), mainKey);
+      }
+    });
+
     filteredRequests.forEach((req) => {
       const canonical = getCanonicalCompany(req);
-
       const st = getStatus(req);
       const combined = getCombinedActivity(req);
       const isHotWork = isHW(req, combined);
@@ -6023,68 +6075,45 @@ export class RequestsService {
       const isPressure = isPress(req, combined);
       const isAnyHra = isHotWork || isElectrical || isHazardous || isWorkHeight || isConfined || isExcavation || isCranes || isPressure;
 
-      const roomList = getIndividualRoomDisplayNames(req);
-      roomList.forEach((zName) => {
-        if (!zoneMap.has(zName)) {
-          zoneMap.set(zName, {
-            zone: zName,
-            companies: new Set<string>(),
-            clash: false,
-            hra: false,
-            onHold: false,
-            preOk: 0,
-            permits: 0,
-            hraActivities: new Set<string>(),
-          });
-        }
-        const zData = zoneMap.get(zName)!;
-        zData.companies.add(canonical.code);
-        zData.permits++;
-        if (isAnyHra) zData.hra = true;
-        if (st === 'hold' || st === 'onhold' || st === 'on-hold') zData.onHold = true;
-        if (st === 'approved' || st === 'pre-approved' || st === 'preapproved') zData.preOk++;
+      const rawRoomNos = (req as any).Room_Nos || req.roomNos || '';
+      const matchedKeys = new Set<string>();
 
-        if (isWorkHeight) zData.hraActivities.add('Working At Height');
-        if (isHazardous) zData.hraActivities.add('Working Hazardous Substances');
-        if (isCranes) zData.hraActivities.add('Using Cranes Or Lifting');
-        if (isHotWork) zData.hraActivities.add('Hot Work');
-        if (isConfined) zData.hraActivities.add('Working Confined Spaces');
-        if (isElectrical) zData.hraActivities.add('Working On Electrical System');
-      });
-    });
-
-    let targetFloorId: number | null = !isNaN(Number(floorName)) && Number(floorName) > 0 ? Number(floorName) : null;
-    if (!targetFloorId && floorName && String(floorName).trim() !== '' && String(floorName).toLowerCase() !== 'overview') {
-      const fObj = allFloors.find((f) => f.floor_name.toLowerCase().trim() === String(floorName).toLowerCase().trim());
-      if (fObj) targetFloorId = fObj.fl_id;
-    }
-
-    const relevantDbRooms = targetFloorId
-      ? allRooms.filter((r) => Number(r.fl_id) === Number(targetFloorId))
-      : allRooms;
-
-    relevantDbRooms.forEach((r) => {
-      const rName = (r.room_name || '').trim();
-      if (rName) {
-        const zName = r.zone_id && zoneLookup.has(r.zone_id) ? `${zoneLookup.get(r.zone_id)!} - ${rName}` : rName;
-        [rName, zName].forEach((keyName) => {
-          if (!zoneMap.has(keyName)) {
-            zoneMap.set(keyName, {
-              zone: keyName,
-              companies: new Set<string>(),
-              clash: false,
-              hra: false,
-              onHold: false,
-              preOk: 0,
-              permits: 0,
-              hraActivities: new Set<string>(),
-            });
+      if (rawRoomNos) {
+        const parts = String(rawRoomNos).split(',').map((s) => s.trim()).filter(Boolean);
+        parts.forEach((p) => {
+          if (dbRoomKeyLookup.has(p.toLowerCase())) {
+            matchedKeys.add(dbRoomKeyLookup.get(p.toLowerCase())!);
           }
         });
       }
+
+      if (matchedKeys.size === 0) {
+        const rType = ((req as any).room_names || req.roomType || req.zone || '').toString().trim().toLowerCase();
+        if (rType && dbRoomKeyLookup.has(rType)) {
+          matchedKeys.add(dbRoomKeyLookup.get(rType)!);
+        }
+      }
+
+      matchedKeys.forEach((key) => {
+        const zData = dbZoneMap.get(key);
+        if (zData) {
+          zData.companies.add(canonical.code);
+          zData.permits++;
+          if (isAnyHra) zData.hra = true;
+          if (st === 'hold' || st === 'onhold' || st === 'on-hold') zData.onHold = true;
+          if (st === 'approved' || st === 'pre-approved' || st === 'preapproved') zData.preOk++;
+
+          if (isWorkHeight) zData.hraActivities.add('Working At Height');
+          if (isHazardous) zData.hraActivities.add('Working Hazardous Substances');
+          if (isCranes) zData.hraActivities.add('Using Cranes Or Lifting');
+          if (isHotWork) zData.hraActivities.add('Hot Work');
+          if (isConfined) zData.hraActivities.add('Working Confined Spaces');
+          if (isElectrical) zData.hraActivities.add('Working On Electrical System');
+        }
+      });
     });
 
-    const roomsToReview = Array.from(zoneMap.values()).map((z) => ({
+    const roomsToReview = Array.from(dbZoneMap.values()).map((z) => ({
       zone: z.zone,
       companies: Array.from(z.companies),
       clash: z.companies.size > 1,
@@ -6096,52 +6125,32 @@ export class RequestsService {
     }));
 
     const roomHoverData: Record<string, any> = {};
-    zoneMap.forEach((z, zName) => {
-      roomHoverData[zName] = {
+    dbZoneMap.forEach((z, zName) => {
+      const hoverObj = z.permits > 0 ? {
         title: zName,
         subtitle: `Room / Area ${zName}`,
         clash: z.companies.size > 1 ? `Clash (${z.companies.size} companies)` : 'Clear (No Clash)',
         companies: `${z.companies.size} companies`,
         permits: `${z.permits} permits`,
         hra: z.hraActivities.size > 0 ? `HRA: ${Array.from(z.hraActivities).join(', ')}` : 'Non-HRA',
+      } : {
+        title: zName,
+        subtitle: `Room / Area ${zName}`,
+        clash: 'Clear (No Clash)',
+        companies: '0 companies',
+        permits: '0 permits',
+        hra: 'No Work',
       };
-    });
 
-    // Attach all DB rooms data to roomHoverData for room polygon hover functionality
-    allRooms.forEach((r) => {
-      const rName = r.room_name;
-      if (rName) {
-        const zName = r.zone_id && zoneLookup.has(r.zone_id) ? `${zoneLookup.get(r.zone_id)!} - ${rName}` : rName;
-        [rName, zName].forEach((keyName) => {
-          if (!roomHoverData[keyName]) {
-            const zData = zoneMap.get(keyName);
-            if (zData && zData.permits > 0) {
-              roomHoverData[keyName] = {
-                title: keyName,
-                subtitle: `Room / Area ${keyName}`,
-                clash: zData.companies.size > 1 ? `Clash (${zData.companies.size} companies)` : 'Clear (No Clash)',
-                companies: `${zData.companies.size} companies`,
-                permits: `${zData.permits} permits`,
-                hra: zData.hraActivities.size > 0 ? `HRA: ${Array.from(zData.hraActivities).join(', ')}` : 'Non-HRA',
-              };
-            } else {
-              roomHoverData[keyName] = {
-                title: keyName,
-                subtitle: `Room / Area ${keyName}`,
-                clash: 'Clear (No Clash)',
-                companies: '0 companies',
-                permits: '0 permits',
-                hra: 'No Work',
-              };
-            }
-          }
-        });
+      roomHoverData[zName] = hoverObj;
+      const parts = zName.split(' - ');
+      if (parts.length > 1) {
+        roomHoverData[parts[parts.length - 1]] = hoverObj;
       }
     });
 
     const allBuildings = await this.buildingRepo.find();
 
-    let targetBuildingId: number | null = !isNaN(bNum) && bNum > 0 ? bNum : null;
     if (!targetBuildingId && rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
       const bObj = allBuildings.find(
         (b) => b.building_name.toLowerCase().trim().includes(String(rawBuilding).toLowerCase().trim())
