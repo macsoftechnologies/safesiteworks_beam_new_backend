@@ -5537,10 +5537,11 @@ export class RequestsService {
       );
     }
 
-    if (floorName && floorName.trim() !== '') {
+    if (floorName && floorName.trim() !== '' && floorName.toLowerCase() !== 'overview') {
       const fNum = Number(floorName);
       query.andWhere(
-        '(req.floorId = :fId OR req.floorId IN (SELECT f.floor_id FROM floors f WHERE f.floor_name LIKE :fName))',
+        '(req.floorId IN (SELECT f.fl_id FROM floors f WHERE f.floor_name LIKE :fName)' +
+        (!isNaN(fNum) ? ' OR req.floorId = :fId' : '') + ')',
         { fName: `%${floorName}%`, fId: isNaN(fNum) ? -1 : fNum },
       );
     }
