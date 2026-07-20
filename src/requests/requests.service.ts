@@ -5401,11 +5401,14 @@ export class RequestsService {
 
     if (rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
       if (!isNaN(bNum) && bNum > 0) {
-        query.andWhere('req.buildingId = :bId', { bId: bNum });
+        query.andWhere(
+          '(req.buildingId = :bId OR req.roomType LIKE :bNameStr)',
+          { bId: bNum, bNameStr: `%${rawBuilding}%` },
+        );
       } else {
         query.andWhere(
-          'req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName)',
-          { bName: `%${rawBuilding}%` },
+          '(req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName) OR req.roomType LIKE :bNameStr)',
+          { bName: `%${rawBuilding}%`, bNameStr: `%${rawBuilding}%` },
         );
       }
     }
@@ -5659,23 +5662,29 @@ export class RequestsService {
 
     if (rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
       if (!isNaN(bNum) && bNum > 0) {
-        query.andWhere('req.buildingId = :bId', { bId: bNum });
+        query.andWhere(
+          '(req.buildingId = :bId OR req.roomType LIKE :bNameStr)',
+          { bId: bNum, bNameStr: `%${rawBuilding}%` },
+        );
       } else {
         query.andWhere(
-          'req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName)',
-          { bName: `%${rawBuilding}%` },
+          '(req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName) OR req.roomType LIKE :bNameStr)',
+          { bName: `%${rawBuilding}%`, bNameStr: `%${rawBuilding}%` },
         );
       }
     }
 
-    if (floorName && floorName.trim() !== '' && floorName.toLowerCase() !== 'overview') {
+    if (floorName && String(floorName).trim() !== '' && String(floorName).toLowerCase() !== 'overview') {
       const fNum = Number(floorName);
       if (!isNaN(fNum) && fNum > 0) {
-        query.andWhere('req.floorId = :fId', { fId: fNum });
+        query.andWhere(
+          '(req.floorId = :fId OR req.roomType LIKE :fNameStr)',
+          { fId: fNum, fNameStr: `%${floorName}%` },
+        );
       } else {
         query.andWhere(
-          'req.floorId IN (SELECT f.fl_id FROM floors f WHERE f.floor_name LIKE :fName)',
-          { fName: `%${floorName}%` },
+          '(req.floorId IN (SELECT f.fl_id FROM floors f WHERE f.floor_name LIKE :fName) OR req.roomType LIKE :fNameStr)',
+          { fName: `%${floorName}%`, fNameStr: `%${floorName}%` },
         );
       }
     }
@@ -6065,6 +6074,38 @@ export class RequestsService {
         permits: `${z.permits} permits`,
         hra: z.hraActivities.size > 0 ? `HRA: ${Array.from(z.hraActivities).join(', ')}` : 'Non-HRA',
       };
+    });
+
+    // Attach all DB rooms data to roomHoverData for room polygon hover functionality
+    allRooms.forEach((r) => {
+      const rName = r.room_name;
+      if (rName) {
+        const zName = r.zone_id && zoneLookup.has(r.zone_id) ? `${zoneLookup.get(r.zone_id)!} - ${rName}` : rName;
+        [rName, zName].forEach((keyName) => {
+          if (!roomHoverData[keyName]) {
+            const zData = zoneMap.get(keyName);
+            if (zData && zData.permits > 0) {
+              roomHoverData[keyName] = {
+                title: keyName,
+                subtitle: `Room / Area ${keyName}`,
+                clash: zData.companies.size > 1 ? `Clash (${zData.companies.size} companies)` : 'Clear (No Clash)',
+                companies: `${zData.companies.size} companies`,
+                permits: `${zData.permits} permits`,
+                hra: zData.hraActivities.size > 0 ? `HRA: ${Array.from(zData.hraActivities).join(', ')}` : 'Non-HRA',
+              };
+            } else {
+              roomHoverData[keyName] = {
+                title: keyName,
+                subtitle: `Room / Area ${keyName}`,
+                clash: 'Clear (No Clash)',
+                companies: '0 companies',
+                permits: '0 permits',
+                hra: 'No Work',
+              };
+            }
+          }
+        });
+      }
     });
 
     const allFloors = await this.floorRepo.find();
