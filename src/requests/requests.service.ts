@@ -5608,11 +5608,16 @@ export class RequestsService {
       if (f.permits > 5) status = 'purple';
       else if (f.permits > 0) status = 'blue';
 
+      let dbRoomCount = 0;
+      if (f.id !== null) {
+        dbRoomCount = allRooms.filter((r) => Number(r.fl_id) === Number(f.id)).length;
+      }
+
       return {
         id: f.id,
         name: f.name,
         permits: f.permits,
-        rooms: f.roomsSet.size,
+        rooms: dbRoomCount > 0 ? dbRoomCount : f.roomsSet.size,
         status,
       };
     });
@@ -6144,11 +6149,16 @@ export class RequestsService {
       if (f.permits > 5) status = 'purple';
       else if (f.permits > 0) status = 'blue';
 
+      let dbRoomCount = 0;
+      if (f.id !== null) {
+        dbRoomCount = allRooms.filter((r) => Number(r.fl_id) === Number(f.id)).length;
+      }
+
       return {
         id: f.id,
         name: f.name,
         permits: f.permits,
-        rooms: f.roomsSet.size,
+        rooms: dbRoomCount > 0 ? dbRoomCount : f.roomsSet.size,
         status,
       };
     });
