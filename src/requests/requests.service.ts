@@ -5525,6 +5525,98 @@ export class RequestsService {
       };
     });
 
+    const allFloors = await this.floorRepo.find();
+    const allBuildings = await this.buildingRepo.find();
+    const allRooms = await this.roomRepo.find();
+
+    let targetBuildingId: number | null = !isNaN(bNum) && bNum > 0 ? bNum : null;
+    if (!targetBuildingId && rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
+      const bObj = allBuildings.find(
+        (b) => b.building_name.toLowerCase().trim().includes(String(rawBuilding).toLowerCase().trim())
+      );
+      if (bObj) {
+        targetBuildingId = bObj.build_id;
+      }
+    }
+
+    let assignedFloors: Floor[] = [];
+    if (targetBuildingId) {
+      assignedFloors = allFloors.filter((f) => Number(f.build_id) === Number(targetBuildingId));
+    } else {
+      assignedFloors = allFloors;
+    }
+
+    const floorStatsMap = new Map<string, {
+      id: number | null;
+      name: string;
+      permits: number;
+      roomsSet: Set<string>;
+    }>();
+
+    assignedFloors.forEach((fl) => {
+      const normName = fl.floor_name.trim();
+      floorStatsMap.set(normName.toLowerCase(), {
+        id: fl.fl_id,
+        name: normName,
+        permits: 0,
+        roomsSet: new Set<string>(),
+      });
+    });
+
+    const resolveReqFloorName = (req: any): string | null => {
+      const fId = Number((req as any).Floor_Id || req.floorId);
+      if (!isNaN(fId) && fId > 0) {
+        const matched = allFloors.find((f) => Number(f.fl_id) === fId);
+        if (matched) return matched.floor_name.trim();
+      }
+      const rawRoomNos = (req as any).Room_Nos || req.roomNos || '';
+      if (rawRoomNos) {
+        const roomParts = String(rawRoomNos).split(',').map((s) => Number(s.trim())).filter((n) => !isNaN(n) && n > 0);
+        for (const rId of roomParts) {
+          const roomObj = allRooms.find((r) => Number(r.room_id) === rId);
+          if (roomObj && roomObj.fl_id) {
+            const matched = allFloors.find((f) => Number(f.fl_id) === Number(roomObj.fl_id));
+            if (matched) return matched.floor_name.trim();
+          }
+        }
+      }
+      return null;
+    };
+
+    allRequests.forEach((req) => {
+      const fName = resolveReqFloorName(req);
+      if (fName) {
+        const key = fName.toLowerCase();
+        if (!floorStatsMap.has(key)) {
+          floorStatsMap.set(key, {
+            id: null,
+            name: fName,
+            permits: 0,
+            roomsSet: new Set<string>(),
+          });
+        }
+        const fStats = floorStatsMap.get(key)!;
+        fStats.permits += 1;
+
+        const roomKey = (req as any).Room_Nos || req.roomNos || req.zone || 'General Area';
+        if (roomKey) fStats.roomsSet.add(roomKey);
+      }
+    });
+
+    const floors = Array.from(floorStatsMap.values()).map((f) => {
+      let status = 'gray';
+      if (f.permits > 5) status = 'purple';
+      else if (f.permits > 0) status = 'blue';
+
+      return {
+        id: f.id,
+        name: f.name,
+        permits: f.permits,
+        rooms: f.roomsSet.size,
+        status,
+      };
+    });
+
     return {
       metrics: {
         total,
@@ -5543,6 +5635,7 @@ export class RequestsService {
         clashes,
       },
       overviewCompanies,
+      floors,
     };
   }
 
@@ -5969,6 +6062,97 @@ export class RequestsService {
       };
     });
 
+    const allFloors = await this.floorRepo.find();
+    const allBuildings = await this.buildingRepo.find();
+
+    let targetBuildingId: number | null = !isNaN(bNum) && bNum > 0 ? bNum : null;
+    if (!targetBuildingId && rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
+      const bObj = allBuildings.find(
+        (b) => b.building_name.toLowerCase().trim().includes(String(rawBuilding).toLowerCase().trim())
+      );
+      if (bObj) {
+        targetBuildingId = bObj.build_id;
+      }
+    }
+
+    let assignedFloors: Floor[] = [];
+    if (targetBuildingId) {
+      assignedFloors = allFloors.filter((f) => Number(f.build_id) === Number(targetBuildingId));
+    } else {
+      assignedFloors = allFloors;
+    }
+
+    const floorStatsMap = new Map<string, {
+      id: number | null;
+      name: string;
+      permits: number;
+      roomsSet: Set<string>;
+    }>();
+
+    assignedFloors.forEach((fl) => {
+      const normName = fl.floor_name.trim();
+      floorStatsMap.set(normName.toLowerCase(), {
+        id: fl.fl_id,
+        name: normName,
+        permits: 0,
+        roomsSet: new Set<string>(),
+      });
+    });
+
+    const resolveReqFloorName = (req: any): string | null => {
+      const fId = Number((req as any).Floor_Id || req.floorId);
+      if (!isNaN(fId) && fId > 0) {
+        const matched = allFloors.find((f) => Number(f.fl_id) === fId);
+        if (matched) return matched.floor_name.trim();
+      }
+      const rawRoomNos = (req as any).Room_Nos || req.roomNos || '';
+      if (rawRoomNos) {
+        const roomParts = String(rawRoomNos).split(',').map((s) => Number(s.trim())).filter((n) => !isNaN(n) && n > 0);
+        for (const rId of roomParts) {
+          const roomObj = allRooms.find((r) => Number(r.room_id) === rId);
+          if (roomObj && roomObj.fl_id) {
+            const matched = allFloors.find((f) => Number(f.fl_id) === Number(roomObj.fl_id));
+            if (matched) return matched.floor_name.trim();
+          }
+        }
+      }
+      return null;
+    };
+
+    allRequests.forEach((req) => {
+      const fName = resolveReqFloorName(req);
+      if (fName) {
+        const key = fName.toLowerCase();
+        if (!floorStatsMap.has(key)) {
+          floorStatsMap.set(key, {
+            id: null,
+            name: fName,
+            permits: 0,
+            roomsSet: new Set<string>(),
+          });
+        }
+        const fStats = floorStatsMap.get(key)!;
+        fStats.permits += 1;
+
+        const roomKey = (req as any).Room_Nos || req.roomNos || req.zone || 'General Area';
+        if (roomKey) fStats.roomsSet.add(roomKey);
+      }
+    });
+
+    const floors = Array.from(floorStatsMap.values()).map((f) => {
+      let status = 'gray';
+      if (f.permits > 5) status = 'purple';
+      else if (f.permits > 0) status = 'blue';
+
+      return {
+        id: f.id,
+        name: f.name,
+        permits: f.permits,
+        rooms: f.roomsSet.size,
+        status,
+      };
+    });
+
     return {
       companies: Array.from(companyMap.values()),
       counts: {
@@ -6003,6 +6187,7 @@ export class RequestsService {
       },
       roomsToReview,
       roomHoverData,
+      floors,
     };
   }
 }
