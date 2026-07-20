@@ -5705,6 +5705,7 @@ export class RequestsService {
     const allSubcontractors = await this.subcontractorRepo.find();
     const allRooms = await this.roomRepo.find();
     const allZones = await this.zoneRepo.find();
+    const allFloors = await this.floorRepo.find();
 
     const roomLookup = new Map<number, { roomName: string; zoneName: string }>();
     const zoneLookup = new Map<number, string>();
@@ -5904,15 +5905,18 @@ export class RequestsService {
 
     allRequests.forEach((req) => {
       const canonical = getCanonicalCompany(req);
-      if (canonical.name && !companyMap.has(canonical.name)) {
-        companyMap.set(canonical.name, {
-          name: canonical.name,
-          code: canonical.code,
-          count: 0,
-          color: palette[colorIdx % palette.length],
-          logo: canonical.logo,
-        });
-        colorIdx++;
+      if (canonical.name) {
+        if (!companyMap.has(canonical.name)) {
+          companyMap.set(canonical.name, {
+            name: canonical.name,
+            code: canonical.code,
+            count: 0,
+            color: palette[colorIdx % palette.length],
+            logo: canonical.logo,
+          });
+          colorIdx++;
+        }
+        companyMap.get(canonical.name)!.count++;
       }
     });
 
@@ -6007,10 +6011,6 @@ export class RequestsService {
     filteredRequests.forEach((req) => {
       const canonical = getCanonicalCompany(req);
 
-      if (companyMap.has(canonical.name)) {
-        companyMap.get(canonical.name)!.count++;
-      }
-
       const st = getStatus(req);
       const combined = getCombinedActivity(req);
       const isHotWork = isHW(req, combined);
@@ -6051,6 +6051,37 @@ export class RequestsService {
         if (isConfined) zData.hraActivities.add('Working Confined Spaces');
         if (isElectrical) zData.hraActivities.add('Working On Electrical System');
       });
+    });
+
+    let targetFloorId: number | null = !isNaN(Number(floorName)) && Number(floorName) > 0 ? Number(floorName) : null;
+    if (!targetFloorId && floorName && String(floorName).trim() !== '' && String(floorName).toLowerCase() !== 'overview') {
+      const fObj = allFloors.find((f) => f.floor_name.toLowerCase().trim() === String(floorName).toLowerCase().trim());
+      if (fObj) targetFloorId = fObj.fl_id;
+    }
+
+    const relevantDbRooms = targetFloorId
+      ? allRooms.filter((r) => Number(r.fl_id) === Number(targetFloorId))
+      : allRooms;
+
+    relevantDbRooms.forEach((r) => {
+      const rName = (r.room_name || '').trim();
+      if (rName) {
+        const zName = r.zone_id && zoneLookup.has(r.zone_id) ? `${zoneLookup.get(r.zone_id)!} - ${rName}` : rName;
+        [rName, zName].forEach((keyName) => {
+          if (!zoneMap.has(keyName)) {
+            zoneMap.set(keyName, {
+              zone: keyName,
+              companies: new Set<string>(),
+              clash: false,
+              hra: false,
+              onHold: false,
+              preOk: 0,
+              permits: 0,
+              hraActivities: new Set<string>(),
+            });
+          }
+        });
+      }
     });
 
     const roomsToReview = Array.from(zoneMap.values()).map((z) => ({
@@ -6108,7 +6139,6 @@ export class RequestsService {
       }
     });
 
-    const allFloors = await this.floorRepo.find();
     const allBuildings = await this.buildingRepo.find();
 
     let targetBuildingId: number | null = !isNaN(bNum) && bNum > 0 ? bNum : null;
