@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Brackets } from 'typeorm';
+import { Repository, In, Brackets, DeepPartial } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RedisCacheService } from 'src/redis/redid-cache.service';
@@ -454,8 +454,10 @@ export class RequestsService {
 
     const permitNo = await this.generatePermitNo();
 
+    const isNightShift = String(dto.night_shift) === '1' || String(dto.night_shift) === 'true';
+
     // 1. Save Request
-    const requestObj = this.requestRepo.create({
+    const requestData: DeepPartial<RequestEntity> = {
       userId: dto.userId,
       companyName: dto.Company_Name,
       permitNo: permitNo,
@@ -489,12 +491,13 @@ export class RequestsService {
       siteId: dto.Site_Id !== undefined ? dto.Site_Id : 5,
       permitType: dto.permit_type,
       permitUnder: dto.permit_under || 'Construction',
-      newDate: dto.new_date,
-      newEndTime: dto.new_end_time,
-      nightShift: dto.night_shift,
+      newDate: isNightShift ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : 'none') : 'none',
+      newEndTime: isNightShift ? (dto.new_end_time && dto.new_end_time !== 'none' ? dto.new_end_time : 'none') : 'none',
+      nightShift: isNightShift ? '1' : '0',
       safetyPrecautions: dto.Safety_Precautions,
-    });
+    };
 
+    const requestObj = this.requestRepo.create(requestData);
     const savedRequest = await this.requestRepo.save(requestObj);
     const requestId = savedRequest.id;
 
@@ -1577,11 +1580,18 @@ export class RequestsService {
         addIfChanged('status', dto.status, existing.status);
       }
     }
+    const isNightShift = dto.night_shift !== undefined
+      ? (String(dto.night_shift) === '1' || String(dto.night_shift) === 'true')
+      : (String(existing.nightShift) === '1' || existing.nightShift === 'true');
+
+    const finalNewDate = isNightShift ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : 'none') : 'none';
+    const finalNewEndTime = isNightShift ? (dto.new_end_time && dto.new_end_time !== 'none' ? dto.new_end_time : 'none') : 'none';
+
     addIfChanged('permitType', dto.permit_type, existing.permitType);
     addIfChanged('permitUnder', dto.permit_under, existing.permitUnder);
-    addIfChanged('newDate', dto.new_date, existing.newDate);
-    addIfChanged('newEndTime', dto.new_end_time, existing.newEndTime);
-    addIfChanged('nightShift', dto.night_shift, existing.nightShift);
+    addIfChanged('newDate', finalNewDate, existing.newDate);
+    addIfChanged('newEndTime', finalNewEndTime, existing.newEndTime);
+    addIfChanged('nightShift', isNightShift ? '1' : '0', existing.nightShift);
     addIfChanged(
       'safetyPrecautions',
       dto.Safety_Precautions,

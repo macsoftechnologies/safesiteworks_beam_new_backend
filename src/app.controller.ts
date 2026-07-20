@@ -5,9 +5,9 @@ import { AppService } from './app.service';
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
-  // @Get()
-  // getHello(@Req() req: any): string {
-  //   console.log('Tenant:', req.tenant); // debug
-  //   return this.appService.getHello();
-  // }
+  @Get()
+  getHello(@Req() req?: any): string {
+    console.log('Tenant:', req?.tenant); // debug
+    return this.appService.getHello();
+  }
 }
