@@ -5502,9 +5502,15 @@ export class RequestsService {
       .where('req.status = :st', { st: 1 });
 
     if (buildingName && buildingName.trim() !== '') {
+      const bNum = Number(buildingName);
       query.andWhere(
-        '(req.Building_Id IN (SELECT build_id FROM buildings WHERE building_name LIKE :bName) OR req.Building_Id LIKE :bNameStr)',
-        { bName: `%${buildingName}%`, bNameStr: `%${buildingName}%` },
+        '(req.buildingId IN (SELECT b.build_id FROM buildings b WHERE b.building_name LIKE :bName) OR req.roomType LIKE :bNameStr' +
+        (!isNaN(bNum) ? ' OR req.buildingId = :bId' : '') + ')',
+        {
+          bName: `%${buildingName}%`,
+          bNameStr: `%${buildingName}%`,
+          bId: bNum,
+        },
       );
     }
 
