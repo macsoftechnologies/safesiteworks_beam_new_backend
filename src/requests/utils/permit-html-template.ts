@@ -17,6 +17,8 @@ export function generatePermitHtml(data: any): string {
   const imgCranesLifting = getBase64Image(join(process.cwd(), 'src/images/logos/Craneslifting.png'));
   const imgElectricalWorks = getBase64Image(join(process.cwd(), 'src/images/logos/electrical_works.png'));
   const imgMechanicalWorks = getBase64Image(join(process.cwd(), 'src/images/logos/mechanical1.png'));
+  const imgCompanyLogo = getBase64Image(join(process.cwd(), 'src/images/logos/Logo.jpeg')) || getBase64Image(join(process.cwd(), '../frontend/Beam2.o_Infrastructure/src/assets/images/Logo.jpeg'));
+  const imgNneLogo = getBase64Image(join(process.cwd(), 'src/images/logos/nne_logo.png')) || getBase64Image(join(process.cwd(), '../frontend/Beam2.o_Infrastructure/src/assets/images/nne_logo.png'));
 
   // Format Helper for Date
   const formatDateOnly = (dateStr: any) => {
@@ -558,7 +560,8 @@ export function generatePermitHtml(data: any): string {
       case 'approved':
         return `
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="${color}" stroke-width="2" width="20" height="20">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-16 0 9 9 0 0116 0z" />
+            <circle cx="12" cy="12" r="9" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.5l2 2 4-4" />
           </svg>
         `;
       case 'opened':
@@ -1828,34 +1831,33 @@ export function generatePermitHtml(data: any): string {
     
     <!-- Top Dashboard Card (Header, Actions, Stepper) -->
     <div class="dashboard-card">
-      <div class="header-layout" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: nowrap; gap: 16px; width: 100%;">
-        <div class="header-title-section" style="display: flex; align-items: center; gap: 16px; min-width: 0; flex-grow: 1;">
-          <div class="back-btn" onclick="window.history.back()" style="flex-shrink: 0;">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 20px; height: 20px;">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
+      <!-- Header Section: Row 1 (Logos & PDF), Row 2 (Permit #, Badges & Location) -->
+      <div class="header-section-wrap" style="width: 100%; margin-bottom: 20px;">
+        <!-- Row 1: Logos (Optically balanced: Novo Nordisk 74px offsets internal padding, NNE 38px matches optical height) -->
+        <div class="header-logos-row" style="display: flex; justify-content: space-between; align-items: center; width: 100%; border-bottom: 1px solid #f1f5f9; padding: 0 140px 14px 140px; margin-bottom: 16px; box-sizing: border-box;">
+          <!-- Left: Novo Nordisk Logo -->
+          <div style="display: flex; align-items: center;">
+            ${imgCompanyLogo ? `<img src="${imgCompanyLogo}" alt="Novo Nordisk Logo" style="height: 74px; width: auto; object-fit: contain; display: block;" />` : ''}
           </div>
-          <div class="header-details-wrap" style="min-width: 0; flex-grow: 1;">
-            <h1 class="permit-title" style="margin: 0;">Permit #${data.PermitNo || '-'}</h1>
-            <div class="badge-row" style="margin-top: 4px;">
-              <span class="header-badge">${data.activityName || data.Activity || 'Activity'}</span>
-              <span class="header-badge badge-risk">${getRiskLevel()} Risk</span>
-              <span class="header-badge badge-status">${getStatusText()}</span>
-              <span class="location-pin-text" style="display: inline-block; vertical-align: middle;">
-                <img src="${locationPinDataUrl}" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;" />
-                <span style="vertical-align: middle;">${formatRooms(data.room_names || data.Room_Nos || data.zone_name)}</span>
-              </span>
-            </div>
+
+          <!-- Right: NNE Logo -->
+          <div style="display: flex; align-items: center;">
+            ${imgNneLogo ? `<img src="${imgNneLogo}" alt="NNE Logo" style="height: 38px; width: auto; object-fit: contain; display: block;" />` : ''}
           </div>
         </div>
-        <div class="header-actions" style="flex-shrink: 0; display: flex; align-items: center; gap: 10px;">
-          <button class="btn-action" onclick="test()">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 16px; height: 16px;">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            PDF
-          </button>
-          <div class="triple-dots" style="padding: 8px;">&#8942;</div>
+
+        <!-- Row 2: Permit # Title, Badges & Location below logos (Center Aligned) -->
+        <div class="header-details-row" style="width: 100%; text-align: center;">
+          <h1 class="permit-title" style="margin: 0 auto 8px auto; font-size: 25px; font-weight: 800; color: #1e293b; letter-spacing: -0.2px; text-align: center;">Permit <span style="color: #ea580c; font-weight: 800;">#${data.PermitNo || '-'}</span></h1>
+          <div class="badge-row" style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 0 auto;">
+            <span class="header-badge">${data.activityName || data.Activity || 'Activity'}</span>
+            <span class="header-badge badge-risk">${getRiskLevel()} Risk</span>
+            <span class="header-badge badge-status">${getStatusText()}</span>
+            <span class="location-pin-text" style="display: inline-block; vertical-align: middle;">
+              <img src="${locationPinDataUrl}" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;" />
+              <span style="vertical-align: middle;">${formatRooms(data.room_names || data.Room_Nos || data.zone_name)}</span>
+            </span>
+          </div>
         </div>
       </div>
       
@@ -2097,40 +2099,23 @@ export function generatePermitHtml(data: any): string {
               <div class="info-label">Machinery Used</div>
               <div class="info-value">${data.Machinery || '-'}</div>
             </div>
-          </div>
-        </div>
-
-        <!-- Details of Persons Attending Toolbox Talk Table -->
-        <div class="dashboard-card">
-          <div class="card-section-header" style="margin-bottom: 16px; border-bottom: none; padding-bottom: 0;">
-            <div class="card-section-title-wrap">
-              <span class="card-section-icon" style="color: #4f46e5;">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 20px; height: 20px;">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-                </svg>
-              </span>
-              <div>
-                <h2 class="card-section-title" style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #1e293b;">Details of Persons Attending Toolbox Talk</h2>
+            <!-- Upload Images Section (For Checkin/Checkout Picture popups) -->
+            <div class="info-fullwidth">
+              <div class="card-section-header">
+                <div class="card-section-title-wrap">
+                  <span class="card-section-icon">
+                    ${getCardHeaderIcon('attachments')}
+                  </span>
+                  <div class="detailed-section-title">
+                    Uploaded Check-in & Check-out Pictures
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                ${imagesHtml}
               </div>
             </div>
           </div>
-          
-          <table style="width: 100%; border-collapse: collapse; font-family: 'Mulish', sans-serif; font-size: 13px; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; page-break-inside: avoid;">
-            <thead>
-              <tr style="background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0;">
-                <th style="width: 50%; padding: 12px 16px; font-weight: 600; text-align: left; border-right: 1px solid #e2e8f0; color: #475569;">Date/Time:</th>
-                <th style="width: 50%; padding: 12px 16px; font-weight: 600; text-align: left; color: #475569;">Toolbox Conducted by:</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${Array.from({ length: 8 }).map((_, i) => `
-                <tr style="background-color: ${i % 2 === 0 ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">
-                  <td style="padding: 14px 16px; border-right: 1px solid #e2e8f0; color: #94a3b8; font-weight: 500; height: 45px; vertical-align: middle;">Name:</td>
-                  <td style="padding: 14px 16px; color: #94a3b8; font-weight: 500; height: 45px; vertical-align: middle;">Signature:</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
         </div>
 
         <!-- Safety Precautions & Notes -->
@@ -2901,6 +2886,39 @@ export function generatePermitHtml(data: any): string {
         <div class="row">
           ${imagesHtml}
         </div>
+      </div>
+
+      <!-- Details of Persons Attending Toolbox Talk Table -->
+      <div class="dashboard-card">
+        <div class="card-section-header" style="margin-bottom: 16px; border-bottom: none; padding-bottom: 0;">
+          <div class="card-section-title-wrap">
+            <span class="card-section-icon" style="color: #4f46e5;">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width: 20px; height: 20px;">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+              </svg>
+            </span>
+            <div>
+              <h2 class="card-section-title" style="font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; color: #1e293b;">Details of Persons Attending Toolbox Talk</h2>
+            </div>
+          </div>
+        </div>
+        
+        <table style="width: 100%; border-collapse: collapse; font-family: 'Mulish', sans-serif; font-size: 13px; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; page-break-inside: avoid;">
+          <thead>
+            <tr style="background-color: #f1f5f9; border-bottom: 1px solid #e2e8f0;">
+              <th style="width: 50%; padding: 12px 16px; font-weight: 600; text-align: left; border-right: 1px solid #e2e8f0; color: #475569;">Date/Time:</th>
+              <th style="width: 50%; padding: 12px 16px; font-weight: 600; text-align: left; color: #475569;">Toolbox Conducted by:</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Array.from({ length: 8 }).map((_, i) => `
+              <tr style="background-color: ${i % 2 === 0 ? '#ffffff' : '#f8fafc'}; border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 14px 16px; border-right: 1px solid #e2e8f0; color: #94a3b8; font-weight: 500; height: 45px; vertical-align: middle;">Name:</td>
+                <td style="padding: 14px 16px; color: #94a3b8; font-weight: 500; height: 45px; vertical-align: middle;">Signature:</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
       </div>
 
     </div>
