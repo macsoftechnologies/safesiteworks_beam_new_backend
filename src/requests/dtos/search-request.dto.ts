@@ -1,11 +1,26 @@
 import { IsString, IsOptional, IsNumber } from 'class-validator';
+import { Transform } from 'class-transformer';
+
+const ToOptionalNumber = () =>
+  Transform(({ value }) => {
+    if (value === null || value === undefined || value === '') return undefined;
+    const cleaned = String(value).replace(/'/g, '').trim();
+    if (cleaned === '') return undefined;
+    const num = Number(cleaned);
+    return isNaN(num) ? undefined : num;
+  });
 
 export class SearchRequestDto {
+  @IsOptional()
+  Start?: any;
+
   // Pagination
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   Page?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   End?: number; // acts as limit
@@ -31,10 +46,12 @@ export class SearchRequestDto {
   @IsOptional()
   Request_status?: string;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   Site_Id?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   Building_Id?: number;
@@ -59,10 +76,12 @@ export class SearchRequestDto {
   @IsOptional()
   zoneIds?: any;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   Sub_Contractor_Id?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   Type_Of_Activity_Id?: number;
@@ -104,75 +123,93 @@ export class SearchRequestDto {
   @IsOptional()
   LoginType?: string;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   user_id?: number;
 
   // Safety work flags from sub-tables
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   Hot_work?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   working_on_electrical_system?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   working_hazardious_substen?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   using_cranes_or_lifting?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
-  pressure_tesing_of_equipment?: number; // note: matches frontend pressure_tesing_of_equipment
+  pressure_tesing_of_equipment?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   working_at_height?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   working_confined_spaces?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   work_in_atex_area?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   securing_facilities?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   excavation_works?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   specific_gloves?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   eye_protection?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   fall_protection?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   hearing_protection?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   respiratory_protection?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   hras?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   taskSpecificPPE?: number;
@@ -181,10 +218,12 @@ export class SearchRequestDto {
   @IsOptional()
   area?: string;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   power_on?: number;
 
+  @ToOptionalNumber()
   @IsNumber()
   @IsOptional()
   pressurization?: number;
