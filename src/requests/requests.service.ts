@@ -2580,12 +2580,13 @@ export class RequestsService {
           });
         }
         if (dto.Request_status) {
-          const statusList = dto.Request_status.split(',').map(s => s.trim());
+          const rawStatus = String(dto.Request_status).replace(/'/g, '').trim();
+          const statusList = rawStatus.split(',').map(s => s.trim().replace(/^'|'$/g, '')).filter(Boolean);
           if (statusList.length > 1) {
             qb.andWhere('requests.Request_status IN (:...requestStatuses)', {
               requestStatuses: statusList,
             });
-          } else {
+          } else if (statusList.length === 1) {
             const singleStatus = statusList[0];
             if (singleStatus === 'Auto-Cancelled') {
               qb.andWhere('extraMisc.cancelReason = :cancelReason', {
@@ -2609,17 +2610,17 @@ export class RequestsService {
         if (
           dto.Site_Id !== undefined &&
           dto.Site_Id !== null &&
-          Number(dto.Site_Id) !== 0
+          Number(String(dto.Site_Id).replace(/'/g, '').trim()) !== 0
         ) {
-          qb.andWhere('requests.Site_Id = :siteId', { siteId: dto.Site_Id });
+          qb.andWhere('requests.Site_Id = :siteId', { siteId: Number(String(dto.Site_Id).replace(/'/g, '').trim()) });
         }
         if (
           dto.Building_Id !== undefined &&
           dto.Building_Id !== null &&
-          Number(dto.Building_Id) !== 0
+          Number(String(dto.Building_Id).replace(/'/g, '').trim()) !== 0
         ) {
           qb.andWhere('requests.Building_Id = :buildingId', {
-            buildingId: dto.Building_Id,
+            buildingId: Number(String(dto.Building_Id).replace(/'/g, '').trim()),
           });
         }
 
@@ -2627,10 +2628,10 @@ export class RequestsService {
         if (
           dto.Floor_Id !== undefined &&
           dto.Floor_Id !== null &&
-          String(dto.Floor_Id).trim() !== '' &&
-          String(dto.Floor_Id).trim() !== '0'
+          String(dto.Floor_Id).replace(/'/g, '').trim() !== '' &&
+          String(dto.Floor_Id).replace(/'/g, '').trim() !== '0'
         ) {
-          const floorIds = await this.resolveFloorIds(String(dto.Floor_Id));
+          const floorIds = await this.resolveFloorIds(String(dto.Floor_Id).replace(/'/g, '').trim());
           if (floorIds !== null) {
             if (floorIds.length > 0) {
               qb.andWhere('requests.Floor_Id IN (:...floorIds)', { floorIds });
@@ -2712,57 +2713,51 @@ export class RequestsService {
           }
         }
 
-        // Room_Nos: support both numeric room ID and room name string
-        // Because Room_Nos is a comma-separated text column we use LIKE conditions.
-        // We resolve the search term to all possible IDs + names then OR them together.
-        if (
-          dto.Room_Nos !== undefined &&
-          dto.Room_Nos !== null &&
-          String(dto.Room_Nos).trim() !== '' &&
-          String(dto.Room_Nos).trim() !== '0'
-        ) {
-          const roomTerms = await this.resolveRoomSearchTerms(
-            String(dto.Room_Nos),
-          );
-          if (roomTerms !== null) {
-            if (roomTerms.length > 0) {
-              const roomConditions = roomTerms
-                .map((_, idx) => `requests.Room_Nos LIKE :roomTerm${idx}`)
-                .join(' OR ');
-              const roomParams: Record<string, string> = {};
-              roomTerms.forEach((t, idx) => {
-                roomParams[`roomTerm${idx}`] = `%${t}%`;
-              });
-              qb.andWhere(`(${roomConditions})`, roomParams);
-            } else {
-              // No rooms matched – return no results
-              qb.andWhere('1 = 0');
-            }
+        // Support both area and Room_Nos search terms
+        const roomSearchVal = dto.Room_Nos !== undefined && dto.Room_Nos !== null && String(dto.Room_Nos).trim() !== ''
+          ? String(dto.Room_Nos)
+          : (dto.area !== undefined && dto.area !== null && String(dto.area).trim() !== '' ? String(dto.area) : '');
+
+        if (roomSearchVal !== '' && roomSearchVal !== '0') {
+          const cleanRoomSearch = roomSearchVal.replace(/'/g, '').trim();
+          const areaTokens = cleanRoomSearch.split(/[|,]/).map(t => t.trim()).filter(Boolean);
+          if (areaTokens.length > 0) {
+            const roomConditions = areaTokens
+              .map((_, idx) => `requests.Room_Nos LIKE :roomTerm${idx}`)
+              .join(' OR ');
+            const roomParams: Record<string, string> = {};
+            areaTokens.forEach((t, idx) => {
+              roomParams[`roomTerm${idx}`] = `%${t}%`;
+            });
+            qb.andWhere(`(${roomConditions})`, roomParams);
           }
         }
 
         if (
           dto.Sub_Contractor_Id !== undefined &&
           dto.Sub_Contractor_Id !== null &&
-          Number(dto.Sub_Contractor_Id) !== 0
+          Number(String(dto.Sub_Contractor_Id).replace(/'/g, '').trim()) !== 0
         ) {
           qb.andWhere('requests.Sub_Contractor_Id = :subContractorId', {
-            subContractorId: dto.Sub_Contractor_Id,
+            subContractorId: Number(String(dto.Sub_Contractor_Id).replace(/'/g, '').trim()),
           });
         }
         if (
           dto.Type_Of_Activity_Id !== undefined &&
           dto.Type_Of_Activity_Id !== null &&
-          Number(dto.Type_Of_Activity_Id) !== 0
+          Number(String(dto.Type_Of_Activity_Id).replace(/'/g, '').trim()) !== 0
         ) {
           qb.andWhere('requests.Type_Of_Activity_Id = :typeOfActivityId', {
-            typeOfActivityId: dto.Type_Of_Activity_Id,
+            typeOfActivityId: Number(String(dto.Type_Of_Activity_Id).replace(/'/g, '').trim()),
           });
         }
         if (dto.Room_Type) {
-          qb.andWhere('requests.Room_Type = :roomType', {
-            roomType: dto.Room_Type,
-          });
+          const cleanRoomType = String(dto.Room_Type).replace(/'/g, '').trim();
+          if (cleanRoomType) {
+            qb.andWhere('requests.Room_Type = :roomType', {
+              roomType: cleanRoomType,
+            });
+          }
         }
         if (dto.permit_type) {
           qb.andWhere('requests.permit_type = :permitType', {
