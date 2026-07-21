@@ -6243,6 +6243,8 @@ export class RequestsService {
       companies: Array.from(z.companies),
       clash: z.companies.size > 1,
       hra: z.hra,
+      hraList: Array.from(z.hraActivities),
+      hraText: Array.from(z.hraActivities).join(', '),
       onHold: z.onHold,
       preOk: z.preOk,
       permits: z.permits,
