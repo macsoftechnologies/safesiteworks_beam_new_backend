@@ -2050,6 +2050,20 @@ export class RequestsService {
         }
 
         if (targetStatus !== '') {
+          // Prevent setting to same status (status must move forward)
+          const currentStatusClean = (existing.requestStatus || '').trim().toLowerCase();
+          const targetStatusClean = (targetStatus || '').trim().toLowerCase();
+          const resolvedStatusClean = (resolvedStatus || '').trim().toLowerCase();
+
+          if (
+            targetStatusClean !== '' &&
+            (targetStatusClean === currentStatusClean || resolvedStatusClean === currentStatusClean)
+          ) {
+            throw new BadRequestException(
+              `Permit ${existing.permitNo ? existing.permitNo + ' ' : ''}is already in '${existing.requestStatus}' status.`,
+            );
+          }
+
           await this.validateStatusTransitionAndRole(existing, targetStatus, userId || 0);
           if (Request_status !== undefined) {
             updateData.requestStatus = resolvedStatus;
@@ -2084,12 +2098,12 @@ export class RequestsService {
         const providedConM = (ConM_initials || '').trim();
         const providedCoMM = (CoMM_initials || '').trim();
         const providedConM1 = (ConM_initials1 || '').trim();
-        const anyInitials = providedInitials || providedConM || providedCoMM || providedConM1;
+        const sig = providedInitials || providedConM || providedCoMM || providedConM1;
 
-        if (anyInitials !== '') {
+        if (sig !== '') {
           const nextStatus = resolvedStatus || targetStatus || existing.requestStatus || '';
           if (nextStatus === 'Opened' || targetStatus === 'Opened') {
-            ext.conMInitials1 = providedConM1 || providedInitials || providedConM;
+            ext.conMInitials1 = providedConM1 || sig;
             isExtUpdated = true;
           }
 
@@ -2097,54 +2111,51 @@ export class RequestsService {
           const permitUnder = (existing.permitUnder || '').trim();
           const currentStatus = (existing.requestStatus || '').trim();
 
-          // Rule 1: Construction & Construction => ConM_initials (Direct approval)
+          // Rule 1: Construction & Construction => ONLY ConM_initials (Direct approval)
           if (permitType === 'Construction' && permitUnder === 'Construction') {
-            ext.conMInitials = providedConM || providedInitials;
+            ext.conMInitials = providedConM || sig;
             isExtUpdated = true;
           }
-          // Rule 2: Commissioning & Commissioning => CoMM_initials (Direct approval)
+          // Rule 2: Commissioning & Commissioning => ONLY CoMM_initials (Direct approval)
           else if (permitType === 'Commissioning' && permitUnder === 'Commissioning') {
-            ext.coMMInitials = providedCoMM || providedInitials;
+            ext.coMMInitials = providedCoMM || sig;
             isExtUpdated = true;
           }
-          // Rule 3 & 4: permit_under: Construction, permit_type: Commissioning
+          // Rule 3: permit_under: Construction, permit_type: Commissioning
           else if (permitUnder === 'Construction' && permitType === 'Commissioning') {
-            // When status is Hold or moving to Pre-Approved => ConM_initials
             if (nextStatus === 'Pre-Approved' || currentStatus === 'Hold' || currentStatus === 'Pending') {
-              ext.conMInitials = providedConM || providedInitials;
+              ext.conMInitials = providedConM || sig;
               isExtUpdated = true;
-            }
-            // When status is Pre-Approved or moving to Approved => CoMM_initials
-            if (nextStatus === 'Approved' || currentStatus === 'Pre-Approved') {
-              ext.coMMInitials = providedCoMM || providedInitials;
+            } else if (nextStatus === 'Approved' || currentStatus === 'Pre-Approved') {
+              ext.coMMInitials = providedCoMM || sig;
+              isExtUpdated = true;
+            } else {
+              ext.conMInitials = providedConM || sig;
               isExtUpdated = true;
             }
           }
-          // Rule 5 & 6: permit_under: Commissioning, permit_type: Construction
+          // Rule 4: permit_under: Commissioning, permit_type: Construction
           else if (permitUnder === 'Commissioning' && permitType === 'Construction') {
-            // When status is Hold or moving to Pre-Approved => CoMM_initials
             if (nextStatus === 'Pre-Approved' || currentStatus === 'Hold' || currentStatus === 'Pending') {
-              ext.coMMInitials = providedCoMM || providedInitials;
+              ext.coMMInitials = providedCoMM || sig;
               isExtUpdated = true;
-            }
-            // When status is Pre-Approved or moving to Approved => ConM_initials
-            if (nextStatus === 'Approved' || currentStatus === 'Pre-Approved') {
-              ext.conMInitials = providedConM || providedInitials;
+            } else if (nextStatus === 'Approved' || currentStatus === 'Pre-Approved') {
+              ext.conMInitials = providedConM || sig;
+              isExtUpdated = true;
+            } else {
+              ext.coMMInitials = providedCoMM || sig;
               isExtUpdated = true;
             }
           }
           else {
-            // Fallback for any other combination
             if (providedConM) {
               ext.conMInitials = providedConM;
               isExtUpdated = true;
-            }
-            if (providedCoMM) {
+            } else if (providedCoMM) {
               ext.coMMInitials = providedCoMM;
               isExtUpdated = true;
-            }
-            if (!providedConM && !providedCoMM && providedInitials) {
-              ext.conMInitials = providedInitials;
+            } else if (sig) {
+              ext.conMInitials = sig;
               isExtUpdated = true;
             }
           }
