@@ -1970,6 +1970,13 @@ export class RequestsService {
     Request_status?: string;
     status?: number;
     userId?: number;
+    initials?: string;
+    ConM_initials?: string;
+    CoMM_initials?: string;
+    ConM_initials1?: string;
+    reject_reason?: string;
+    cancel_reason?: string;
+    close_note?: string;
     Start_Time?: string;
     End_Time?: string;
     night_shift?: number;
@@ -1980,6 +1987,13 @@ export class RequestsService {
       Request_status,
       status,
       userId,
+      initials,
+      ConM_initials,
+      CoMM_initials,
+      ConM_initials1,
+      reject_reason,
+      cancel_reason,
+      close_note,
       Start_Time,
       End_Time,
       night_shift,
@@ -2043,6 +2057,101 @@ export class RequestsService {
           if (status !== undefined) {
             updateData.status = status;
           }
+        }
+
+        // 1b. Update extension subtable (initials, reasons, notes)
+        let ext = await this.extraMiscRepo.findOne({ where: { requestId: singleId } });
+        if (!ext) {
+          ext = this.extraMiscRepo.create({ requestId: singleId });
+        }
+
+        let isExtUpdated = false;
+
+        if (reject_reason !== undefined && reject_reason !== '') {
+          ext.rejectReason = reject_reason;
+          isExtUpdated = true;
+        }
+        if (cancel_reason !== undefined && cancel_reason !== '') {
+          ext.cancelReason = cancel_reason;
+          isExtUpdated = true;
+        }
+        if (close_note !== undefined && close_note !== '') {
+          ext.closeNote = close_note;
+          isExtUpdated = true;
+        }
+
+        const providedInitials = (initials || '').trim();
+        const providedConM = (ConM_initials || '').trim();
+        const providedCoMM = (CoMM_initials || '').trim();
+        const providedConM1 = (ConM_initials1 || '').trim();
+        const anyInitials = providedInitials || providedConM || providedCoMM || providedConM1;
+
+        if (anyInitials !== '') {
+          const nextStatus = resolvedStatus || targetStatus || existing.requestStatus || '';
+          if (nextStatus === 'Opened' || targetStatus === 'Opened') {
+            ext.conMInitials1 = providedConM1 || providedInitials || providedConM;
+            isExtUpdated = true;
+          }
+
+          const permitType = (existing.permitType || '').trim();
+          const permitUnder = (existing.permitUnder || '').trim();
+          const currentStatus = (existing.requestStatus || '').trim();
+
+          // Rule 1: Construction & Construction => ConM_initials (Direct approval)
+          if (permitType === 'Construction' && permitUnder === 'Construction') {
+            ext.conMInitials = providedConM || providedInitials;
+            isExtUpdated = true;
+          }
+          // Rule 2: Commissioning & Commissioning => CoMM_initials (Direct approval)
+          else if (permitType === 'Commissioning' && permitUnder === 'Commissioning') {
+            ext.coMMInitials = providedCoMM || providedInitials;
+            isExtUpdated = true;
+          }
+          // Rule 3 & 4: permit_under: Construction, permit_type: Commissioning
+          else if (permitUnder === 'Construction' && permitType === 'Commissioning') {
+            // When status is Hold or moving to Pre-Approved => ConM_initials
+            if (nextStatus === 'Pre-Approved' || currentStatus === 'Hold' || currentStatus === 'Pending') {
+              ext.conMInitials = providedConM || providedInitials;
+              isExtUpdated = true;
+            }
+            // When status is Pre-Approved or moving to Approved => CoMM_initials
+            if (nextStatus === 'Approved' || currentStatus === 'Pre-Approved') {
+              ext.coMMInitials = providedCoMM || providedInitials;
+              isExtUpdated = true;
+            }
+          }
+          // Rule 5 & 6: permit_under: Commissioning, permit_type: Construction
+          else if (permitUnder === 'Commissioning' && permitType === 'Construction') {
+            // When status is Hold or moving to Pre-Approved => CoMM_initials
+            if (nextStatus === 'Pre-Approved' || currentStatus === 'Hold' || currentStatus === 'Pending') {
+              ext.coMMInitials = providedCoMM || providedInitials;
+              isExtUpdated = true;
+            }
+            // When status is Pre-Approved or moving to Approved => ConM_initials
+            if (nextStatus === 'Approved' || currentStatus === 'Pre-Approved') {
+              ext.conMInitials = providedConM || providedInitials;
+              isExtUpdated = true;
+            }
+          }
+          else {
+            // Fallback for any other combination
+            if (providedConM) {
+              ext.conMInitials = providedConM;
+              isExtUpdated = true;
+            }
+            if (providedCoMM) {
+              ext.coMMInitials = providedCoMM;
+              isExtUpdated = true;
+            }
+            if (!providedConM && !providedCoMM && providedInitials) {
+              ext.conMInitials = providedInitials;
+              isExtUpdated = true;
+            }
+          }
+        }
+
+        if (isExtUpdated) {
+          await this.extraMiscRepo.save(ext);
         }
 
         // 2. Process Shift & Timing bulk edit if requested

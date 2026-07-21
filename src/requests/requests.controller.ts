@@ -164,7 +164,23 @@ export class RequestsController {
 
   // 4. Bulk Update Status
   @Put('status/change')
-  async updateStatus(@Body() body: { id: string; Request_status?: string; status?: number; userId?: number }) {
+  async updateStatus(@Body() body: {
+    id: string;
+    Request_status?: string;
+    status?: number;
+    userId?: number;
+    initials?: string;
+    ConM_initials?: string;
+    CoMM_initials?: string;
+    ConM_initials1?: string;
+    reject_reason?: string;
+    cancel_reason?: string;
+    close_note?: string;
+    Start_Time?: string;
+    End_Time?: string;
+    night_shift?: number;
+    new_end_time?: string;
+  }) {
     try {
       const result = await this.requestsService.updateStatus(body);
       return result;
