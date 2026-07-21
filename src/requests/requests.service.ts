@@ -491,8 +491,8 @@ export class RequestsService {
       siteId: dto.Site_Id !== undefined ? dto.Site_Id : 5,
       permitType: dto.permit_type,
       permitUnder: dto.permit_under || 'Construction',
-      newDate: isNightShift ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : 'none') : 'none',
-      newEndTime: isNightShift ? (dto.new_end_time && dto.new_end_time !== 'none' ? dto.new_end_time : 'none') : 'none',
+      newDate: isNightShift ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : '') : '',
+      newEndTime: isNightShift ? (dto.new_end_time && dto.new_end_time !== 'none' ? dto.new_end_time : '') : '',
       nightShift: isNightShift ? '1' : '0',
       safetyPrecautions: dto.Safety_Precautions,
     };
@@ -1584,8 +1584,8 @@ export class RequestsService {
       ? (String(dto.night_shift) === '1' || String(dto.night_shift) === 'true')
       : (String(existing.nightShift) === '1' || existing.nightShift === 'true');
 
-    const finalNewDate = isNightShift ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : 'none') : 'none';
-    const finalNewEndTime = isNightShift ? (dto.new_end_time && dto.new_end_time !== 'none' ? dto.new_end_time : 'none') : 'none';
+    const finalNewDate = isNightShift ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : '') : '';
+    const finalNewEndTime = isNightShift ? (dto.new_end_time && dto.new_end_time !== 'none' ? dto.new_end_time : '') : '';
 
     addIfChanged('permitType', dto.permit_type, existing.permitType);
     addIfChanged('permitUnder', dto.permit_under, existing.permitUnder);
@@ -2079,8 +2079,8 @@ export class RequestsService {
             if (End_Time !== undefined) {
               updateData.endTime = End_Time;
             }
-            updateData.newDate = null as any;
-            updateData.newEndTime = null as any;
+            updateData.newDate = '';
+            updateData.newEndTime = '';
           } else {
             // night_shift is not being changed, just updating start/end times
             const currentNightShift = existing.nightShift === '1';
