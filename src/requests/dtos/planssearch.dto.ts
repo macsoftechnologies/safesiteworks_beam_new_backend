@@ -26,18 +26,17 @@ export class PlanSearchDto {
     Site_Id?: number;
 
     @IsOptional()
-    @IsNumber()
-    @Type(() => Number)
-    Building_Id?: number;
+    Building_Id?: any;
 
     @IsOptional()
-    @IsNumber()
-    @Type(() => Number)
-    Sub_Contractor_Id?: number;
+    Sub_Contractor_Id?: any;
 
     @IsOptional()
     @IsString()
     Room_Type?: string;
+
+    @IsOptional()
+    Floor_Id?: any;
 
     @IsOptional()
     @IsString()
@@ -80,8 +79,11 @@ export class PlanSearchDto {
     new_end_time?: string;
 
     @IsOptional()
+    hras?: any;
+
+    @IsOptional()
     @IsString()
-    hras?: string;
+    Room_Nos?: string;
 
     @IsOptional()
     @IsString()

@@ -51,10 +51,8 @@ export class SearchRequestDto {
   @IsOptional()
   Site_Id?: number;
 
-  @ToOptionalNumber()
-  @IsNumber()
   @IsOptional()
-  Building_Id?: number;
+  Building_Id?: any;
 
   // Floor_Id accepts either a numeric floor ID or a floor name string
   @IsString()
@@ -76,10 +74,8 @@ export class SearchRequestDto {
   @IsOptional()
   zoneIds?: any;
 
-  @ToOptionalNumber()
-  @IsNumber()
   @IsOptional()
-  Sub_Contractor_Id?: number;
+  Sub_Contractor_Id?: any;
 
   @ToOptionalNumber()
   @IsNumber()
