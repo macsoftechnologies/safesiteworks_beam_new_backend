@@ -2429,7 +2429,7 @@ export class RequestsService {
     zoneIdsInput?: any,
     zoneIdInput?: any,
     zoneInput?: any,
-  ): Promise<{ selectedZoneIds: number[]; zoneNames: string[]; roomTerms: string[] } | null> {
+  ): Promise<{ selectedZoneIds: number[]; zoneNames: string[] } | null> {
     const rawZoneTerms: string[] = [];
 
     const extractZoneItems = (val: any) => {
@@ -2493,29 +2493,9 @@ export class RequestsService {
     const selectedZoneIds = Array.from(resolvedZoneIdsSet);
     const zoneNames = Array.from(new Set([...resolvedZoneNamesSet, ...nameTerms]));
 
-    const roomTermsSet = new Set<string>();
-
-    zoneNames.forEach((zName) => {
-      if (zName && zName.trim()) roomTermsSet.add(zName.trim());
-    });
-
-    if (selectedZoneIds.length > 0) {
-      try {
-        const rooms = await this.roomRepo.find({
-          where: { zone_id: In(selectedZoneIds) },
-          select: { room_id: true, room_name: true },
-        });
-        rooms.forEach((r) => {
-          if (r.room_id) roomTermsSet.add(String(r.room_id));
-          if (r.room_name && r.room_name.trim()) roomTermsSet.add(r.room_name.trim());
-        });
-      } catch (e) {}
-    }
-
     return {
       selectedZoneIds,
       zoneNames,
-      roomTerms: Array.from(roomTermsSet),
     };
   }
 
@@ -2902,8 +2882,8 @@ export class RequestsService {
 
         const zoneRes = await this.resolveZoneFilters(dto.zoneIds, dto.Zone_Id, dto.zone);
         if (zoneRes) {
-          const { selectedZoneIds, zoneNames, roomTerms } = zoneRes;
-          if (selectedZoneIds.length > 0 || zoneNames.length > 0 || roomTerms.length > 0) {
+          const { selectedZoneIds, zoneNames } = zoneRes;
+          if (selectedZoneIds.length > 0 || zoneNames.length > 0) {
             qb.andWhere(
               new Brackets((zoneQb) => {
                 let hasCond = false;
@@ -2916,23 +2896,8 @@ export class RequestsService {
                   const paramName = `zName_${index}`;
                   if (hasCond) {
                     zoneQb.orWhere(`requests.zone LIKE :${paramName}`, { [paramName]: `%${zName}%` });
-                    zoneQb.orWhere(`requests.Room_Nos LIKE :${paramName}`, { [paramName]: `%${zName}%` });
-                    zoneQb.orWhere(`requests.Room_Type LIKE :${paramName}`, { [paramName]: `%${zName}%` });
                   } else {
-                    zoneQb.where(
-                      `(requests.zone LIKE :${paramName} OR requests.Room_Nos LIKE :${paramName} OR requests.Room_Type LIKE :${paramName})`,
-                      { [paramName]: `%${zName}%` },
-                    );
-                    hasCond = true;
-                  }
-                });
-
-                roomTerms.forEach((rTerm, index) => {
-                  const paramName = `rTerm_${index}`;
-                  if (hasCond) {
-                    zoneQb.orWhere(`requests.Room_Nos LIKE :${paramName}`, { [paramName]: `%${rTerm}%` });
-                  } else {
-                    zoneQb.where(`requests.Room_Nos LIKE :${paramName}`, { [paramName]: `%${rTerm}%` });
+                    zoneQb.where(`requests.zone LIKE :${paramName}`, { [paramName]: `%${zName}%` });
                     hasCond = true;
                   }
                 });
@@ -3561,8 +3526,8 @@ export class RequestsService {
 
         const planZoneRes = await this.resolveZoneFilters(searchDto.zoneIds, searchDto.Zone_Id, searchDto.zone);
         if (planZoneRes) {
-          const { selectedZoneIds, zoneNames, roomTerms } = planZoneRes;
-          if (selectedZoneIds.length > 0 || zoneNames.length > 0 || roomTerms.length > 0) {
+          const { selectedZoneIds, zoneNames } = planZoneRes;
+          if (selectedZoneIds.length > 0 || zoneNames.length > 0) {
             qb.andWhere(
               new Brackets((zoneQb) => {
                 let hasCond = false;
@@ -3575,23 +3540,8 @@ export class RequestsService {
                   const paramName = `zName_${index}`;
                   if (hasCond) {
                     zoneQb.orWhere(`requests.zone LIKE :${paramName}`, { [paramName]: `%${zName}%` });
-                    zoneQb.orWhere(`requests.Room_Nos LIKE :${paramName}`, { [paramName]: `%${zName}%` });
-                    zoneQb.orWhere(`requests.Room_Type LIKE :${paramName}`, { [paramName]: `%${zName}%` });
                   } else {
-                    zoneQb.where(
-                      `(requests.zone LIKE :${paramName} OR requests.Room_Nos LIKE :${paramName} OR requests.Room_Type LIKE :${paramName})`,
-                      { [paramName]: `%${zName}%` },
-                    );
-                    hasCond = true;
-                  }
-                });
-
-                roomTerms.forEach((rTerm, index) => {
-                  const paramName = `rTerm_${index}`;
-                  if (hasCond) {
-                    zoneQb.orWhere(`requests.Room_Nos LIKE :${paramName}`, { [paramName]: `%${rTerm}%` });
-                  } else {
-                    zoneQb.where(`requests.Room_Nos LIKE :${paramName}`, { [paramName]: `%${rTerm}%` });
+                    zoneQb.where(`requests.zone LIKE :${paramName}`, { [paramName]: `%${zName}%` });
                     hasCond = true;
                   }
                 });
