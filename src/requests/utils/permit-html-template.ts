@@ -1025,6 +1025,18 @@ export function generatePermitHtml(data: any): string {
     approvalsHtml = `<div class="info-label">ConM initials</div><div class="info-value mb-2">${conm}</div>`;
   }
 
+  const mechanicalWorksText = (data.resolvedMechanicalWorks && Array.isArray(data.resolvedMechanicalWorks) && data.resolvedMechanicalWorks.length > 0)
+    ? data.resolvedMechanicalWorks.join(', ')
+    : (data.mechanical_works || '');
+
+  const panelNumbersText = (data.resolvedPanelNumbers && Array.isArray(data.resolvedPanelNumbers) && data.resolvedPanelNumbers.length > 0)
+    ? data.resolvedPanelNumbers.join(', ')
+    : '';
+
+  const systemNumbersText = (data.resolvedSystemNumbers && Array.isArray(data.resolvedSystemNumbers) && data.resolvedSystemNumbers.length > 0)
+    ? data.resolvedSystemNumbers.join(', ')
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1833,31 +1845,22 @@ export function generatePermitHtml(data: any): string {
     <div class="dashboard-card">
       <!-- Header Section: Row 1 (Logos & PDF), Row 2 (Permit #, Badges & Location) -->
       <div class="header-section-wrap" style="width: 100%; margin-bottom: 20px;">
-        <!-- Row 1: Logos (Optically balanced: Novo Nordisk 74px offsets internal padding, NNE 38px matches optical height) -->
-        <div class="header-logos-row" style="display: flex; justify-content: space-between; align-items: center; width: 100%; border-bottom: 1px solid #f1f5f9; padding: 0 140px 14px 140px; margin-bottom: 16px; box-sizing: border-box;">
+        <!-- Row 1: Logos (Optically balanced) -->
+        <div class="header-logos-row" style="display: flex; justify-content: space-between; align-items: center; width: 100%; border-bottom: 1px solid #f1f5f9; padding: 0 40px 14px 40px; margin-bottom: 16px; box-sizing: border-box;">
           <!-- Left: Novo Nordisk Logo -->
           <div style="display: flex; align-items: center;">
-            ${imgCompanyLogo ? `<img src="${imgCompanyLogo}" alt="Novo Nordisk Logo" style="height: 74px; width: auto; object-fit: contain; display: block;" />` : ''}
+            ${imgCompanyLogo ? `<img src="${imgCompanyLogo}" alt="Novo Nordisk Logo" style="height: 110px; width: auto; object-fit: contain; display: block;" />` : ''}
           </div>
 
           <!-- Right: NNE Logo -->
           <div style="display: flex; align-items: center;">
-            ${imgNneLogo ? `<img src="${imgNneLogo}" alt="NNE Logo" style="height: 38px; width: auto; object-fit: contain; display: block;" />` : ''}
+            ${imgNneLogo ? `<img src="${imgNneLogo}" alt="NNE Logo" style="height: 56px; width: auto; object-fit: contain; display: block;" />` : ''}
           </div>
         </div>
 
-        <!-- Row 2: Permit # Title, Badges & Location below logos (Center Aligned) -->
+        <!-- Row 2: Permit # Title below logos (Center Aligned) -->
         <div class="header-details-row" style="width: 100%; text-align: center;">
-          <h1 class="permit-title" style="margin: 0 auto 8px auto; font-size: 25px; font-weight: 800; color: #1e293b; letter-spacing: -0.2px; text-align: center;">Permit <span style="color: #ea580c; font-weight: 800;">#${data.PermitNo || '-'}</span></h1>
-          <div class="badge-row" style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 0 auto;">
-            <span class="header-badge">${data.activityName || data.Activity || 'Activity'}</span>
-            <span class="header-badge badge-risk">${getRiskLevel()} Risk</span>
-            <span class="header-badge badge-status">${getStatusText()}</span>
-            <span class="location-pin-text" style="display: inline-block; vertical-align: middle;">
-              <img src="${locationPinDataUrl}" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;" />
-              <span style="vertical-align: middle;">${formatRooms(data.room_names || data.Room_Nos || data.zone_name)}</span>
-            </span>
-          </div>
+          <h1 class="permit-title" style="margin: 0 auto; font-size: 25px; font-weight: 800; color: #1e293b; letter-spacing: -0.2px; text-align: center;">Permit <span style="color: #ea580c; font-weight: 800;">#${data.PermitNo || '-'}</span></h1>
         </div>
       </div>
       
@@ -1874,15 +1877,6 @@ export function generatePermitHtml(data: any): string {
 
     <!-- Statistics Row Widget -->
     <div class="stats-row">
-      <div class="stats-card">
-        <div class="stats-icon-wrap bg-blue-light">
-          <img src="${statusIconDataUrl}" style="width: 20px; height: 20px; display: block;" />
-        </div>
-        <div class="stats-info">
-          <div class="stats-label">Status</div>
-          <div class="stats-value text-blue">${getStatusText()}</div>
-        </div>
-      </div>
       <div class="stats-card">
         <div class="stats-icon-wrap bg-red-light">
           <img src="${companyIconDataUrl}" style="width: 20px; height: 20px; display: block;" />
@@ -2069,20 +2063,38 @@ export function generatePermitHtml(data: any): string {
             </div>
             <div>
               <div class="info-label">Type of Activity</div>
-              <div class="info-value">${data.work_type || data.activityName || data.Activity || '-'}</div>
+              <div class="info-value">${data.activityName || data.Activity || '-'}</div>
             </div>
             <div>
               <div class="info-label">RAMS Number</div>
               <div class="info-value">${data.rams_number || '-'}</div>
             </div>
+            ${String(data.permit_type || '').toLowerCase().trim() === 'commissioning' ? `
             <div>
-              <div class="info-label">Permit Type</div>
-              <div class="info-value">${data.permit_type || '-'}</div>
+              <div class="info-label">Type of Work</div>
+              <div class="info-value">${data.work_type || '-'}</div>
             </div>
+            ${(String(data.work_type || '').toLowerCase().includes('electrical') || String(data.work_type || '').toLowerCase().includes('both')) ? `
+              ${panelNumbersText ? `
+              <div>
+                <div class="info-label">Panel Numbers</div>
+                <div class="info-value">${panelNumbersText}</div>
+              </div>
+              ` : ''}
+              ${systemNumbersText ? `
+              <div>
+                <div class="info-label">System Numbers</div>
+                <div class="info-value">${systemNumbersText}</div>
+              </div>
+              ` : ''}
+            ` : ''}
+            ${(mechanicalWorksText && (String(data.work_type || '').toLowerCase().includes('mechanical') || String(data.work_type || '').toLowerCase().includes('both'))) ? `
             <div>
-              <div class="info-label">Permit Under</div>
-              <div class="info-value">${data.permit_under || 'Construction'}</div>
+              <div class="info-label">Mechanical Works</div>
+              <div class="info-value">${mechanicalWorksText}</div>
             </div>
+            ` : ''}
+            ` : ''}
             <div>
               <div class="info-label">Supervisor</div>
               <div class="info-value">${data.Foreman || '-'}</div>
@@ -2099,50 +2111,29 @@ export function generatePermitHtml(data: any): string {
               <div class="info-label">Machinery Used</div>
               <div class="info-value">${data.Machinery || '-'}</div>
             </div>
-            <!-- Upload Images Section (For Checkin/Checkout Picture popups) -->
-            <div class="info-fullwidth">
-              <div class="card-section-header">
-                <div class="card-section-title-wrap">
-                  <span class="card-section-icon">
-                    ${getCardHeaderIcon('attachments')}
-                  </span>
-                  <div class="detailed-section-title">
-                    Uploaded Check-in & Check-out Pictures
-                  </div>
-                </div>
-              </div>
-              <div class="row">
-                ${imagesHtml}
-              </div>
-            </div>
           </div>
         </div>
 
-        <!-- Safety Precautions & Notes -->
+        <!-- Detailed Approvals & Notes -->
         <div class="dashboard-card">
-          <div class="card-section-header">
-            <div class="card-section-title-wrap">
-              <span class="card-section-icon">
-                ${getCardHeaderIcon('safety')}
-              </span>
-              <div>
-                <h2 class="card-section-title">Safety Precautions & Notes</h2>
-                <p class="card-section-subtitle">Special instructions for this task</p>
-              </div>
+          <div class="detailed-section-title">
+            Detailed Approvals & Notes
+          </div>
+          <div class="row">
+            <div class="col-md-6">
+              ${approvalsHtml}
+              <div class="info-label mt-2">The person responsible for this work</div>
+              <div class="info-value">${data.ConM_initials1 || 'N/A'}</div>
+            </div>
+            <div class="col-md-6">
+              <div class="info-label">Reject Reason</div>
+              <div class="info-value mb-2">${data.reject_reason || 'N/A'}</div>
+              <div class="info-label">Cancel Reason</div>
+              <div class="info-value mb-2">${data.cancel_reason || 'N/A'}</div>
+              <div class="info-label">Close Note</div>
+              <div class="info-value">${data.close_note || 'N/A'}</div>
             </div>
           </div>
-          
-          ${data.resolvedPrecautions && data.resolvedPrecautions.length > 0 ? `
-            <div class="precautions-card">
-              <div class="precautions-content">
-                <ul>
-                  ${data.resolvedPrecautions.map((p: string) => `<li>${p}</li>`).join('')}
-                </ul>
-              </div>
-            </div>
-          ` : ''}
-
-          ${notesHtml}
         </div>
 
 
@@ -2198,23 +2189,7 @@ export function generatePermitHtml(data: any): string {
 
 
 
-        <!-- Attachments -->
-        <div class="dashboard-card">
-          <div class="card-section-header">
-            <div class="card-section-title-wrap">
-              <span class="card-section-icon">
-                ${getCardHeaderIcon('attachments')}
-              </span>
-              <div>
-                <h2 class="card-section-title">Attachments</h2>
-                <p class="card-section-subtitle">Documents and images</p>
-              </div>
-            </div>
-          </div>
-          <div class="attachments-grid">
-            ${attachmentsHtml}
-          </div>
-        </div>
+
 
         <!-- Metadata -->
         <div class="dashboard-card">
@@ -2856,26 +2831,31 @@ export function generatePermitHtml(data: any): string {
 
 
 
-      <!-- Approvals and Notes original signoffs -->
+      <!-- Safety Precautions & Notes -->
       <div class="dashboard-card">
-        <div class="detailed-section-title">
-          Detailed Approvals & Notes
-        </div>
-        <div class="row">
-          <div class="col-md-6">
-            ${approvalsHtml}
-            <div class="info-label mt-2">The person responsible for this work</div>
-            <div class="info-value">${data.ConM_initials1 || 'N/A'}</div>
-          </div>
-          <div class="col-md-6">
-            <div class="info-label">Reject Reason</div>
-            <div class="info-value mb-2">${data.reject_reason || 'N/A'}</div>
-            <div class="info-label">Cancel Reason</div>
-            <div class="info-value mb-2">${data.cancel_reason || 'N/A'}</div>
-            <div class="info-label">Close Note</div>
-            <div class="info-value">${data.close_note || 'N/A'}</div>
+        <div class="card-section-header">
+          <div class="card-section-title-wrap">
+            <span class="card-section-icon">
+              ${getCardHeaderIcon('safety')}
+            </span>
+            <div>
+              <h2 class="card-section-title">Safety Precautions & Notes</h2>
+              <p class="card-section-subtitle">Special instructions for this task</p>
+            </div>
           </div>
         </div>
+        
+        ${data.resolvedPrecautions && data.resolvedPrecautions.length > 0 ? `
+          <div class="precautions-card">
+            <div class="precautions-content">
+              <ul>
+                ${data.resolvedPrecautions.map((p: string) => `<li>${p}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+        ` : ''}
+
+        ${notesHtml}
       </div>
 
       <!-- Upload Images Section (For Checkin/Checkout Picture popups) -->
