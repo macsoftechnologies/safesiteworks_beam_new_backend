@@ -470,9 +470,15 @@ export class RequestsController {
   async getDashboardOverview(
     @Query('building') building?: string,
     @Query('buildingId') buildingId?: string,
+    @Query('fromDate') fromDate?: string,
+    @Query('toDate') toDate?: string,
   ) {
     try {
-      const data = await this.requestsService.getDashboardOverview({ building: building || buildingId });
+      const data = await this.requestsService.getDashboardOverview({
+        building: building || buildingId,
+        fromDate,
+        toDate,
+      });
       return {
         status: HttpStatus.OK,
         data,

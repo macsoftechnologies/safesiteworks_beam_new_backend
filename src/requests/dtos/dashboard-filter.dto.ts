@@ -48,4 +48,12 @@ export class DashboardFilterDto {
   @IsString()
   @IsOptional()
   roomSearch?: string;
+
+  @IsString()
+  @IsOptional()
+  fromDate?: string;
+
+  @IsString()
+  @IsOptional()
+  toDate?: string;
 }

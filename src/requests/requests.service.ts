@@ -5746,6 +5746,16 @@ export class RequestsService {
       .addSelect('rem.cancel_reason', 'rem_cancelReason')
       .where('req.status = :st', { st: 1 });
 
+    const fromDate = filterPayload?.fromDate;
+    const toDate = filterPayload?.toDate;
+
+    if (fromDate && fromDate.trim() !== '') {
+      query.andWhere('req.Working_Date >= :fromDate', { fromDate });
+    }
+    if (toDate && toDate.trim() !== '') {
+      query.andWhere('req.Working_Date <= :toDate', { toDate });
+    }
+
     if (rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
       if (!isNaN(bNum) && bNum > 0) {
         query.andWhere(
@@ -6006,6 +6016,16 @@ export class RequestsService {
       .leftJoin('request_extra_misc', 'rem', 'rem.request_id = req.id')
       .addSelect('rem.cancel_reason', 'rem_cancelReason')
       .where('req.status = :st', { st: 1 });
+
+    const fromDate = filterPayload?.fromDate;
+    const toDate = filterPayload?.toDate;
+
+    if (fromDate && fromDate.trim() !== '') {
+      query.andWhere('req.Working_Date >= :fromDate', { fromDate });
+    }
+    if (toDate && toDate.trim() !== '') {
+      query.andWhere('req.Working_Date <= :toDate', { toDate });
+    }
 
     if (rawBuilding && String(rawBuilding).trim() !== '' && String(rawBuilding).toLowerCase() !== 'all') {
       if (!isNaN(bNum) && bNum > 0) {
