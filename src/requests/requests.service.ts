@@ -1580,18 +1580,32 @@ export class RequestsService {
         addIfChanged('status', dto.status, existing.status);
       }
     }
-    const isNightShift = dto.night_shift !== undefined
-      ? (String(dto.night_shift) === '1' || String(dto.night_shift) === 'true')
-      : (String(existing.nightShift) === '1' || existing.nightShift === 'true');
-
-    const finalNewDate = isNightShift ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : '') : '';
-    const finalNewEndTime = isNightShift ? (dto.new_end_time && dto.new_end_time !== 'none' ? dto.new_end_time : '') : '';
-
     addIfChanged('permitType', dto.permit_type, existing.permitType);
     addIfChanged('permitUnder', dto.permit_under, existing.permitUnder);
-    addIfChanged('newDate', finalNewDate, existing.newDate);
-    addIfChanged('newEndTime', finalNewEndTime, existing.newEndTime);
-    addIfChanged('nightShift', isNightShift ? '1' : '0', existing.nightShift);
+
+    if (dto.night_shift !== undefined || dto.new_date !== undefined || dto.new_end_time !== undefined) {
+      const isNightShift = dto.night_shift !== undefined
+        ? (String(dto.night_shift) === '1' || String(dto.night_shift) === 'true')
+        : (String(existing.nightShift) === '1' || existing.nightShift === 'true');
+
+      if (isNightShift) {
+        const finalNewDate = dto.new_date !== undefined
+          ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : '')
+          : existing.newDate;
+
+        const finalNewEndTime = dto.new_end_time !== undefined
+          ? (dto.new_end_time && dto.new_end_time !== 'none' ? dto.new_end_time : '')
+          : existing.newEndTime;
+
+        addIfChanged('newDate', finalNewDate, existing.newDate);
+        addIfChanged('newEndTime', finalNewEndTime, existing.newEndTime);
+        addIfChanged('nightShift', '1', existing.nightShift);
+      } else {
+        addIfChanged('newDate', '', existing.newDate);
+        addIfChanged('newEndTime', '', existing.newEndTime);
+        addIfChanged('nightShift', '0', existing.nightShift);
+      }
+    }
     addIfChanged(
       'safetyPrecautions',
       dto.Safety_Precautions,
@@ -3967,7 +3981,8 @@ export class RequestsService {
         userTypes.includes('SuperAdmin') ||
         userTypes.includes('Department') ||
         userTypes.includes('Department1') ||
-        userTypes.includes('HSE')
+        userTypes.includes('HSE') ||
+        userTypes.includes('Observer')
       ) {
         // No filter for admin / department
       } else {
@@ -4082,7 +4097,8 @@ export class RequestsService {
         userTypes.includes('SuperAdmin') ||
         userTypes.includes('Department') ||
         userTypes.includes('Department1') ||
-        userTypes.includes('HSE')
+        userTypes.includes('HSE') ||
+        userTypes.includes('Observer')
       ) {
         // No filter
       } else {
@@ -4139,7 +4155,8 @@ export class RequestsService {
         userTypes.includes('SuperAdmin') ||
         userTypes.includes('Department') ||
         userTypes.includes('Department1') ||
-        userTypes.includes('HSE')
+        userTypes.includes('HSE') ||
+        userTypes.includes('Observer')
       ) {
         // No filter
       } else {
@@ -4236,7 +4253,8 @@ export class RequestsService {
         userTypes.includes('SuperAdmin') ||
         userTypes.includes('Department') ||
         userTypes.includes('Department1') ||
-        userTypes.includes('HSE')
+        userTypes.includes('HSE') ||
+        userTypes.includes('Observer')
       ) {
         // Admin/HSE/Department sees all
       } else {
