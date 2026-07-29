@@ -1,11 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Like } from 'typeorm';
 import { Subcontractor } from './entities/subcontractor.entity';
-import { CreateSubcontractorDto, UpdateSubcontractorDto } from './dtos/subcontractor.dto';
+import { CreateSubcontractorDto, UpdateSubcontractorDto, SubcontractorPaginationQueryDto } from './dtos/subcontractor.dto';
 import { FileUploadService } from './file-upload.service';
 import { RedisCacheService } from 'src/redis/redid-cache.service';
-import { PaginationQueryDto } from 'src/redis/dtos/pagination.dto';
 import { User } from '../users/entities/user.entity';
 
 @Injectable()
@@ -48,9 +47,9 @@ export class SubcontractorService {
     }
   }
 
-  async findAll(query: PaginationQueryDto, loggedInUserId?: number) {
+  async findAll(query: SubcontractorPaginationQueryDto, loggedInUserId?: number) {
     try {
-      const { page = 1, limit = 10, isExport = false } = query;
+      const { page = 1, limit = 10, isExport = false, search = "" } = query;
 
       let subContractorId: number | null = null;
       if (loggedInUserId) {
@@ -61,17 +60,25 @@ export class SubcontractorService {
       }
 
       const cacheKey = subContractorId
-        ? `subcontractors:list:${isExport}:${page}:${limit}:subcon:${subContractorId}`
-        : `subcontractors:list:${isExport}:${page}:${limit}`;
+        ? `subcontractors:list:${isExport}:${page}:${limit}:${search}:subcon:${subContractorId}`
+        : `subcontractors:list:${isExport}:${page}:${limit}:${search}`;
 
       return this.redisCacheService.getOrSet(
         cacheKey,
         async () => {
           const findOptions: any = {
-            order: { createdTime: 'DESC' },
+            order: { subContractorName: 'ASC' },
           };
           if (subContractorId) {
             findOptions.where = { id: subContractorId };
+          }
+          if (search) {
+            const searchFilter = { subContractorName: Like(`%${search}%`) };
+            if (findOptions.where) {
+              findOptions.where = { ...findOptions.where, ...searchFilter };
+            } else {
+              findOptions.where = searchFilter;
+            }
           }
           if (!isExport) {
             findOptions.take = limit;

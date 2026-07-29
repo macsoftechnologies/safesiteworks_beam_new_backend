@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Like } from 'typeorm';
 import { Room } from './entities/room.entity';
 import { CreateRoomDto, UpdateRoomDto, RoomQueryDto } from './dtos/room.dto';
 import { RedisCacheService } from 'src/redis/redid-cache.service';
@@ -21,13 +21,16 @@ export class RoomService {
   }
 
   async findAll(query: RoomQueryDto): Promise<any> {
-    const { page = 1, limit = 10, isExport = false, flid } = query;
+    const { page = 1, limit = 10, isExport = false, flid, search } = query;
     return this.redisCacheService.getOrSet(
-      `rooms:list:${flid ?? 'all'}:${isExport}:${page}:${limit}`,
+      `rooms:list:${flid ?? 'all'}:${search ?? 'all'}:${isExport}:${page}:${limit}`,
       async () => {
         const where: any = {};
         if (flid !== undefined && flid !== null) {
           where.fl_id = flid;
+        }
+        if (search) {
+          where.room_name = Like(`%${search}%`);
         }
         
         const findOptions: any = {

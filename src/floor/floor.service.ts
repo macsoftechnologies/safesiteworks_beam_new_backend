@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Like } from 'typeorm';
 import { Floor } from './entities/floor.entity';
 import { CreateFloorDto, UpdateFloorDto, FloorQueryDto } from './dtos/floor.dto';
 import { RedisCacheService } from 'src/redis/redid-cache.service';
@@ -21,13 +21,16 @@ export class FloorService {
   }
 
   async findAll(query: FloorQueryDto): Promise<any> {
-    const { page = 1, limit = 10, isExport = false, bid } = query;
+    const { page = 1, limit = 10, isExport = false, bid, search } = query;
     return this.redisCacheService.getOrSet(
-      `floors:list:${bid ?? 'all'}:${isExport}:${page}:${limit}`,
+      `floors:list:${bid ?? 'all'}:${search ?? 'all'}:${isExport}:${page}:${limit}`,
       async () => {
         const where: any = {};
         if (bid !== undefined && bid !== null) {
           where.build_id = bid;
+        }
+        if (search) {
+          where.floor_name = Like(`%${search}%`);
         }
 
         const findOptions: any = {

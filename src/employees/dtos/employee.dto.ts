@@ -198,6 +198,14 @@ export class CreateUserLogDto {
   @IsOptional() @IsString() timestamp?: string;
 }
 
+export class LogsReportsQueryDto extends PaginationQueryDto {
+  @IsOptional() @IsString() username?: string;
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @IsString() user?: string;
+  @IsOptional() @IsString() date?: string;
+  @IsOptional() @IsString() searchDate?: string;
+}
+
 export class SubContEmployeesQueryDto extends PaginationQueryDto {
   @IsNotEmpty()
   @Type(() => Number)

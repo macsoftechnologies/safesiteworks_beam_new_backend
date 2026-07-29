@@ -206,4 +206,17 @@ export class PlanSearchDto {
 
     @IsOptional()
     zoneIds?: any;
+
+    @IsOptional()
+    @IsNumber()
+    @Type(() => Number)
+    Type_Of_Activity_Id?: number;
+
+    @IsOptional()
+    @IsString()
+    PermitNo?: string;
+
+    @IsOptional()
+    @IsString()
+    Activity?: string;
 }

@@ -1,7 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, HttpCode, Query, UseInterceptors, UploadedFile, HttpStatus, UseGuards, Request } from '@nestjs/common';
 import { SubcontractorService } from './subcontractor.service';
-import { CreateSubcontractorDto, UpdateSubcontractorDto } from './dtos/subcontractor.dto';
-import { PaginationQueryDto } from 'src/redis/dtos/pagination.dto';
+import { CreateSubcontractorDto, UpdateSubcontractorDto, SubcontractorPaginationQueryDto } from './dtos/subcontractor.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { diskStorage } from 'multer';
@@ -30,7 +29,7 @@ export class SubcontractorController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
-  async findAll(@Query() query: PaginationQueryDto, @Request() req: any) {
+  async findAll(@Query() query: SubcontractorPaginationQueryDto, @Request() req: any) {
     try {
       const subcontractors = await this.subcontractorService.findAll(query, req.user?.userId);
       return subcontractors;

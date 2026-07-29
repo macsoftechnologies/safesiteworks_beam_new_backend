@@ -583,17 +583,28 @@ export class EmployeesService {
   }
 
   async getUserLogs(
-    query: PaginationQueryDto,
+    query: any,
   ): Promise<{ statusCode: HttpStatus; data: UserLog[]; total: number; page: number; limit: number; totalPages: number }> {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const page = Number(query.page ?? 1);
+    const limit = Number(query.limit ?? 20);
     const skip = (page - 1) * limit;
+    const searchUser = query.username || query.search || query.user || '';
+    const searchDate = query.date || query.searchDate || '';
 
-    const [data, total] = await this.userLogRepo.findAndCount({
-      order: { timestamp: 'DESC' },
-      skip,
-      take: limit,
-    });
+    const qb = this.userLogRepo.createQueryBuilder('log')
+      .orderBy('log.timestamp', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    if (searchUser && String(searchUser).trim() !== '') {
+      qb.andWhere('log.user LIKE :searchUser', { searchUser: `%${String(searchUser).trim()}%` });
+    }
+
+    if (searchDate && String(searchDate).trim() !== '') {
+      qb.andWhere('log.timestamp LIKE :searchDate', { searchDate: `${String(searchDate).trim()}%` });
+    }
+
+    const [data, total] = await qb.getManyAndCount();
 
     return {
       statusCode: HttpStatus.OK,

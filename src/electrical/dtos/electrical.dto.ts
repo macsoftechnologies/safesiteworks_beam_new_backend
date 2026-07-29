@@ -27,4 +27,8 @@ export class ElectricalQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   module?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

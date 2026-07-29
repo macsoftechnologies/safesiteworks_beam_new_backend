@@ -21,16 +21,16 @@ export class RedisCacheService {
     cb: () => Promise<T>,
     ttl,
   ): Promise<T> {
-    // ✅ CHECK CACHE
-    const cachedData =
-      await this.cacheManager.get<T>(key);
+    try {
+      // ✅ CHECK CACHE
+      const cachedData = await this.cacheManager.get<T>(key);
 
-    if (cachedData) {
-      console.log(
-        `🟩 CACHE HIT: ${key}`,
-      );
-
-      return cachedData;
+      if (cachedData) {
+        console.log(`🟩 CACHE HIT: ${key}`);
+        return cachedData;
+      }
+    } catch (err) {
+      console.warn(`⚠️ Cache check failed for key "${key}":`, err.message || err);
     }
 
     console.log(`🔥 DB HIT: ${key}`);
@@ -38,18 +38,26 @@ export class RedisCacheService {
     // ✅ FETCH DATA
     const freshData = await cb();
 
-    // ✅ STORE CACHE
-    await this.cacheManager.set(
-      key,
-      freshData,
-      ttl,
-    );
+    try {
+      // ✅ STORE CACHE
+      await this.cacheManager.set(
+        key,
+        freshData,
+        ttl,
+      );
+    } catch (err) {
+      console.warn(`⚠️ Cache store failed for key "${key}":`, err.message || err);
+    }
 
     return freshData;
   }
 
   async delete(key: string) {
-    await this.cacheManager.del(key);
+    try {
+      await this.cacheManager.del(key);
+    } catch (err) {
+      console.warn(`⚠️ Cache delete failed for key "${key}":`, err.message || err);
+    }
   }
 
   async deleteByPattern(pattern: string) {
@@ -71,19 +79,36 @@ export class RedisCacheService {
         }
       } catch (err) {
         console.error(`Failed to delete keys by pattern ${pattern}:`, err);
-        await this.cacheManager.clear();
+        try {
+          await this.cacheManager.clear();
+        } catch (clearErr) {
+          console.error(`Failed to clear cache:`, clearErr);
+        }
       }
     } else {
-      await this.cacheManager.clear();
-      console.log(`🧹 CACHE CLEARED (Fallback)`);
+      try {
+        await this.cacheManager.clear();
+        console.log(`🧹 CACHE CLEARED (Fallback)`);
+      } catch (clearErr) {
+        console.error(`Failed to clear cache (Fallback):`, clearErr);
+      }
     }
   }
 
   async get<T>(key: string): Promise<T | undefined> {
-    return this.cacheManager.get<T>(key);
+    try {
+      return await this.cacheManager.get<T>(key);
+    } catch (err) {
+      console.warn(`⚠️ Cache get failed for key "${key}":`, err.message || err);
+      return undefined;
+    }
   }
 
   async set<T>(key: string, value: T, ttl?: number): Promise<void> {
-    await this.cacheManager.set(key, value, ttl);
+    try {
+      await this.cacheManager.set(key, value, ttl);
+    } catch (err) {
+      console.warn(`⚠️ Cache set failed for key "${key}":`, err.message || err);
+    }
   }
 }

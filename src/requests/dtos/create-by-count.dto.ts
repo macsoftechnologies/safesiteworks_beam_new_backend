@@ -121,4 +121,17 @@ export class CreateByCountDto {
   @IsNumber()
   @IsOptional()
   count?: number;
+
+  @IsString()
+  @IsOptional()
+  New_End_Time?: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  night_shift?: number;
+
+  @IsString()
+  @IsOptional()
+  Number_Of_Workers?: string;
 }

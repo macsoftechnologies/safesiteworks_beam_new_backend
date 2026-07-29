@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Like } from 'typeorm';
 import { ElectricalWork } from './entities/electrical.entity';
 import { CreateElectricalDto, UpdateElectricalDto, ElectricalQueryDto } from './dtos/electrical.dto';
 import { RedisCacheService } from 'src/redis/redid-cache.service';
@@ -21,13 +21,16 @@ export class ElectricalService {
   }
 
   async findAll(query: ElectricalQueryDto): Promise<any> {
-    const { page = 1, limit = 10, isExport = false, module } = query;
+    const { page = 1, limit = 10, isExport = false, module, search } = query;
     return this.redisCacheService.getOrSet(
-      `electrical:list:${module ?? 'all'}:${isExport}:${page}:${limit}`,
+      `electrical:list:${module ?? 'all'}:${search ?? 'all'}:${isExport}:${page}:${limit}`,
       async () => {
         const where: any = {};
         if (module) {
           where.module = module;
+        }
+        if (search) {
+          where.electrical_works = Like(`%${search}%`);
         }
 
         const findOptions: any = {

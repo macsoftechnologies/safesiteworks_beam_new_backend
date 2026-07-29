@@ -53,4 +53,8 @@ export class RoomQueryDto extends PaginationQueryDto {
   @Transform(({ value }) => (value ? Number(value) : undefined))
   @IsNumber()
   flid?: number;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

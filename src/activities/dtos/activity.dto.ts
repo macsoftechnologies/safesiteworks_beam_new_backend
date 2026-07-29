@@ -19,4 +19,8 @@ export class ActivitiesQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   activityName?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

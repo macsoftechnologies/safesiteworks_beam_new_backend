@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Like } from 'typeorm';
 import { Activity } from './entities/activity.entity';
 import { CreateActivityDto, UpdateActivityDto, ActivitiesQueryDto } from './dtos/activity.dto';
 import { RedisCacheService } from 'src/redis/redid-cache.service';
@@ -21,13 +21,14 @@ export class ActivitiesService {
   }
 
   async findAll(query: ActivitiesQueryDto): Promise<any> {
-    const { page = 1, limit = 10, isExport = false, activityName } = query;
+    const { page = 1, limit = 10, isExport = false, activityName, search } = query;
+    const searchTerm = search || activityName;
     return this.redisCacheService.getOrSet(
-      `activities:list:${activityName ?? 'all'}:${isExport}:${page}:${limit}`,
+      `activities:list:${searchTerm ?? 'all'}:${isExport}:${page}:${limit}`,
       async () => {
         const where: any = {};
-        if (activityName) {
-          where.activityName = activityName;
+        if (searchTerm) {
+          where.activityName = Like(`%${searchTerm}%`);
         }
 
         const findOptions: any = {

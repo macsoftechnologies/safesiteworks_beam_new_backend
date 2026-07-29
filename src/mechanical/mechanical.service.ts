@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Like } from 'typeorm';
 import { MechanicalWork } from './entities/mechanical.entity';
 import { CreateMechanicalDto, UpdateMechanicalDto, MechanicalQueryDto } from './dtos/mechanical.dto';
 import { RedisCacheService } from 'src/redis/redid-cache.service';
@@ -21,13 +21,16 @@ export class MechanicalService {
   }
 
   async findAll(query: MechanicalQueryDto): Promise<any> {
-    const { page = 1, limit = 10, isExport = false, mechanical_works } = query;
+    const { page = 1, limit = 10, isExport = false, mechanical_works, search } = query;
     return this.redisCacheService.getOrSet(
-      `mechanical:list:${mechanical_works ?? 'all'}:${isExport}:${page}:${limit}`,
+      `mechanical:list:${mechanical_works ?? 'all'}:${search ?? 'all'}:${isExport}:${page}:${limit}`,
       async () => {
         const where: any = {};
         if (mechanical_works) {
           where.mechanical_works = mechanical_works;
+        }
+        if (search) {
+          where.mechanical_works = Like(`%${search}%`);
         }
 
         const findOptions: any = {

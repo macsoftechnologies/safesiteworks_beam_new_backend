@@ -37,4 +37,8 @@ export class FloorQueryDto extends PaginationQueryDto {
   @Transform(({ value }) => (value ? Number(value) : undefined))
   @IsNumber()
   bid?: number;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

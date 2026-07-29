@@ -1,5 +1,6 @@
 import { IsString, IsNotEmpty, IsNumber, IsOptional, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { PaginationQueryDto } from '../../redis/dtos/pagination.dto';
 
 export class CreateSubcontractorDto {
   @Transform(({ value }) => (value ? Number(value) : undefined))
@@ -31,4 +32,10 @@ export class UpdateSubcontractorDto {
   @IsOptional()
   @IsString()
   logo?: string;
+}
+
+export class SubcontractorPaginationQueryDto extends PaginationQueryDto {
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

@@ -2307,12 +2307,32 @@ export class RequestsService {
     if (!id) {
       throw new BadRequestException('Missing required field: id');
     }
+
     const idsArray = id
       .split(',')
       .map((val) => Number(val.trim()))
       .filter((val) => !isNaN(val));
 
-    await this.requestRepo.update(idsArray, { safetyPrecautions: safety });
+    // Parse the new precaution IDs the user selected
+    const newPrecautionIds = (safety || '')
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean);
+
+    // Fetch current safety precautions for all selected permits
+    const permits = await this.requestRepo.findBy({ id: In(idsArray) });
+
+    // For each permit, merge existing IDs with new IDs (union, no duplicates)
+    for (const permit of permits) {
+      const existingIds = (permit.safetyPrecautions || '')
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean);
+
+      const mergedIds = Array.from(new Set([...existingIds, ...newPrecautionIds]));
+      await this.requestRepo.update(permit.id, { safetyPrecautions: mergedIds.join(',') });
+    }
+
     await this.redisCacheService.deleteByPattern('requests:*');
     return { success: true, updatedCount: idsArray.length };
   }
@@ -3258,7 +3278,7 @@ export class RequestsService {
       'work_in_atex_area', 'securing_facilities', 'excavation_works',
       'specific_gloves', 'eye_protection', 'fall_protection', 'hearing_protection',
       'respiratory_protection', 'taskSpecificPPE', 'power_on', 'pressurization',
-      'fromDate', 'toDate', 'Start_Time', 'End_Time', 'Zone_Id', 'zone', 'zoneIds', 'Room_Nos', 'Floor_Id'
+      'fromDate', 'toDate', 'Start_Time', 'End_Time', 'Zone_Id', 'zone', 'zoneIds', 'Room_Nos', 'Floor_Id', 'Type_Of_Activity_Id', 'PermitNo', 'Activity'
     ];
     const filteredSearchDto: PlanSearchDto = {};
     for (const key of allowedKeys) {
@@ -3432,6 +3452,25 @@ export class RequestsService {
         }
         if (searchDto.permit_under) {
           qb.andWhere('requests.permit_under = :permitUnder', { permitUnder: searchDto.permit_under });
+        }
+        if (
+          searchDto.Type_Of_Activity_Id !== undefined &&
+          searchDto.Type_Of_Activity_Id !== null &&
+          Number(String(searchDto.Type_Of_Activity_Id).replace(/'/g, '').trim()) !== 0
+        ) {
+          qb.andWhere('requests.Type_Of_Activity_Id = :typeOfActivityId', {
+            typeOfActivityId: Number(String(searchDto.Type_Of_Activity_Id).replace(/'/g, '').trim()),
+          });
+        }
+        if (searchDto.PermitNo) {
+          qb.andWhere('requests.PermitNo LIKE :permitNo', {
+            permitNo: `%${searchDto.PermitNo}%`,
+          });
+        }
+        if (searchDto.Activity) {
+          qb.andWhere('requests.Activity LIKE :activityName', {
+            activityName: `%${searchDto.Activity}%`,
+          });
         }
         if (searchDto.night_shift !== undefined && searchDto.night_shift !== null && String(searchDto.night_shift).trim() !== '') {
           const nsVal = String(searchDto.night_shift).trim();
@@ -3749,7 +3788,55 @@ export class RequestsService {
     return { status: 202, message: 'Request not updated' };
   }
 
-  // 4. Soft delete RAMS file attachment
+  // 4. Upload/Add RAMS file attachments for an existing request
+  async addRamsFiles(
+    requestId: number,
+    files?: any[],
+    userId?: number,
+  ): Promise<any> {
+    if (!requestId || isNaN(requestId)) {
+      return {
+        status: false,
+        message: 'Invalid request ID',
+      };
+    }
+
+    const request = await this.requestRepo.findOne({ where: { id: requestId } });
+    if (!request) {
+      return {
+        status: false,
+        message: `Request with ID ${requestId} not found`,
+      };
+    }
+
+    if (files && files.length > 0) {
+      for (const file of files) {
+        const filePath = file.path.replace(/\\/g, '/');
+        await this.ramsFileRepo.insert({
+          requestId,
+          ramsFile: filePath,
+          status: 1,
+          createdAt: new Date(),
+          userId: userId || 0,
+        });
+      }
+    }
+
+    await this.redisCacheService.deleteByPattern('requests:*');
+
+    const updatedFiles = await this.ramsFileRepo.find({
+      where: { requestId, status: 1 },
+      order: { ramsFileId: 'ASC' },
+    });
+
+    return {
+      status: true,
+      message: 'RAMS Files uploaded successfully',
+      files: updatedFiles,
+    };
+  }
+
+  // Soft delete RAMS file attachment
   async softDeleteRamsFile(ramsFileId: number): Promise<any> {
     await this.ramsFileRepo.update(ramsFileId, { status: 0 });
     await this.redisCacheService.deleteByPattern('requests:*');
@@ -5264,7 +5351,7 @@ export class RequestsService {
         foremanPhoneNumber: dto.Foreman_Phone_Number ?? originalRequest.foremanPhoneNumber,
         activity: dto.Activity ?? originalRequest.activity,
         typeOfActivityId: dto.Type_Of_Activity_Id ?? originalRequest.typeOfActivityId,
-        requestDate: dto.Request_Date ?? originalRequest.requestDate,
+        requestDate: new Date().toISOString().split('T')[0],
         startTime: dto.Start_Time ?? originalRequest.startTime,
         endTime: dto.End_Time ?? originalRequest.endTime,
         assignStartTime: dto.Assign_Start_Time ?? originalRequest.assignStartTime,
@@ -5284,8 +5371,9 @@ export class RequestsService {
         siteId: dto.Site_Id ?? originalRequest.siteId ?? 5,
         permitType: originalRequest.permitType,
         permitUnder: originalRequest.permitUnder || 'Construction',
-        newEndTime: originalRequest.newEndTime,
-        nightShift: originalRequest.nightShift,
+        newEndTime: dto.New_End_Time ?? originalRequest.newEndTime,
+        nightShift: dto.night_shift !== undefined ? String(dto.night_shift) : originalRequest.nightShift,
+        numberOfWorkers: dto.Number_Of_Workers ?? originalRequest.numberOfWorkers,
         safetyPrecautions: originalRequest.safetyPrecautions,
       });
 

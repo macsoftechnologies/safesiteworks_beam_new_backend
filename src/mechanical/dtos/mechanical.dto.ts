@@ -19,4 +19,8 @@ export class MechanicalQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsString()
   mechanical_works?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
 }

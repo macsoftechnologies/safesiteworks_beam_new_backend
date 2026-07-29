@@ -43,9 +43,20 @@ export const requestMulterOptions = {
   storage: diskStorage({
     destination: uploadDir,
     filename: (req, file, callback) => {
-      const uniqueSuffix = Date.now() + '_' + Math.round(Math.random() * 1e9);
-      const ext = extname(file.originalname);
-      callback(null, `rams_${uniqueSuffix}${ext}`);
+      const originalName = file.originalname || 'file';
+      const ext = extname(originalName);
+      const nameWithoutExt = originalName.substring(0, originalName.length - ext.length);
+      const cleanBaseName = nameWithoutExt.replace(/^rams[_-]/i, '');
+      const sanitizedBaseName = cleanBaseName.replace(/[/\\?%*:|"<>]/g, '_');
+
+      let targetFilename = `rams_${sanitizedBaseName}${ext}`;
+      const filePath = join(uploadDir, targetFilename);
+
+      if (fs.existsSync(filePath)) {
+        targetFilename = `rams_${sanitizedBaseName}_${Date.now()}${ext}`;
+      }
+
+      callback(null, targetFilename);
     },
   }),
   fileFilter: (req, file, callback) => {
@@ -242,6 +253,49 @@ export class RequestsController {
       return await this.requestsService.deleteSelected(body.id, body.Request_status);
     } catch (error) {
       return { status: 202, message: error.message };
+    }
+  }
+
+  // Upload/Add RAMS file attachments to an existing request (edit form)
+  @Post('files')
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'rams_file', maxCount: 20 },
+        { name: 'rams_file[]', maxCount: 20 },
+      ],
+      requestMulterOptions,
+    ),
+  )
+  async addRamsFiles(
+    @Body() body: { id?: string | number; request_id?: string | number; requestId?: string | number; userId?: string | number; user_id?: string | number },
+    @UploadedFiles() files?: { rams_file?: any[]; 'rams_file[]'?: any[] },
+  ) {
+    try {
+      const ramsFiles = [
+        ...(files?.rams_file || []),
+        ...(files?.['rams_file[]'] || []),
+      ];
+      const reqId = body.id || body.request_id || body.requestId;
+      const uId = body.userId || body.user_id;
+
+      if (!reqId) {
+        return {
+          status: HttpStatus.BAD_REQUEST,
+          message: 'Request ID (id or request_id) is required',
+        };
+      }
+
+      return await this.requestsService.addRamsFiles(
+        Number(reqId),
+        ramsFiles,
+        Number(uId || 0),
+      );
+    } catch (error) {
+      return {
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+        message: error.message || 'Failed to upload RAMS files',
+      };
     }
   }
 
