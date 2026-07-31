@@ -5974,22 +5974,24 @@ export class RequestsService {
       if (companies.size > 1) clashes++;
     });
 
-    const overviewCompanies = Array.from(companyStats.values()).map((c) => {
-      let companyClashes = 0;
-      c.rooms.forEach((rKey) => {
-        if ((roomCompanyMap.get(rKey)?.size || 0) > 1) {
-          companyClashes++;
-        }
+    const overviewCompanies = Array.from(companyStats.values())
+      .filter((c) => c.permits > 0)
+      .map((c) => {
+        let companyClashes = 0;
+        c.rooms.forEach((rKey) => {
+          if ((roomCompanyMap.get(rKey)?.size || 0) > 1) {
+            companyClashes++;
+          }
+        });
+        return {
+          name: c.name,
+          code: c.code,
+          permits: c.permits,
+          rooms: c.rooms.size,
+          clashes: companyClashes,
+          color: c.color,
+        };
       });
-      return {
-        name: c.name,
-        code: c.code,
-        permits: c.permits,
-        rooms: c.rooms.size,
-        clashes: companyClashes,
-        color: c.color,
-      };
-    });
 
     const allFloors = await this.floorRepo.find();
     const allBuildings = await this.buildingRepo.find();
@@ -6102,7 +6104,7 @@ export class RequestsService {
         autoCancel,
         unknown,
         activeRooms: roomCompanyMap.size,
-        activeCompanies: companyStats.size,
+        activeCompanies: overviewCompanies.length,
         clashes,
       },
       overviewCompanies,
@@ -6719,7 +6721,7 @@ export class RequestsService {
     });
 
     return {
-      companies: Array.from(companyMap.values()),
+      companies: Array.from(companyMap.values()).filter((c) => c.count > 0),
       counts: {
         permitTypes: {
           commissioning: commissioning,

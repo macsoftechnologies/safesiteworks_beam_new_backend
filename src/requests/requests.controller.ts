@@ -49,11 +49,11 @@ export const requestMulterOptions = {
       const cleanBaseName = nameWithoutExt.replace(/^rams[_-]/i, '');
       const sanitizedBaseName = cleanBaseName.replace(/[/\\?%*:|"<>]/g, '_');
 
-      let targetFilename = `rams_${sanitizedBaseName}${ext}`;
+      let targetFilename = `${sanitizedBaseName}${ext}`;
       const filePath = join(uploadDir, targetFilename);
 
       if (fs.existsSync(filePath)) {
-        targetFilename = `rams_${sanitizedBaseName}_${Date.now()}${ext}`;
+        targetFilename = `${sanitizedBaseName}_${Date.now()}${ext}`;
       }
 
       callback(null, targetFilename);
