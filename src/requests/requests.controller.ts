@@ -317,11 +317,29 @@ export class RequestsController {
       if (!file || !file.ramsFile) {
         return res.status(HttpStatus.NOT_FOUND).send('File not found');
       }
-      const absolutePath = join(process.cwd(), file.ramsFile);
-      if (!fs.existsSync(absolutePath)) {
+
+      const rawPath = file.ramsFile || '';
+      const filename = (rawPath ? rawPath.split('/').pop()?.split('\\').pop() : '') || 'Attachment';
+      const possiblePaths = [
+        join(process.cwd(), rawPath),
+        join(process.cwd(), 'uploads', 'requests', filename),
+        join(process.cwd(), './uploads/requests', filename),
+        join(process.cwd(), 'dist', 'uploads', 'requests', filename),
+        rawPath,
+      ];
+
+      let absolutePath = '';
+      for (const p of possiblePaths) {
+        if (p && fs.existsSync(p)) {
+          absolutePath = p;
+          break;
+        }
+      }
+
+      if (!absolutePath) {
         return res.status(HttpStatus.NOT_FOUND).send('File not found on disk');
       }
-      const filename = file.ramsFile.split('/').pop() || 'Attachment';
+
       res.download(absolutePath, filename);
     } catch (error) {
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).send(error.message);
