@@ -939,10 +939,10 @@ export function generatePermitHtml(data: any): string {
   const attachmentsHtml = data.files && data.files.length > 0
     ? `<div class="attachments-grid" style="margin-top: 6px;">
         ${data.files.map((file: any) => {
-          const rawPath = file.ramsFile || file.rams_file || file.file || '';
-          const filename = rawPath ? rawPath.split('/').pop().split('\\').pop() : 'Attachment';
-          const fileId = file.ramsFileId !== undefined ? file.ramsFileId : (file.rams_file_id !== undefined ? file.rams_file_id : file.id);
-          return `
+      const rawPath = file.ramsFile || file.rams_file || file.file || '';
+      const filename = rawPath ? rawPath.split('/').pop().split('\\').pop() : 'Attachment';
+      const fileId = file.ramsFileId !== undefined ? file.ramsFileId : (file.rams_file_id !== undefined ? file.rams_file_id : file.id);
+      return `
             <a href="/requests/files/${fileId}" target="_blank" download class="attachment-box">
               <div class="attachment-icon-wrap">
                 <svg class="attachment-file-icon text-danger" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -960,7 +960,7 @@ export function generatePermitHtml(data: any): string {
               </div>
             </a>
           `;
-        }).join('')}
+    }).join('')}
       </div>`
     : '<div class="info-value" style="color: #94a3b8; font-style: italic; margin-top: 4px;">No RAMS files uploaded</div>';
 
@@ -2368,9 +2368,9 @@ export function generatePermitHtml(data: any): string {
           </div>
 
           ${(() => {
-            const isClosedStatus = String(data.Request_status || data.requestStatus || '').toLowerCase() === 'closed';
-            if (!isClosedStatus) return '';
-            return `
+          const isClosedStatus = String(data.Request_status || data.requestStatus || '').toLowerCase() === 'closed';
+          if (!isClosedStatus) return '';
+          return `
               <div class="mt-4 border-top pt-3">
                 <table class="detailed-table">
                   <thead>
@@ -2397,7 +2397,7 @@ export function generatePermitHtml(data: any): string {
                 </table>
               </div>
             `;
-          })()}
+        })()}
         </div>
       `;
     })()}
@@ -2927,7 +2927,7 @@ export function generatePermitHtml(data: any): string {
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     function test() {
-      window.location.href = "/requests/permit-design/${data.PermitNo}/pdf";
+      window.location.href = "/api/requests/permit-design/${data.PermitNo}/pdf";
     }
   </script>
 </body>

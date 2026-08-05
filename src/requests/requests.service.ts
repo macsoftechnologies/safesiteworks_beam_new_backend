@@ -477,8 +477,12 @@ export class RequestsService {
       buildingId: dto.Building_Id,
       floorId: dto.Floor_Id,
       plansId: dto.Plans_Id,
-      zoneId: dto.Zone_Id,
-      zone: dto.zone,
+      zoneId: Array.isArray(dto.Zone_Id)
+        ? dto.Zone_Id.join(',')
+        : (dto.Zone_Id !== undefined && dto.Zone_Id !== null ? String(dto.Zone_Id) : undefined),
+      zone: Array.isArray(dto.zone)
+        ? dto.zone.map((z: any) => (typeof z === 'object' ? (z.zone || z.zone_name) : z)).filter(Boolean).join(',')
+        : dto.zone,
       roomNos: dto.Room_Nos,
       roomType: dto.Room_Type,
       numberOfWorkers: dto.Number_Of_Workers,
@@ -3136,11 +3140,45 @@ export class RequestsService {
 
         const [rawRequests, totalCount] = await qb.getManyAndCount();
 
+        // Build zone lookup for all zone IDs present in the search results
+        const zoneLookupMap = new Map<number, string>();
+        const allZoneIdsSet = new Set<number>();
+        rawRequests.forEach((req) => {
+          if (req.zoneId) {
+            String(req.zoneId).split(',').forEach((id) => {
+              const num = Number(id.trim());
+              if (!isNaN(num) && num > 0) allZoneIdsSet.add(num);
+            });
+          }
+        });
+        if (allZoneIdsSet.size > 0) {
+          const zoneEntities = await this.zoneRepo.findBy({ id: In([...allZoneIdsSet]) });
+          zoneEntities.forEach((z) => zoneLookupMap.set(z.id, z.zone));
+        }
+
         // Map responses to match legacy format and resolve Room, Building, Level and Zone names
         const dataList: any[] = [];
         for (const req of rawRequests) {
           // Resolve room names
           const resolvedRooms = await this.resolveRoomNames(req.roomNos);
+
+          // Resolve all zone names string
+          let resolvedZoneNames = '';
+          if (req.zoneId) {
+            const names = String(req.zoneId)
+              .split(',')
+              .map((id) => zoneLookupMap.get(Number(id.trim())))
+              .filter(Boolean);
+            if (names.length > 0) {
+              resolvedZoneNames = names.join(', ');
+            }
+          }
+          if (!resolvedZoneNames && typeof req.zone === 'string') {
+            resolvedZoneNames = req.zone;
+          }
+          if (!resolvedZoneNames && (req as any).zone?.zone) {
+            resolvedZoneNames = (req as any).zone.zone;
+          }
 
           // Join safety fields back into flat properties to match legacy output
           const flatObj: any = {
@@ -3170,8 +3208,8 @@ export class RequestsService {
             floor_name: (req as any).floor?.floor_name || '',
             Plans_Id: req.plansId || '',
             Zone_Id: req.zoneId || '',
-            zone_name: (req as any).zone?.zone || '',
-            zone: req.zone || '',
+            zone_name: resolvedZoneNames || '',
+            zone: resolvedZoneNames || '',
             Room_Nos: resolvedRooms || '',
             room_names: resolvedRooms,
             Room_Type: req.roomType || '',
@@ -3653,10 +3691,44 @@ export class RequestsService {
         qb.orderBy('requests.id', 'DESC');
         const [rawRequests, totalCount] = await qb.getManyAndCount();
 
+        // Build zone lookup for all zone IDs present in the search results
+        const zoneLookupMap = new Map<number, string>();
+        const allZoneIdsSet = new Set<number>();
+        rawRequests.forEach((req) => {
+          if (req.zoneId) {
+            String(req.zoneId).split(',').forEach((id) => {
+              const num = Number(id.trim());
+              if (!isNaN(num) && num > 0) allZoneIdsSet.add(num);
+            });
+          }
+        });
+        if (allZoneIdsSet.size > 0) {
+          const zoneEntities = await this.zoneRepo.findBy({ id: In([...allZoneIdsSet]) });
+          zoneEntities.forEach((z) => zoneLookupMap.set(z.id, z.zone));
+        }
+
         // --- Build flat response ---
         const dataList: any[] = [];
         for (const req of rawRequests) {
           const resolvedRooms = await this.resolveRoomNames(req.roomNos);
+
+          // Resolve all zone names string
+          let resolvedZoneNames = '';
+          if (req.zoneId) {
+            const names = String(req.zoneId)
+              .split(',')
+              .map((id) => zoneLookupMap.get(Number(id.trim())))
+              .filter(Boolean);
+            if (names.length > 0) {
+              resolvedZoneNames = names.join(', ');
+            }
+          }
+          if (!resolvedZoneNames && typeof req.zone === 'string') {
+            resolvedZoneNames = req.zone;
+          }
+          if (!resolvedZoneNames && (req as any).zone?.zone) {
+            resolvedZoneNames = (req as any).zone.zone;
+          }
 
           const flatObj: any = {
             id: req.id,
@@ -3684,8 +3756,8 @@ export class RequestsService {
             floor_name: (req as any).floor?.floor_name || '',
             Plans_Id: req.plansId || '',
             Zone_Id: req.zoneId || '',
-            zone_name: (req as any).zone?.zone || '',
-            zone: req.zone || '',
+            zone_name: resolvedZoneNames || '',
+            zone: resolvedZoneNames || '',
             Room_Nos: resolvedRooms || '',
             room_names: resolvedRooms,
             Room_Type: req.roomType || '',
@@ -4497,7 +4569,7 @@ export class RequestsService {
 
   private async checkZoneStatusAndAssignPermitUnder(
     dto: CreateRequestDto | UpdateRequestDto,
-    existingZoneId?: number,
+    existingZoneId?: any,
   ) {
     let zoneIds: number[] = [];
     const zoneIdVal = dto.Zone_Id !== undefined ? dto.Zone_Id : existingZoneId;
@@ -4541,7 +4613,7 @@ export class RequestsService {
       } else if (commonStatus === 'C') {
         dto.permit_under = 'Commissioning';
       }
-      dto.Zone_Id = zoneIds[0];
+      dto.Zone_Id = zoneIds.join(',');
     }
   }
 
@@ -5328,7 +5400,7 @@ export class RequestsService {
     const createdTime = dto.createdTime ? new Date(dto.createdTime.replace(',', '')) : new Date();
 
     // 7. Resolve zone: use first Zone_Id from the array for zoneId FK
-    const resolvedZoneId = zoneIds[0];
+    const resolvedZoneId = zoneIds.join(',');
 
     const createdIds: number[] = [];
 
@@ -5579,6 +5651,31 @@ export class RequestsService {
 
     const resolvedRooms = await this.resolveRoomNames(req.roomNos);
 
+    // Resolve all zone names string for single or multi-zones
+    let resolvedZoneNames = '';
+    if (req.zoneId) {
+      const ids = String(req.zoneId)
+        .split(',')
+        .map((id) => Number(id.trim()))
+        .filter((id) => !isNaN(id) && id > 0);
+      if (ids.length > 0) {
+        try {
+          const zoneEntities = await this.zoneRepo.findBy({ id: In(ids) });
+          if (zoneEntities && zoneEntities.length > 0) {
+            resolvedZoneNames = zoneEntities.map((z) => z.zone).filter(Boolean).join(', ');
+          }
+        } catch (e) {
+          // ignore lookup error
+        }
+      }
+    }
+    if (!resolvedZoneNames && typeof req.zone === 'string') {
+      resolvedZoneNames = req.zone;
+    }
+    if (!resolvedZoneNames && (req as any).zone?.zone) {
+      resolvedZoneNames = (req as any).zone.zone;
+    }
+
     const flatObj: any = {
       id: req.id,
       userId: req.userId || '',
@@ -5606,8 +5703,8 @@ export class RequestsService {
       floor_name: (req as any).floor?.floor_name || '',
       Plans_Id: req.plansId || '',
       Zone_Id: req.zoneId || '',
-      zone_name: (req as any).zone?.zone || '',
-      zone: req.zone || '',
+      zone_name: resolvedZoneNames || '',
+      zone: resolvedZoneNames || '',
       Room_Nos: resolvedRooms || '',
       room_names: resolvedRooms,
       Room_Type: req.roomType || '',
