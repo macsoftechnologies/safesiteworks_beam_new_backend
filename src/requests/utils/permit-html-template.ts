@@ -2927,7 +2927,7 @@ export function generatePermitHtml(data: any): string {
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     function test() {
-      window.location.href = "/api/requests/permit-design/${data.PermitNo}/pdf";
+      window.location.href = "/requests/permit-design/${data.PermitNo}/pdf";
     }
   </script>
 </body>

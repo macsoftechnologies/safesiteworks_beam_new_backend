@@ -16,14 +16,34 @@ const PUPPETEER_ARGS = [
   '--disable-gpu',
 ];
 
+import fs from 'fs';
+
+function getExecutablePath(): string | undefined {
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+  ];
+  for (const c of candidates) {
+    if (c && fs.existsSync(c)) {
+      return c;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Generates a permit PDF via Puppeteer/headless Chrome from the HTML template.
  */
 export async function generatePermitPdf(data: any): Promise<Buffer> {
   const html = generatePermitHtml(data);
+  const execPath = getExecutablePath();
   const browser = await puppeteer.launch({
     headless: true,
     args: PUPPETEER_ARGS,
+    ...(execPath ? { executablePath: execPath } : {}),
   });
   try {
     const page = await browser.newPage();
@@ -51,9 +71,11 @@ export async function generateLogsPdf(
   images: any[],
 ): Promise<Buffer> {
   const html = generateLogsHtml(permitNo, logs, images);
+  const execPath = getExecutablePath();
   const browser = await puppeteer.launch({
     headless: true,
     args: PUPPETEER_ARGS,
+    ...(execPath ? { executablePath: execPath } : {}),
   });
   try {
     const page = await browser.newPage();
