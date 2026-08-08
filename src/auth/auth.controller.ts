@@ -10,7 +10,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) { }
 
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
@@ -57,6 +57,12 @@ export class AuthController {
   /**
    * Change Password with OTP verification (requires active JWT session)
    */
+  @Post('sso-login')
+  async ssoLogin(@Body() body: { sso_token?: string; token?: string }) {
+    const token = body.sso_token || body.token || '';
+    return this.authService.ssoLogin(token);
+  }
+
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
   async changePassword(@Body() changePasswordDto: ChangePasswordDto) {
