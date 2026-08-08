@@ -4,6 +4,8 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @Controller('auth')
@@ -25,6 +27,36 @@ export class AuthController {
     return this.authService.verifyOtp(verifyOtpDto);
   }
 
+  /**
+   * Forgot Password: Send OTP to user's registered phone
+   */
+  @Post('forgot-password')
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(forgotPasswordDto);
+  }
+
+  /**
+   * Reset Password: Verify OTP then update password
+   */
+  @Post('reset-password')
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPasswordWithOtp(resetPasswordDto);
+  }
+
+  /**
+   * Send OTP for Change Password (requires active JWT session)
+   */
+  @Post('send-change-password-otp')
+  @UseGuards(JwtAuthGuard)
+  async sendChangePasswordOtp(@Request() req) {
+    const rawId = req.user?.userId ?? req.user?.sub ?? req.user?.id;
+    const userId = Number(rawId);
+    return this.authService.sendChangePasswordOtp(userId);
+  }
+
+  /**
+   * Change Password with OTP verification (requires active JWT session)
+   */
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
   async changePassword(@Body() changePasswordDto: ChangePasswordDto) {

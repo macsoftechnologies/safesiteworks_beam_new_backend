@@ -60,18 +60,6 @@ export const requestMulterOptions = {
     },
   }),
   fileFilter: (req, file, callback) => {
-    // Allowed file types based on legacy mime mappings or file extension
-    const mimeRegex = /\/(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|csv|mp4|webm|ogg|octet-stream|vnd.openxmlformats-officedocument.wordprocessingml.document|vnd.openxmlformats-officedocument.spreadsheetml.sheet|msword|vnd.ms-excel|zip|x-zip-compressed|x-rar-compressed|vnd.rar|x-7z-compressed|plain|dwg|x-dwg|vnd.dwg|vnd.ms-outlook)$/i;
-    const extRegex = /\.(jpg|jpeg|png|gif|bmp|pdf|doc|docx|xls|xlsx|csv|mp4|webm|ogg|zip|rar|7z|txt|dwg|msg)$/i;
-
-    const isMimeValid = file.mimetype && mimeRegex.test(file.mimetype);
-    const isExtValid = file.originalname && extRegex.test(file.originalname);
-
-    if (!isMimeValid && !isExtValid) {
-      const errMsg = `Unsupported or corrupt file type: "${file.originalname}" (MimeType: "${file.mimetype || 'unknown'}")`;
-      console.error(errMsg);
-      return callback(new Error(errMsg), false);
-    }
     callback(null, true);
   },
 };

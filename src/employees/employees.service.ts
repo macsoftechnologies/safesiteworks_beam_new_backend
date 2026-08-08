@@ -16,8 +16,18 @@ import { PaginationQueryDto } from 'src/redis/dtos/pagination.dto';
 const encodePassword = (plain: string): string =>
   plain ? Buffer.from(plain).toString('base64') : '';
 
-const decodePassword = (encoded: string): string =>
-  encoded ? Buffer.from(encoded, 'base64').toString('utf8') : '';
+const decodePassword = (encoded: string): string => {
+  if (!encoded) return '';
+  try {
+    const decoded = Buffer.from(encoded, 'base64').toString('utf8');
+    if (!decoded.includes('\uFFFD') && /^[\x20-\x7E]*$/.test(decoded)) {
+      return decoded;
+    }
+  } catch {
+    // Return original
+  }
+  return encoded;
+};
 
 const TTL = {
   ALL: 1000 * 60 * 5,
@@ -89,24 +99,59 @@ export class EmployeesService {
     }));
   }
 
-  private async syncUserForEmployee(employee: Employee, dto: any, userType?: string) {
-    if (dto.username || dto.password || userType || dto.departId || dto.subContId || dto.obserId) {
-      let user = await this.userRepo.findOne({ where: { empId: employee.id } });
-      if (!user) {
-        user = this.userRepo.create({
-          empId: employee.id,
-          created: new Date(),
-          otp: dto.otp ?? '',
-        });
+  private applyEmployeeFields(existing: Employee, dto: any) {
+    if (dto.roleId !== undefined && dto.roleId !== null) existing.roleId = Number(dto.roleId);
+    if (dto.departId !== undefined) existing.departId = dto.departId ? Number(dto.departId) : null as any;
+    if (dto.subContId !== undefined) existing.subContId = dto.subContId ? Number(dto.subContId) : null as any;
+    if (dto.obserId !== undefined) existing.obserId = dto.obserId ? Number(dto.obserId) : null as any;
+    if (dto.badgeId !== undefined) existing.badgeId = dto.badgeId;
+    if (dto.employeeName !== undefined && dto.employeeName !== null) existing.employeeName = dto.employeeName;
+    if (dto.companyName !== undefined) existing.companyName = dto.companyName;
+    if (dto.email !== undefined) existing.email = dto.email;
+    if (dto.designation !== undefined) existing.designation = dto.designation;
+    if (dto.access !== undefined) existing.access = dto.access;
+    if (dto.username !== undefined) existing.username = dto.username;
+
+    if (dto.phonenumber !== undefined && dto.phonenumber !== null) {
+      const rawPhone = String(dto.phonenumber).replace(/^\++/, '');
+      existing.phonenumber = rawPhone ? `+${rawPhone}` : '';
+    }
+
+    if (dto.password && typeof dto.password === 'string' && dto.password.trim() !== '') {
+      const raw = dto.password.trim();
+      if (!raw.includes('\uFFFD') && raw !== decodePassword(existing.password) && raw !== existing.password) {
+        existing.password = encodePassword(raw);
       }
-      if (dto.username) user.username = dto.username;
-      if (dto.password) user.password = encodePassword(dto.password);
-      if (userType) user.userType = userType;
-      if (dto.departId) user.typeId = dto.departId;
-      else if (dto.subContId) user.typeId = dto.subContId;
-      else if (dto.obserId) user.typeId = dto.obserId;
-      if (dto.otp) user.otp = dto.otp;
-      await this.userRepo.save(user);
+    }
+  }
+
+  private async syncUserForEmployee(employee: Employee, dto: any, userType?: string) {
+    try {
+      if (dto.username || dto.password || userType || dto.departId || dto.subContId || dto.obserId) {
+        let user = await this.userRepo.findOne({ where: { empId: employee.id } });
+        if (!user) {
+          user = this.userRepo.create({
+            empId: employee.id,
+            created: new Date(),
+            otp: dto.otp ?? '',
+          });
+        }
+        if (dto.username) user.username = dto.username;
+        if (dto.password && typeof dto.password === 'string' && dto.password.trim() !== '') {
+          const raw = dto.password.trim();
+          if (!raw.includes('\uFFFD') && raw !== decodePassword(user.password || '') && raw !== user.password) {
+            user.password = encodePassword(raw);
+          }
+        }
+        if (userType) user.userType = userType;
+        if (dto.departId) user.typeId = dto.departId;
+        else if (dto.subContId) user.typeId = dto.subContId;
+        else if (dto.obserId) user.typeId = dto.obserId;
+        if (dto.otp) user.otp = dto.otp;
+        await this.userRepo.save(user);
+      }
+    } catch (err) {
+      console.error('Error syncing user for employee:', err);
     }
   }
 
@@ -354,6 +399,10 @@ export class EmployeesService {
       return { statusCode: HttpStatus.NO_CONTENT, message: 'Empty Employee' };
     }
 
+    if (!dto.userType || dto.userType.trim() === '') {
+      return { statusCode: HttpStatus.BAD_REQUEST, message: 'Employee Type is required' };
+    }
+
     const employee = this.employeeRepo.create({
       ...dto,
       phonenumber: dto.phonenumber ? `+${dto.phonenumber}` : undefined,
@@ -455,102 +504,118 @@ export class EmployeesService {
   }
 
   async update(dto: UpdateEmployeeDto): Promise<{ statusCode: HttpStatus; message: string }> {
-    const existing = await this.employeeRepo.findOne({ where: { id: dto.id } });
-    if (!existing) {
+    try {
+      if (!dto.userType || dto.userType.trim() === '') {
+        return { statusCode: HttpStatus.BAD_REQUEST, message: 'Employee Type is required' };
+      }
+      const existing = await this.employeeRepo.findOne({ where: { id: dto.id } });
+      if (!existing) {
+        return { statusCode: HttpStatus.NOT_FOUND, message: 'Employee not found' };
+      }
+
+      this.applyEmployeeFields(existing, dto);
+      await this.employeeRepo.save(existing);
+
+      let userType = dto.userType;
+      if (!userType) {
+        if (dto.subContId) userType = 'Subcontractor';
+        else if (dto.departId) userType = 'Department';
+        else if (dto.obserId) userType = 'Observer';
+        else userType = 'Admin';
+      }
+
+      await this.syncUserForEmployee(existing, dto, userType);
+
+      await this.invalidateAfterWrite({
+        employeeId: dto.id,
+        departId: dto.departId,
+        subContId: dto.subContId,
+        username: dto.username,
+      });
+
+      return { statusCode: HttpStatus.OK, message: 'Employee Updated' };
+    } catch (err) {
+      console.error('Error updating employee:', err);
       return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Employee not updated' };
     }
-
-    Object.assign(existing, dto);
-    await this.employeeRepo.save(existing);
-
-    // Sync with User table
-    let userType = dto.userType;
-    if (!userType) {
-      if (dto.subContId) userType = 'Subcontractor';
-      else if (dto.departId) userType = 'Department';
-      else if (dto.obserId) userType = 'Observer';
-      else userType = 'Admin';
-    }
-
-    await this.syncUserForEmployee(existing, dto, userType);
-
-    await this.invalidateAfterWrite({
-      employeeId: dto.id,
-      departId: dto.departId,
-      subContId: dto.subContId,
-      username: dto.username,
-    });
-
-    return { statusCode: HttpStatus.OK, message: 'Employee Updated' };
   }
 
   async updateDepEmployee(
     dto: UpdateDepEmployeeDto,
   ): Promise<{ statusCode: HttpStatus; message: string }> {
-    const existing = await this.employeeRepo.findOne({ where: { id: dto.id } });
-    if (!existing) {
+    try {
+      const existing = await this.employeeRepo.findOne({ where: { id: dto.id } });
+      if (!existing) {
+        return { statusCode: HttpStatus.NOT_FOUND, message: 'Employee not found' };
+      }
+
+      this.applyEmployeeFields(existing, dto);
+      await this.employeeRepo.save(existing);
+
+      await this.syncUserForEmployee(existing, dto, 'Department');
+
+      await this.invalidateAfterWrite({
+        employeeId: dto.id,
+        departId: dto.departId,
+        username: dto.username,
+      });
+
+      return { statusCode: HttpStatus.OK, message: 'Employee Updated' };
+    } catch (err) {
+      console.error('Error updating department employee:', err);
       return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Employee not updated' };
     }
-
-    const { id, ...fields } = dto;
-    Object.assign(existing, fields);
-    await this.employeeRepo.save(existing);
-
-    // Sync with User table
-    await this.syncUserForEmployee(existing, dto, 'Department');
-
-    await this.invalidateAfterWrite({
-      employeeId: id,
-      departId: dto.departId,
-      username: dto.username,
-    });
-
-    return { statusCode: HttpStatus.OK, message: 'Employee Updated' };
   }
 
   async updateSubEmployee(
     dto: UpdateSubEmployeeDto,
   ): Promise<{ statusCode: HttpStatus; message: string }> {
-    const existing = await this.employeeRepo.findOne({ where: { id: dto.id } });
-    if (!existing) {
+    try {
+      const existing = await this.employeeRepo.findOne({ where: { id: dto.id } });
+      if (!existing) {
+        return { statusCode: HttpStatus.NOT_FOUND, message: 'Employee not found' };
+      }
+
+      this.applyEmployeeFields(existing, dto);
+      await this.employeeRepo.save(existing);
+
+      await this.syncUserForEmployee(existing, dto, 'Subcontractor');
+
+      await this.invalidateAfterWrite({
+        employeeId: dto.id,
+        subContId: dto.subContId,
+        username: dto.username,
+      });
+
+      return { statusCode: HttpStatus.OK, message: 'Employee Updated' };
+    } catch (err) {
+      console.error('Error updating sub employee:', err);
       return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Employee not updated' };
     }
-
-    const { id, ...fields } = dto;
-    Object.assign(existing, fields);
-    await this.employeeRepo.save(existing);
-
-    // Sync with User table
-    await this.syncUserForEmployee(existing, dto, 'Subcontractor');
-
-    await this.invalidateAfterWrite({
-      employeeId: id,
-      subContId: dto.subContId,
-      username: dto.username,
-    });
-
-    return { statusCode: HttpStatus.OK, message: 'Employee Updated' };
   }
 
   async updateEmp(dto: UpdateEmpDto): Promise<{ statusCode: HttpStatus; message: string }> {
-    const existing = await this.employeeRepo.findOne({ where: { id: dto.id } });
-    if (!existing) {
+    try {
+      const existing = await this.employeeRepo.findOne({ where: { id: dto.id } });
+      if (!existing) {
+        return { statusCode: HttpStatus.NOT_FOUND, message: 'Employee not found' };
+      }
+
+      this.applyEmployeeFields(existing, dto);
+      await this.employeeRepo.save(existing);
+
+      await this.syncUserForEmployee(existing, dto, dto.type);
+
+      await this.invalidateAfterWrite({
+        employeeId: dto.id,
+        username: dto.username,
+      });
+
+      return { statusCode: HttpStatus.OK, message: 'Employee Updated' };
+    } catch (err) {
+      console.error('Error updating emp:', err);
       return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Employee not updated' };
     }
-
-    const { id, ...fields } = dto;
-    Object.assign(existing, fields);
-    await this.employeeRepo.save(existing);
-
-    // Sync with User table
-    await this.syncUserForEmployee(existing, dto, dto.type);
-
-    await this.invalidateAfterWrite({
-      employeeId: id,
-      username: dto.username,
-    });
-
-    return { statusCode: HttpStatus.OK, message: 'Employee Updated' };
   }
 
   async delete(id: number): Promise<{ statusCode: HttpStatus; message: string }> {

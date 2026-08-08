@@ -15,7 +15,9 @@ async function bootstrap() {
   app.enableCors({ origin: '*' });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true, }),);
   app.enableCors();
-  app.use(express.static(join(process.cwd(), './uploads/')));
+  app.use('/subcontractors', express.static(join(process.cwd(), './uploads/subcontractors')));
+  app.use('/uploads', express.static(join(process.cwd(), './uploads')));
+  app.use(express.static(join(process.cwd(), './uploads')));
   app.use(bodyParser.json({ limit: '100mb' }));
   app.use(bodyParser.urlencoded({ limit: '500mb', extended: true }));
   setupSwagger(app);

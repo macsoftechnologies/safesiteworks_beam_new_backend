@@ -542,9 +542,9 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
 
           <!-- Company info -->
           <div class="company-row">
-            <span class="meta-item">🏢 ${compName}</span>
-            <span class="meta-item">👷 ${contractor}</span>
-            ${log.request?.workingDate ? `<span class="meta-item">📅 Work Date: ${formatDate(log.request.workingDate)}</span>` : ''}
+            <span class="meta-item"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 3px;"><path d="M3 21h18M9 8h1M9 12h1M9 16h1M14 8h1M14 12h1M14 16h1M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/></svg>${compName}</span>
+            <span class="meta-item"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 3px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${contractor}</span>
+            ${log.request?.workingDate ? `<span class="meta-item"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 3px;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Work Date: ${formatDate(log.request.workingDate)}</span>` : ''}
           </div>
 
           <!-- Field changes (only for Edited) -->
@@ -614,7 +614,7 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script>
   function downloadPDF() {
-    window.location.href = "/requests/logs-design/${permitNo}/pdf";
+    window.location.href = "/m3infrastructure/requests/logs-design/${permitNo}/pdf";
   }
 </script>
 </body>

@@ -12,6 +12,8 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -58,7 +60,7 @@ export class AuthService {
   }
 
   /**
-   * Login: Generate OTP and send SMS
+   * Login: Validate credentials, generate OTP and send SMS
    */
   async login(loginDto: LoginDto) {
     const { username, password } = loginDto;
@@ -76,12 +78,21 @@ export class AuthService {
     await this.usersService.updateOtp(user.id, otp);
 
     // Fetch phone number from Employee table
-    const employee = (user.empId !== null && user.empId !== undefined) ? await this.employeeRepo.findOne({ where: { id: user.empId } }) : null;
+    const employee = (user.empId !== null && user.empId !== undefined)
+      ? await this.employeeRepo.findOne({ where: { id: user.empId } })
+      : null;
     const phoneNumber = employee?.phonenumber ?? '';
 
-    // Send SMS via Twilio (Disabled as requested)
-    // const smsSent = await this.otpService.sendOtpViaSms(phoneNumber, otp);
-    const smsSent = false;
+    // Send OTP via SMS using Twilio
+    let smsSent = false;
+    if (phoneNumber) {
+      smsSent = await this.otpService.sendOtpViaSms(phoneNumber, otp);
+    }
+
+    // Fallback: log OTP to server console for development/testing
+    if (!smsSent) {
+      console.log(`[OTP - LOGIN] User: ${username} | OTP: ${otp} | Phone: ${phoneNumber || 'N/A'}`);
+    }
 
     // Generate auth token (legacy support)
     const authString = user.id + 'beamapi' + new Date().toISOString();
@@ -90,15 +101,21 @@ export class AuthService {
     // Save auth token
     await this.usersService.updateAuthToken(user.id, authToken);
 
+    // Mask phone number for display (show last 4 digits only)
+    const maskedPhone = phoneNumber
+      ? phoneNumber.replace(/\D/g, '').slice(-4).padStart(phoneNumber.replace(/\D/g, '').length, '*')
+      : '';
+
     return {
       statusCode: HttpStatus.OK,
-      message: 'Login successful.',
+      message: 'Login successful. OTP sent to your registered phone number.',
       id: user.id,
       username: user.username,
       userType: user.userType,
       typeId: user.typeId,
       empId: user.empId,
       phonenumber: phoneNumber,
+      maskedPhone,
       auth_token: authToken,
       sms_sent: smsSent,
     };
@@ -116,14 +133,18 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // OTP validation disabled as requested
-    // const staticOtp = process.env.DEV_STATIC_OTP;
-    // const isStaticOtpMatch = staticOtp && otp === staticOtp;
-    // if (!isStaticOtpMatch && (!user.otp || user.otp !== otp)) {
-    //   throw new UnauthorizedException('Invalid OTP');
-    // }
+    // Allow static dev OTP bypass via environment variable
+    const staticOtp = process.env.DEV_STATIC_OTP;
+    const isStaticOtpMatch = staticOtp && otp === staticOtp;
 
-    // Clear OTP
+    // Validate OTP against stored value
+    if (!isStaticOtpMatch) {
+      if (!user.otp || user.otp !== otp) {
+        throw new UnauthorizedException('Invalid OTP. Please check the code sent to your phone.');
+      }
+    }
+
+    // Clear OTP after successful verification
     await this.usersService.clearOtp(user.id);
 
     // Generate JWT token
@@ -143,16 +164,169 @@ export class AuthService {
   }
 
   /**
-   * Change password
+   * Forgot Password: Send OTP to user's registered phone
+   */
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    const { username } = forgotPasswordDto;
+
+    // Look up user by username
+    const user = await this.usersService.findByUsername(username);
+    if (!user) {
+      // Return generic message to avoid user enumeration
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'If this username exists, an OTP has been sent to the registered phone number.',
+      };
+    }
+
+    // Generate OTP
+    const otp = this.otpService.generateOtp();
+
+    // Save OTP to user record
+    await this.usersService.updateOtp(user.id, otp);
+
+    // Fetch phone number from Employee table
+    const employee = (user.empId !== null && user.empId !== undefined)
+      ? await this.employeeRepo.findOne({ where: { id: user.empId } })
+      : null;
+    const phoneNumber = employee?.phonenumber ?? '';
+
+    // Send OTP via SMS
+    let smsSent = false;
+    if (phoneNumber) {
+      smsSent = await this.otpService.sendOtpViaSms(phoneNumber, otp);
+    }
+
+    // Fallback: log OTP to server console
+    if (!smsSent) {
+      console.log(`[OTP - FORGOT PASSWORD] User: ${username} | OTP: ${otp} | Phone: ${phoneNumber || 'N/A'}`);
+    }
+
+    // Mask phone number for display
+    const maskedPhone = phoneNumber
+      ? `****${phoneNumber.replace(/\D/g, '').slice(-4)}`
+      : 'N/A';
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: `OTP sent to your registered phone number ending in ${maskedPhone}.`,
+      user_id: user.id,
+      maskedPhone,
+      sms_sent: smsSent,
+    };
+  }
+
+  /**
+   * Reset Password: Verify OTP and update password
+   */
+  async resetPasswordWithOtp(resetPasswordDto: ResetPasswordDto) {
+    const { user_id, otp, password } = resetPasswordDto;
+
+    // Get user
+    const user = await this.usersService.findById(user_id);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Allow static dev OTP bypass
+    const staticOtp = process.env.DEV_STATIC_OTP;
+    const isStaticOtpMatch = staticOtp && otp === staticOtp;
+
+    // Validate OTP
+    if (!isStaticOtpMatch) {
+      if (!user.otp || user.otp !== otp) {
+        throw new UnauthorizedException('Invalid OTP. Please check the code sent to your phone.');
+      }
+    }
+
+    // Clear OTP
+    await this.usersService.clearOtp(user.id);
+
+    // Update password as base64 (legacy compatible)
+    const base64Password = Buffer.from(password).toString('base64');
+    const updated = await this.usersService.updatePassword(user_id, base64Password);
+
+    if (updated) {
+      return {
+        statusCode: HttpStatus.OK,
+        message: 'Password reset successfully. Please login with your new password.',
+      };
+    } else {
+      throw new BadRequestException('Failed to reset password. Please try again.');
+    }
+  }
+
+  /**
+   * Send OTP for Change Password (requires valid JWT session)
+   */
+  async sendChangePasswordOtp(userId: number) {
+    // Get user
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Generate OTP
+    const otp = this.otpService.generateOtp();
+
+    // Save OTP
+    await this.usersService.updateOtp(user.id, otp);
+
+    // Fetch phone number from Employee table
+    const employee = (user.empId !== null && user.empId !== undefined)
+      ? await this.employeeRepo.findOne({ where: { id: user.empId } })
+      : null;
+    const phoneNumber = employee?.phonenumber ?? '';
+
+    // Send OTP via SMS
+    let smsSent = false;
+    if (phoneNumber) {
+      smsSent = await this.otpService.sendOtpViaSms(phoneNumber, otp);
+    }
+
+    // Fallback: log OTP to server console
+    if (!smsSent) {
+      console.log(`[OTP - CHANGE PASSWORD] User ID: ${userId} | OTP: ${otp} | Phone: ${phoneNumber || 'N/A'}`);
+    }
+
+    // Mask phone number
+    const maskedPhone = phoneNumber
+      ? `****${phoneNumber.replace(/\D/g, '').slice(-4)}`
+      : 'N/A';
+
+    return {
+      statusCode: HttpStatus.OK,
+      message: `OTP sent to your registered phone number ending in ${maskedPhone}.`,
+      maskedPhone,
+      sms_sent: smsSent,
+    };
+  }
+
+  /**
+   * Verify OTP and change password (requires valid JWT session)
    */
   async changePassword(changePasswordDto: ChangePasswordDto) {
-    const { id, password } = changePasswordDto;
+    const { id, password, otp } = changePasswordDto;
 
     // Get user
     const user = await this.usersService.findById(id);
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
+
+    // Allow static dev OTP bypass
+    const staticOtp = process.env.DEV_STATIC_OTP;
+    const isStaticOtpMatch = staticOtp && otp === staticOtp;
+
+    // Validate OTP
+    if (!isStaticOtpMatch) {
+      if (!user.otp || user.otp !== otp) {
+        throw new UnauthorizedException('Invalid OTP. Please check the code sent to your phone.');
+      }
+    }
+
+    // Clear OTP after successful verification
+    await this.usersService.clearOtp(user.id);
 
     // Save new password as base64 for compatibility with legacy system
     const base64Password = Buffer.from(password).toString('base64');
@@ -163,12 +337,12 @@ export class AuthService {
     if (updated) {
       return {
         statusCode: HttpStatus.OK,
-        message: 'User Password Updated',
+        message: 'Password changed successfully.',
       };
     } else {
       return {
         statusCode: HttpStatus.NOT_FOUND,
-        message: 'User Password not updated',
+        message: 'Password could not be updated. Please try again.',
       };
     }
   }

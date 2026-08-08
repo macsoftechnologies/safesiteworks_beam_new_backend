@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, HttpCode, Query, UseInterceptors, UploadedFile, HttpStatus, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, HttpCode, Query, UseInterceptors, UploadedFile, HttpStatus, UseGuards, Request, Res } from '@nestjs/common';
 import { SubcontractorService } from './subcontractor.service';
 import { CreateSubcontractorDto, UpdateSubcontractorDto, SubcontractorPaginationQueryDto } from './dtos/subcontractor.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, join } from 'path';
+import * as fs from 'fs';
 
 export const multerOptions = {
   storage: diskStorage({
@@ -16,12 +17,51 @@ export const multerOptions = {
     },
   }),
   fileFilter: (req, file, callback) => {
-    if (!file.mimetype.match(/\/(jpg|jpeg|pdf|doc|png|gif|bmp|webp)$/)) {
-      return callback(new Error('Unsupported or corrupt image file'), false);
+    const imageRegex = /\/(jpg|jpeg|png|gif|bmp|webp|svg\+xml|x-png)$/i;
+    const extRegex = /\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i;
+    const isMimeValid = file.mimetype && imageRegex.test(file.mimetype);
+    const isExtValid = file.originalname && extRegex.test(file.originalname);
+    if (!isMimeValid && !isExtValid) {
+      return callback(new Error('Only image files are allowed for contractor logo (jpg, jpeg, png, gif, bmp, webp, svg)'), false);
     }
     callback(null, true);
   },
 };
+
+function findFileOnDisk(filename: string): string | null {
+  const cleanFilename = filename.split('/').pop()?.split('\\').pop() || filename;
+
+  const possibleDirs = [
+    join(process.cwd(), 'uploads', 'subcontractors'),
+    join(process.cwd(), 'uploads'),
+    join(__dirname, '..', '..', 'uploads', 'subcontractors'),
+    join(__dirname, '..', '..', 'uploads'),
+    '/www/wwwroot/api.beam.safesiteworks.com/beam_2.0_north_backend/uploads/subcontractors',
+  ];
+
+  for (const dir of possibleDirs) {
+    if (!fs.existsSync(dir)) continue;
+
+    // 1. Exact match
+    const exactPath = join(dir, cleanFilename);
+    if (fs.existsSync(exactPath)) {
+      return exactPath;
+    }
+
+    // 2. Case-insensitive match for Linux OS
+    try {
+      const files = fs.readdirSync(dir);
+      const matched = files.find(f => f.toLowerCase() === cleanFilename.toLowerCase());
+      if (matched) {
+        return join(dir, matched);
+      }
+    } catch {
+      // ignore read errors
+    }
+  }
+
+  return null;
+}
 
 @Controller('subcontractors')
 export class SubcontractorController {
@@ -38,13 +78,35 @@ export class SubcontractorController {
     }
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
+  @Get('logo/:filename')
+  async getLogo(@Param('filename') filename: string, @Res() res: any) {
     try {
-      const subcontractor = await this.subcontractorService.findOne(Number(id));
-      return subcontractor;
+      const filePath = findFileOnDisk(filename);
+      if (filePath) {
+        return res.sendFile(filePath);
+      }
+      return res.status(HttpStatus.NOT_FOUND).send('File not found on disk');
     } catch (error) {
-      return { statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: error.message };
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).send(error.message);
+    }
+  }
+
+  @Get(':id')
+  async findOne(@Param('id') id: string, @Res() res: any) {
+    try {
+      // If the parameter is an image filename or non-numeric string, serve the file directly
+      if (/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i.test(id) || isNaN(Number(id))) {
+        const filePath = findFileOnDisk(id);
+        if (filePath) {
+          return res.sendFile(filePath);
+        }
+        return res.status(HttpStatus.NOT_FOUND).send('File not found on disk');
+      }
+
+      const subcontractor = await this.subcontractorService.findOne(Number(id));
+      return res.json(subcontractor);
+    } catch (error) {
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ statusCode: HttpStatus.INTERNAL_SERVER_ERROR, message: error.message });
     }
   }
 
