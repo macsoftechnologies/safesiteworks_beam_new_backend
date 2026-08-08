@@ -28,21 +28,21 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
   };
 
   const TYPE_STYLES: Record<string, { color: string; bg: string; icon: string }> = {
-    Hold: { color: "#d97706", bg: "#fef3c7", icon: "⏸" },
-    Edited: { color: "#2563eb", bg: "#dbeafe", icon: "✏️" },
-    Approved: { color: "#16a34a", bg: "#dcfce7", icon: "✅" },
-    Opened: { color: "#7c3aed", bg: "#f3e8ff", icon: "🔓" },
-    Closed: { color: "#4b5563", bg: "#f3f4f6", icon: "🔒" },
-    Rejected: { color: "#dc2626", bg: "#fee2e2", icon: "❌" },
-    Cancelled: { color: "#dc2626", bg: "#fee2e2", icon: "🚫" },
-    "Auto-Cancelled": { color: "#dc2626", bg: "#fee2e2", icon: "🚫" },
-    Draft: { color: "#475569", bg: "#f1f5f9", icon: "📝" },
-    Submitted: { color: "#0284c7", bg: "#e0f2fe", icon: "📤" },
+    Hold: { color: "#d97706", bg: "#fef3c7", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>` },
+    Edited: { color: "#2563eb", bg: "#dbeafe", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>` },
+    Approved: { color: "#16a34a", bg: "#dcfce7", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><polyline points="20 6 9 17 4 12"/></svg>` },
+    Opened: { color: "#7c3aed", bg: "#f3e8ff", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>` },
+    Closed: { color: "#4b5563", bg: "#f3f4f6", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>` },
+    Rejected: { color: "#dc2626", bg: "#fee2e2", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>` },
+    Cancelled: { color: "#dc2626", bg: "#fee2e2", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>` },
+    "Auto-Cancelled": { color: "#dc2626", bg: "#fee2e2", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>` },
+    Draft: { color: "#475569", bg: "#f1f5f9", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` },
+    Submitted: { color: "#0284c7", bg: "#e0f2fe", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>` },
   };
 
   const getStatusIcon = (type: string) => {
     const key = Object.keys(TYPE_STYLES).find(k => k.toLowerCase() === String(type).toLowerCase().trim());
-    return key ? TYPE_STYLES[key].icon : "•";
+    return key ? TYPE_STYLES[key].icon : `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:block;"><circle cx="12" cy="12" r="6"/></svg>`;
   };
 
   const getStatusClass = (type: string) => {
@@ -52,7 +52,7 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
 
   const getTypeStyle = (type: string) => {
     const key = Object.keys(TYPE_STYLES).find(k => k.toLowerCase() === String(type).toLowerCase().trim());
-    return key ? TYPE_STYLES[key] : { color: "#64748b", bg: "#f1f5f9", icon: "•" };
+    return key ? TYPE_STYLES[key] : { color: "#64748b", bg: "#f1f5f9", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:block;"><circle cx="12" cy="12" r="6"/></svg>` };
   };
 
   // Find metadata details from the first log if available
@@ -476,8 +476,8 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
 
   <!-- Meta Summary bar -->
   <div class="meta-summary">
-    <span class="meta-summary-item">🏢 ${companyName}</span>
-    <span class="meta-summary-item">👷 ${mainContractor}</span>
+    <span class="meta-summary-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><path d="M3 21h18M9 8h1M9 12h1M9 16h1M14 8h1M14 12h1M14 16h1M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16"/></svg>${companyName}</span>
+    <span class="meta-summary-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 4px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>${mainContractor}</span>
   </div>
 
   <div class="section-title">Permit Actions Timeline</div>
@@ -525,7 +525,7 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
               ${reqType}
             </span>
             <span class="log-time">
-              🕐 ${formatDateTime(log.createdTime)}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -2px; margin-right: 3px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${formatDateTime(log.createdTime)}
             </span>
           </div>
 
