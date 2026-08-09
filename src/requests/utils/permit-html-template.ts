@@ -2325,7 +2325,7 @@ export function generatePermitHtml(data: any): string {
             </div>
           </div>
 
-          ${(isHotWorkActive && String(data.Request_status || data.requestStatus || '').toLowerCase().trim() === 'opened') ? `
+          ${(isHotWorkActive && ['opened', 'closed'].includes(String(data.Request_status || data.requestStatus || '').toLowerCase().trim())) ? `
           <div class="row mt-3">
             <div class="col-md-6">
               <div class="info-grid">
