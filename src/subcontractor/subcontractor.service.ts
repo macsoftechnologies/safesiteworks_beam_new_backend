@@ -22,6 +22,7 @@ export class SubcontractorService {
     try {
       const subcontractor = this.subcontractorRepo.create({
         ...createSubcontractorDto,
+        departId: createSubcontractorDto.departId ?? 0,
         logo: logoFilename,
       });
 

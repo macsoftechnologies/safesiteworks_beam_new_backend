@@ -56,6 +56,7 @@ export class CreateDepEmployeeDto {
 export class CreateSubEmployeeDto {
   @IsOptional() @IsNumber() roleId?: number;
   @IsOptional() @IsNumber() subContId?: number;
+  @IsOptional() @IsNumber() departId?: number;
   @IsOptional() @IsString() badgeId?: string;
 
   @IsNotEmpty()

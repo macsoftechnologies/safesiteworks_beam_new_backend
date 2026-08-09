@@ -38,6 +38,7 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
     "Auto-Cancelled": { color: "#dc2626", bg: "#fee2e2", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>` },
     Draft: { color: "#475569", bg: "#f1f5f9", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>` },
     Submitted: { color: "#0284c7", bg: "#e0f2fe", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>` },
+    "Note Deleted": { color: "#dc2626", bg: "#fee2e2", icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>` },
   };
 
   const getStatusIcon = (type: string) => {
@@ -47,7 +48,7 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
 
   const getStatusClass = (type: string) => {
     const key = Object.keys(TYPE_STYLES).find(k => k.toLowerCase() === String(type).toLowerCase().trim());
-    return key ? `status-${key}` : "status-default";
+    return key ? `status-${key.replace(/\s+/g, '-')}` : "status-default";
   };
 
   const getTypeStyle = (type: string) => {
@@ -253,7 +254,7 @@ export function generateLogsHtml(permitNo: string, logs: any[], images: any[]): 
     .status-Opened { color: #7c3aed; background-color: #f3e8ff; border-color: #e9d5ff; }
     .status-Closed { color: #4b5563; background-color: #f3f4f6; border-color: #e5e7eb; }
     .status-Rejected { color: #dc2626; background-color: #fee2e2; border-color: #fecaca; }
-    .status-Cancelled, .status-Auto-Cancelled { color: #dc2626; background-color: #fee2e2; border-color: #fecaca; }
+    .status-Cancelled, .status-Auto-Cancelled, .status-Note-Deleted { color: #dc2626; background-color: #fee2e2; border-color: #fecaca; }
     .status-Draft { color: #475569; background-color: #f1f5f9; border-color: #e2e8f0; }
     .status-Submitted { color: #0284c7; background-color: #e0f2fe; border-color: #bae6fd; }
     .status-default { color: #64748b; background-color: #f1f5f9; border-color: #e2e8f0; }

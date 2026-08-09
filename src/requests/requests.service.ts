@@ -3963,11 +3963,29 @@ export class RequestsService {
   }
 
   // Delete a single note by ID
-  async deleteNote(id: number): Promise<any> {
+  async deleteNote(id: number, userId?: number): Promise<any> {
     const note = await this.noteRepo.findOne({ where: { id } });
     if (!note) {
       return { status: 404, message: 'Note not found' };
     }
+
+    const logUserId = userId || note.userId || 0;
+    const now = new Date();
+
+    await this.createLogs(
+      note.requestId,
+      logUserId,
+      'Note Deleted',
+      now,
+      [
+        {
+          field_name: 'note',
+          previous: note.note || '',
+          present: 'Deleted',
+        },
+      ],
+    );
+
     await this.noteRepo.delete({ id });
     await this.redisCacheService.deleteByPattern('requests:*');
     return { status: 200, message: 'Note deleted successfully' };

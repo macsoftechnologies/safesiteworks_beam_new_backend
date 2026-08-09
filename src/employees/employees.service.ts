@@ -467,6 +467,7 @@ export class EmployeesService {
 
     const employee = this.employeeRepo.create({
       ...dto,
+      departId: dto.departId ?? 0,
       password: dto.password ? encodePassword(dto.password) : undefined,
     } as any) as any as Employee;
 

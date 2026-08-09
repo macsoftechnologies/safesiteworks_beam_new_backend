@@ -346,9 +346,9 @@ export class RequestsController {
 
   // 9b. Delete a single note by ID
   @Delete('notes/:id')
-  async deleteNote(@Param('id') id: string) {
+  async deleteNote(@Param('id') id: string, @Request() req: any) {
     try {
-      return await this.requestsService.deleteNote(Number(id));
+      return await this.requestsService.deleteNote(Number(id), req.user?.userId || req.user?.id);
     } catch (error) {
       return { status: 400, message: error.message };
     }
