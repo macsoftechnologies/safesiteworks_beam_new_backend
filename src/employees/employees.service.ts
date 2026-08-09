@@ -296,19 +296,36 @@ export class EmployeesService {
     );
   }
 
+  private async isUsernameTaken(username: string, excludeEmployeeId?: number): Promise<boolean> {
+    if (!username || typeof username !== 'string' || !username.trim()) return false;
+    const trimmed = username.trim();
+
+    // Check in users table
+    const qbUser = this.userRepo.createQueryBuilder('user')
+      .where('LOWER(user.username) = LOWER(:username)', { username: trimmed });
+    if (excludeEmployeeId) {
+      qbUser.andWhere('(user.empId IS NULL OR user.empId != :excludeId)', { excludeId: excludeEmployeeId });
+    }
+    const userCount = await qbUser.getCount();
+    if (userCount > 0) return true;
+
+    // Check in employees table
+    const qbEmp = this.employeeRepo.createQueryBuilder('emp')
+      .where('LOWER(emp.username) = LOWER(:username)', { username: trimmed });
+    if (excludeEmployeeId) {
+      qbEmp.andWhere('emp.id != :excludeId', { excludeId: excludeEmployeeId });
+    }
+    const empCount = await qbEmp.getCount();
+    return empCount > 0;
+  }
+
   async checkUsername(
     username: string,
   ): Promise<{ statusCode: HttpStatus; message: string }> {
-    return this.cache.getOrSet(
-      CACHE_KEYS.username(username),
-      async () => {
-        const count = await this.employeeRepo.count({ where: { username } });
-        return count > 0
-          ? { statusCode: HttpStatus.CONFLICT, message: 'Username Exists' }
-          : { statusCode: HttpStatus.OK, message: 'Username not Exists' };
-      },
-      TTL.USERNAME,
-    );
+    const isTaken = await this.isUsernameTaken(username);
+    return isTaken
+      ? { statusCode: HttpStatus.CONFLICT, message: 'Username Exists' }
+      : { statusCode: HttpStatus.OK, message: 'Username not Exists' };
   }
 
   async search(
@@ -403,6 +420,10 @@ export class EmployeesService {
       return { statusCode: HttpStatus.BAD_REQUEST, message: 'Employee Type is required' };
     }
 
+    if (dto.username && (await this.isUsernameTaken(dto.username))) {
+      return { statusCode: HttpStatus.CONFLICT, message: 'Username already exists' };
+    }
+
     const employee = this.employeeRepo.create({
       ...dto,
       phonenumber: dto.phonenumber ? `+${dto.phonenumber}` : undefined,
@@ -438,6 +459,10 @@ export class EmployeesService {
       return { statusCode: HttpStatus.NO_CONTENT, message: 'Empty Employee' };
     }
 
+    if (dto.username && (await this.isUsernameTaken(dto.username))) {
+      return { statusCode: HttpStatus.CONFLICT, message: 'Username already exists' };
+    }
+
     const otp = dto.otp ?? String(Math.floor(100000 + Math.random() * 900000));
 
     const employee = this.employeeRepo.create({
@@ -465,6 +490,10 @@ export class EmployeesService {
       return { statusCode: HttpStatus.NO_CONTENT, message: 'Empty Employee' };
     }
 
+    if (dto.username && (await this.isUsernameTaken(dto.username))) {
+      return { statusCode: HttpStatus.CONFLICT, message: 'Username already exists' };
+    }
+
     const employee = this.employeeRepo.create({
       ...dto,
       departId: dto.departId ?? 0,
@@ -489,6 +518,10 @@ export class EmployeesService {
       return { statusCode: HttpStatus.NO_CONTENT, message: 'Empty Employee' };
     }
 
+    if (dto.username && (await this.isUsernameTaken(dto.username))) {
+      return { statusCode: HttpStatus.CONFLICT, message: 'Username already exists' };
+    }
+
     const employee = this.employeeRepo.create({
       ...dto,
       password: dto.password ? encodePassword(dto.password) : undefined,
@@ -508,6 +541,9 @@ export class EmployeesService {
     try {
       if (!dto.userType || dto.userType.trim() === '') {
         return { statusCode: HttpStatus.BAD_REQUEST, message: 'Employee Type is required' };
+      }
+      if (dto.username && (await this.isUsernameTaken(dto.username, dto.id))) {
+        return { statusCode: HttpStatus.CONFLICT, message: 'Username already exists' };
       }
       const existing = await this.employeeRepo.findOne({ where: { id: dto.id } });
       if (!existing) {
@@ -550,6 +586,10 @@ export class EmployeesService {
         return { statusCode: HttpStatus.NOT_FOUND, message: 'Employee not found' };
       }
 
+      if (dto.username && (await this.isUsernameTaken(dto.username, dto.id))) {
+        return { statusCode: HttpStatus.CONFLICT, message: 'Username already exists' };
+      }
+
       this.applyEmployeeFields(existing, dto);
       await this.employeeRepo.save(existing);
 
@@ -577,6 +617,10 @@ export class EmployeesService {
         return { statusCode: HttpStatus.NOT_FOUND, message: 'Employee not found' };
       }
 
+      if (dto.username && (await this.isUsernameTaken(dto.username, dto.id))) {
+        return { statusCode: HttpStatus.CONFLICT, message: 'Username already exists' };
+      }
+
       this.applyEmployeeFields(existing, dto);
       await this.employeeRepo.save(existing);
 
@@ -600,6 +644,10 @@ export class EmployeesService {
       const existing = await this.employeeRepo.findOne({ where: { id: dto.id } });
       if (!existing) {
         return { statusCode: HttpStatus.NOT_FOUND, message: 'Employee not found' };
+      }
+
+      if (dto.username && (await this.isUsernameTaken(dto.username, dto.id))) {
+        return { statusCode: HttpStatus.CONFLICT, message: 'Username already exists' };
       }
 
       this.applyEmployeeFields(existing, dto);
