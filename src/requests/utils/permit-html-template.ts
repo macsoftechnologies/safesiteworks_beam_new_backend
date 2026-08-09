@@ -677,9 +677,6 @@ export function generatePermitHtml(data: any): string {
     let html = '';
 
     if (Number(data.Hot_work) === 1) {
-      const riskLevelText = Number(data.high_risk_hotwork) === 1 ? 'High Risk' : 'Low Risk';
-      const riskLevelClass = Number(data.high_risk_hotwork) === 1 ? 'text-danger' : 'text-success';
-
       html += `
         <div class="active-hazard-card mb-3">
           <div class="active-hazard-header">
@@ -689,7 +686,6 @@ export function generatePermitHtml(data: any): string {
               </span>
               <div>
                 <div class="hazard-title">Hot Work</div>
-                <div class="hazard-risk ${riskLevelClass}">${riskLevelText}</div>
               </div>
             </div>
             <div class="hazard-check-status">
@@ -714,7 +710,6 @@ export function generatePermitHtml(data: any): string {
               </span>
               <div>
                 <div class="hazard-title">Temporary Electrical Systems</div>
-                <div class="hazard-risk text-warning">Electrical Risk</div>
               </div>
             </div>
             <div class="hazard-check-status">
@@ -739,7 +734,6 @@ export function generatePermitHtml(data: any): string {
               </span>
               <div>
                 <div class="hazard-title">Hazardous Substances</div>
-                <div class="hazard-risk text-danger">Chemical Risk</div>
               </div>
             </div>
             <div class="hazard-check-status">
@@ -764,7 +758,6 @@ export function generatePermitHtml(data: any): string {
               </span>
               <div>
                 <div class="hazard-title">Working at Height</div>
-                <div class="hazard-risk text-primary">Fall Risk</div>
               </div>
             </div>
             <div class="hazard-check-status">
@@ -789,7 +782,6 @@ export function generatePermitHtml(data: any): string {
               </span>
               <div>
                 <div class="hazard-title">Confined Space Entry</div>
-                <div class="hazard-risk text-warning">Atmosphere Risk</div>
               </div>
             </div>
             <div class="hazard-check-status">
@@ -814,7 +806,6 @@ export function generatePermitHtml(data: any): string {
               </span>
               <div>
                 <div class="hazard-title">Pressure Testing of Equipment</div>
-                <div class="hazard-risk text-warning">Pressure Risk</div>
               </div>
             </div>
             <div class="hazard-check-status">
@@ -839,7 +830,6 @@ export function generatePermitHtml(data: any): string {
               </span>
               <div>
                 <div class="hazard-title">Excavation Works</div>
-                <div class="hazard-risk text-danger">Ground Risk</div>
               </div>
             </div>
             <div class="hazard-check-status">
@@ -864,7 +854,6 @@ export function generatePermitHtml(data: any): string {
               </span>
               <div>
                 <div class="hazard-title">Cranes &amp; Lifting</div>
-                <div class="hazard-risk text-danger">Lifting Risk</div>
               </div>
             </div>
             <div class="hazard-check-status">
@@ -889,7 +878,6 @@ export function generatePermitHtml(data: any): string {
               </span>
               <div>
                 <div class="hazard-title">Electrical Works</div>
-                <div class="hazard-risk text-warning">Electrical Risk</div>
               </div>
             </div>
             <div class="hazard-check-status">
@@ -914,7 +902,6 @@ export function generatePermitHtml(data: any): string {
               </span>
               <div>
                 <div class="hazard-title">Mechanical Works</div>
-                <div class="hazard-risk text-primary">Mechanical Risk</div>
               </div>
             </div>
             <div class="hazard-check-status">
@@ -2173,7 +2160,7 @@ export function generatePermitHtml(data: any): string {
           <div class="info-value">${data.Machinery || '-'}</div>
         </div>
         <div class="info-fullwidth" style="margin-top: 10px;">
-          <div class="info-label">RAMS File Attachments</div>
+          <div class="info-label">Attached Files</div>
           ${attachmentsHtml}
         </div>
       </div>
@@ -2338,6 +2325,7 @@ export function generatePermitHtml(data: any): string {
             </div>
           </div>
 
+          ${(isHotWorkActive && String(data.Request_status || data.requestStatus || '').toLowerCase().trim() === 'opened') ? `
           <div class="row mt-3">
             <div class="col-md-6">
               <div class="info-grid">
@@ -2366,6 +2354,7 @@ export function generatePermitHtml(data: any): string {
               ` : ''}
             </div>
           </div>
+          ` : ''}
 
           ${(() => {
           const isClosedStatus = String(data.Request_status || data.requestStatus || '').toLowerCase() === 'closed';

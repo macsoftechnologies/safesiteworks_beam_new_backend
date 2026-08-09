@@ -133,5 +133,9 @@ export class CreateByCountDto {
 
   @IsString()
   @IsOptional()
+  new_date?: string;
+
+  @IsString()
+  @IsOptional()
   Number_Of_Workers?: string;
 }

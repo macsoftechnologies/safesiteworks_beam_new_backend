@@ -455,6 +455,7 @@ export class RequestsService {
     const permitNo = await this.generatePermitNo();
 
     const isNightShift = String(dto.night_shift) === '1' || String(dto.night_shift) === 'true';
+    const computedNextDate = (dto.Working_Date && this.getNextDateString(dto.Working_Date)) || '';
 
     // 1. Save Request
     const requestData: DeepPartial<RequestEntity> = {
@@ -495,7 +496,7 @@ export class RequestsService {
       siteId: dto.Site_Id !== undefined ? dto.Site_Id : 5,
       permitType: dto.permit_type,
       permitUnder: dto.permit_under || 'Construction',
-      newDate: isNightShift ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : '') : '',
+      newDate: isNightShift ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : computedNextDate) : '',
       newEndTime: isNightShift ? (dto.new_end_time && dto.new_end_time !== 'none' ? dto.new_end_time : '') : '',
       nightShift: isNightShift ? '1' : '0',
       safetyPrecautions: dto.Safety_Precautions,
@@ -1590,12 +1591,15 @@ export class RequestsService {
     if (dto.night_shift !== undefined || dto.new_date !== undefined || dto.new_end_time !== undefined) {
       const isNightShift = dto.night_shift !== undefined
         ? (String(dto.night_shift) === '1' || String(dto.night_shift) === 'true')
-        : (String(existing.nightShift) === '1' || existing.nightShift === 'true');
+        : (String(existing.nightShift) === '1' || String(existing.nightShift) === 'true');
 
       if (isNightShift) {
+        const workingDateVal = dto.Working_Date || existing.workingDate;
+        const computedNextDate = (workingDateVal && this.getNextDateString(workingDateVal)) || '';
+
         const finalNewDate = dto.new_date !== undefined
-          ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : '')
-          : existing.newDate;
+          ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : computedNextDate)
+          : (existing.newDate || computedNextDate);
 
         const finalNewEndTime = dto.new_end_time !== undefined
           ? (dto.new_end_time && dto.new_end_time !== 'none' ? dto.new_end_time : '')
@@ -3958,6 +3962,17 @@ export class RequestsService {
     };
   }
 
+  // Delete a single note by ID
+  async deleteNote(id: number): Promise<any> {
+    const note = await this.noteRepo.findOne({ where: { id } });
+    if (!note) {
+      return { status: 404, message: 'Note not found' };
+    }
+    await this.noteRepo.delete({ id });
+    await this.redisCacheService.deleteByPattern('requests:*');
+    return { status: 200, message: 'Note deleted successfully' };
+  }
+
   // Fetch logs for a specific permit_no (log.php equivalent)
   async getPermitLogs(permitNo: string): Promise<any> {
     const query = `
@@ -4432,6 +4447,11 @@ export class RequestsService {
       async () => {
         const todayQb = this.requestRepo
           .createQueryBuilder('requests')
+          .leftJoin(
+            'request_extra_misc',
+            'rem',
+            'rem.request_id = requests.id',
+          )
           .select('COUNT(*)', 'totalCount')
           .addSelect(
             "SUM(CASE WHEN requests.night_shift = '1' THEN 1 ELSE 0 END)",
@@ -4462,8 +4482,16 @@ export class RequestsService {
             'openedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.Request_status = 'Cancelled' THEN 1 ELSE 0 END)",
+            `SUM(CASE WHEN requests.Request_status = 'Cancelled' 
+            AND (rem.cancel_reason IS NULL OR rem.cancel_reason != 'Permit not opened so system cancelled automatically') 
+            THEN 1 ELSE 0 END)`,
             'cancelledCount',
+          )
+          .addSelect(
+            `SUM(CASE WHEN requests.Request_status = 'Cancelled' 
+            AND rem.cancel_reason = 'Permit not opened so system cancelled automatically' 
+            THEN 1 ELSE 0 END)`,
+            'autoCancelledCount',
           )
           .addSelect(
             "SUM(CASE WHEN requests.Request_status = 'Closed' THEN 1 ELSE 0 END)",
@@ -4481,6 +4509,11 @@ export class RequestsService {
 
         const lastWeekQb = this.requestRepo
           .createQueryBuilder('requests')
+          .leftJoin(
+            'request_extra_misc',
+            'rem',
+            'rem.request_id = requests.id',
+          )
           .select('COUNT(*)', 'totalCount')
           .addSelect(
             "SUM(CASE WHEN requests.night_shift = '1' THEN 1 ELSE 0 END)",
@@ -4511,8 +4544,16 @@ export class RequestsService {
             'openedCount',
           )
           .addSelect(
-            "SUM(CASE WHEN requests.Request_status = 'Cancelled' THEN 1 ELSE 0 END)",
+            `SUM(CASE WHEN requests.Request_status = 'Cancelled' 
+            AND (rem.cancel_reason IS NULL OR rem.cancel_reason != 'Permit not opened so system cancelled automatically') 
+            THEN 1 ELSE 0 END)`,
             'cancelledCount',
+          )
+          .addSelect(
+            `SUM(CASE WHEN requests.Request_status = 'Cancelled' 
+            AND rem.cancel_reason = 'Permit not opened so system cancelled automatically' 
+            THEN 1 ELSE 0 END)`,
+            'autoCancelledCount',
           )
           .addSelect(
             "SUM(CASE WHEN requests.Request_status = 'Closed' THEN 1 ELSE 0 END)",
@@ -4543,6 +4584,7 @@ export class RequestsService {
                 rejectedCount: Number(todayCounts.rejectedCount || 0),
                 openedCount: Number(todayCounts.openedCount || 0),
                 cancelledCount: Number(todayCounts.cancelledCount || 0),
+                autoCancelledCount: Number(todayCounts.autoCancelledCount || 0),
                 closedCount: Number(todayCounts.closedCount || 0),
               },
             ],
@@ -4557,6 +4599,7 @@ export class RequestsService {
                 rejectedCount: Number(lastWeekCounts.rejectedCount || 0),
                 openedCount: Number(lastWeekCounts.openedCount || 0),
                 cancelledCount: Number(lastWeekCounts.cancelledCount || 0),
+                autoCancelledCount: Number(lastWeekCounts.autoCancelledCount || 0),
                 closedCount: Number(lastWeekCounts.closedCount || 0),
               },
             ],
@@ -5410,8 +5453,22 @@ export class RequestsService {
       baseDate.setUTCDate(baseDate.getUTCDate() + x);
       const iterDate = baseDate.toISOString().split('T')[0];
 
+      // Calculate next day date for night shift
+      const nextDateObj = new Date(Date.UTC(sYear, sMonth - 1, sDay));
+      nextDateObj.setUTCDate(nextDateObj.getUTCDate() + x + 1);
+      const nextDayDate = nextDateObj.toISOString().split('T')[0];
+
       // Generate a unique PermitNo for each new request
       const newPermitNo = await this.generatePermitNo();
+
+      const nightShiftVal = dto.night_shift !== undefined
+        ? String(dto.night_shift)
+        : String(originalRequest.nightShift || '0');
+      const isNightShift = nightShiftVal === '1' || nightShiftVal === 'true';
+
+      const resolvedNewDate = isNightShift
+        ? (dto.new_date && dto.new_date !== 'none' ? dto.new_date : nextDayDate)
+        : '';
 
       // Build the new request by copying fields from original + overrides from DTO
       const newRequest = this.requestRepo.create({
@@ -5443,8 +5500,9 @@ export class RequestsService {
         siteId: dto.Site_Id ?? originalRequest.siteId ?? 5,
         permitType: originalRequest.permitType,
         permitUnder: originalRequest.permitUnder || 'Construction',
+        newDate: resolvedNewDate,
         newEndTime: dto.New_End_Time ?? originalRequest.newEndTime,
-        nightShift: dto.night_shift !== undefined ? String(dto.night_shift) : originalRequest.nightShift,
+        nightShift: isNightShift ? '1' : '0',
         numberOfWorkers: dto.Number_Of_Workers ?? originalRequest.numberOfWorkers,
         safetyPrecautions: originalRequest.safetyPrecautions,
       });

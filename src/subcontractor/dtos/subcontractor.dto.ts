@@ -5,8 +5,8 @@ import { PaginationQueryDto } from '../../redis/dtos/pagination.dto';
 export class CreateSubcontractorDto {
   @Transform(({ value }) => (value ? Number(value) : undefined))
   @IsNumber()
-  @IsNotEmpty()
-  departId: number;
+  @IsOptional()
+  departId?: number;
 
   @IsString()
   @IsNotEmpty()

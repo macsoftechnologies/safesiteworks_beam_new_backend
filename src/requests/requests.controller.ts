@@ -344,6 +344,16 @@ export class RequestsController {
     }
   }
 
+  // 9b. Delete a single note by ID
+  @Delete('notes/:id')
+  async deleteNote(@Param('id') id: string) {
+    try {
+      return await this.requestsService.deleteNote(Number(id));
+    } catch (error) {
+      return { status: 400, message: error.message };
+    }
+  }
+
   // 10. Fetch user logs (readLogs.php)
   @Get('logs/user/:userId')
   async readLogs(@Param('userId') userId: string) {

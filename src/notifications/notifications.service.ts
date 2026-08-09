@@ -71,7 +71,7 @@ export class NotificationsService {
       if (subcontractorId) {
         const sub = await this.subcontractorRepo.findOne({ where: { id: subcontractorId } });
         if (sub) {
-          departId = sub.departId;
+          departId = sub.departId ?? null;
         }
       }
 

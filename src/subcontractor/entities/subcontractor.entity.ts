@@ -5,8 +5,8 @@ export class Subcontractor {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'int', nullable: false })
-  departId: number;
+  @Column({ type: 'int', nullable: true })
+  departId?: number;
 
   @Column({ type: 'varchar', length: 255, nullable: false })
   subContractorName: string;
