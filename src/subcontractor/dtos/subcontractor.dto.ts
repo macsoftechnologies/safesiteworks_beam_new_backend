@@ -3,7 +3,11 @@ import { Transform } from 'class-transformer';
 import { PaginationQueryDto } from '../../redis/dtos/pagination.dto';
 
 export class CreateSubcontractorDto {
-  @Transform(({ value }) => (value ? Number(value) : undefined))
+  @Transform(({ value }) => {
+    if (!value || value === 'undefined' || value === 'null') return undefined;
+    const num = Number(value);
+    return isNaN(num) ? undefined : num;
+  })
   @IsNumber()
   @IsOptional()
   departId?: number;
@@ -19,7 +23,11 @@ export class CreateSubcontractorDto {
 }
 
 export class UpdateSubcontractorDto {
-  @Transform(({ value }) => (value ? Number(value) : undefined))
+  @Transform(({ value }) => {
+    if (!value || value === 'undefined' || value === 'null') return undefined;
+    const num = Number(value);
+    return isNaN(num) ? undefined : num;
+  })
   @IsNumber()
   @IsOptional()
   departId?: number;
