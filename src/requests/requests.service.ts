@@ -5372,14 +5372,37 @@ export class RequestsService {
       throw new BadRequestException('PermitNo is required');
     }
 
-    // zone is now an array of objects: { Zone_Id: number, zone: string }
-    const zoneItems: Array<{ Zone_Id: number; zone: string }> = Array.isArray(dto.zone) ? dto.zone : [];
-    if (zoneItems.length === 0) {
-      throw new BadRequestException('Zone not provided');
+    // zone can be an array of objects ({ Zone_Id, zone }), an array of zone IDs, or a string/number
+    let zoneIds: number[] = [];
+    let zoneNamesFromDto: string[] = [];
+
+    const rawZone = dto.zone;
+    if (Array.isArray(rawZone)) {
+      rawZone.forEach((item) => {
+        if (typeof item === 'object' && item !== null) {
+          const zId = Number(item.Zone_Id ?? item.zone_id ?? item.id);
+          const zName = item.zone ?? item.zone_name ?? item.name;
+          if (zId && !isNaN(zId)) zoneIds.push(zId);
+          if (zName) zoneNamesFromDto.push(String(zName));
+        } else if (typeof item === 'number' || typeof item === 'string') {
+          const num = Number(item);
+          if (!isNaN(num) && num > 0) zoneIds.push(num);
+        }
+      });
+    } else if (typeof rawZone === 'string') {
+      rawZone.split(',').forEach((s) => {
+        const num = Number(s.trim());
+        if (!isNaN(num) && num > 0) zoneIds.push(num);
+      });
+    } else if (typeof rawZone === 'number' && rawZone > 0) {
+      zoneIds.push(rawZone);
     }
 
-    const zoneIds = zoneItems.map((z) => z.Zone_Id).filter(Boolean);
-    const zoneNames = zoneItems.map((z) => z.zone).filter(Boolean);
+    zoneIds = [...new Set(zoneIds)];
+
+    if (zoneIds.length === 0) {
+      throw new BadRequestException('Zone not provided');
+    }
 
     // 2. Fetch the original permit (source to copy from)
     const originalRequest = await this.requestRepo.findOne({
@@ -5460,8 +5483,11 @@ export class RequestsService {
 
     const createdTime = dto.createdTime ? new Date(dto.createdTime.replace(',', '')) : new Date();
 
-    // 7. Resolve zone: use first Zone_Id from the array for zoneId FK
-    const resolvedZoneId = zoneIds.join(',');
+    // 7. Resolve zone and zoneId safely truncated to max 250 characters
+    const resolvedZoneId = zoneIds.join(',').substring(0, 250);
+    const fetchedZoneNames = zoneEntities.map((z) => z.zone).filter(Boolean);
+    const combinedZoneNames = zoneNamesFromDto.length > 0 ? zoneNamesFromDto.join(',') : fetchedZoneNames.join(',');
+    const resolvedZone = (combinedZoneNames || originalRequest.zone || '').substring(0, 250);
 
     const createdIds: number[] = [];
 
@@ -5509,7 +5535,7 @@ export class RequestsService {
         buildingId: dto.Building_Id ?? originalRequest.buildingId,
         floorId: dto.Floor_Id ?? originalRequest.floorId,
         zoneId: resolvedZoneId,
-        zone: zoneNames.join(',') || zoneEntities.map((z) => z.zone).join(',') || originalRequest.zone,
+        zone: resolvedZone,
         roomNos: dto.Room_Nos ?? originalRequest.roomNos,
         roomType: dto.Room_Type ?? originalRequest.roomType,
         requestStatus: (originalRequest.requestStatus || '').toLowerCase().trim() === 'draft' ? 'Draft' : 'Hold',

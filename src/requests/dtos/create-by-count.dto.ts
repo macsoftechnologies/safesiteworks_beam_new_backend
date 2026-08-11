@@ -105,12 +105,8 @@ export class CreateByCountDto {
   @IsOptional()
   permit_under?: string;
 
-  // zone is an array of zone objects with Zone_Id (number) and zone (name string)
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ZoneItemDto)
   @IsOptional()
-  zone?: ZoneItemDto[];
+  zone?: any;
 
   @IsString()
   @IsOptional()
