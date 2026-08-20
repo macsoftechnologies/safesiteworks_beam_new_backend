@@ -2414,6 +2414,7 @@ export class RequestsService {
   private async resolveLevelFilters(
     floorIdInput?: any,
     roomTypeInput?: any,
+    buildingIdInput?: any,
   ): Promise<{ resolvedFloorIds: number[]; resolvedFloorNames: string[]; rawTerms: string[] } | null> {
     const rawTerms: string[] = [];
 
@@ -2450,24 +2451,48 @@ export class RequestsService {
     const floorIdsSet = new Set<number>(directFloorIds);
     const floorNamesSet = new Set<string>();
 
+    const buildingIds = this.parseIdList(buildingIdInput);
+
+    // Helper: strip prefix ONLY if an explicit delimiter (- or :) exists (e.g. "B14 - Ground Floor" -> "Ground Floor")
+    // Do NOT strip "Ground " from "Ground Floor"!
+    const getBaseName = (name: string): string => {
+      const stripped = name.replace(/^(?:[A-Za-z0-9_]+\s*[-:]\s*)/, '').trim();
+      const genericWords = ['floor', 'level', 'plan', 'block', 'room', 'zone', 'building'];
+      if (
+        !stripped ||
+        genericWords.includes(stripped.toLowerCase()) ||
+        stripped.toLowerCase() === name.trim().toLowerCase()
+      ) {
+        return '';
+      }
+      return stripped;
+    };
+
     nameTerms.forEach((term) => {
       const trimmed = term.trim();
       floorNamesSet.add(trimmed);
-      const baseName = trimmed.replace(/^(?:[A-Za-z0-9]+\s*[-:]?\s*)/, '').trim();
-      if (baseName && baseName !== trimmed) {
+      const baseName = getBaseName(trimmed);
+      if (baseName) {
         floorNamesSet.add(baseName);
       }
     });
 
     if (directFloorIds.length > 0) {
       try {
-        const foundFloors = await this.floorRepo.findBy({
-          fl_id: In(directFloorIds),
-        });
+        let foundFloors: Floor[] = [];
+        if (buildingIds.length > 0) {
+          foundFloors = await this.floorRepo.find({
+            where: { fl_id: In(directFloorIds), build_id: In(buildingIds) },
+          });
+        } else {
+          foundFloors = await this.floorRepo.findBy({
+            fl_id: In(directFloorIds),
+          });
+        }
         foundFloors.forEach((f) => {
           if (f && f.floor_name) {
             floorNamesSet.add(f.floor_name.trim());
-            const base = f.floor_name.replace(/^(?:[A-Za-z0-9]+\s*[-:]?\s*)/, '').trim();
+            const base = getBaseName(f.floor_name);
             if (base) floorNamesSet.add(base);
           }
         });
@@ -2477,18 +2502,31 @@ export class RequestsService {
     if (nameTerms.length > 0) {
       for (const nTerm of nameTerms) {
         const fullTerm = nTerm.trim();
-        const baseTerm = nTerm.replace(/^(?:[A-Za-z0-9]+\s*[-:]?\s*)/, '').trim();
+        const baseTerm = getBaseName(nTerm);
         try {
-          const matchingFloors = await this.floorRepo
-            .createQueryBuilder('f')
-            .where('f.floor_name LIKE :full', { full: `%${fullTerm}%` })
-            .orWhere('f.floor_name LIKE :base', { base: `%${baseTerm}%` })
-            .getMany();
+          const qb = this.floorRepo.createQueryBuilder('f');
+          if (buildingIds.length > 0) {
+            qb.where('f.build_id IN (:...buildingIds)', { buildingIds });
+            qb.andWhere(
+              new Brackets((sub) => {
+                sub.where('f.floor_name LIKE :full', { full: `%${fullTerm}%` });
+                if (baseTerm) {
+                  sub.orWhere('f.floor_name LIKE :base', { base: `%${baseTerm}%` });
+                }
+              }),
+            );
+          } else {
+            qb.where('f.floor_name LIKE :full', { full: `%${fullTerm}%` });
+            if (baseTerm) {
+              qb.orWhere('f.floor_name LIKE :base', { base: `%${baseTerm}%` });
+            }
+          }
+          const matchingFloors = await qb.getMany();
           matchingFloors.forEach((f) => {
             if (f && f.fl_id) floorIdsSet.add(f.fl_id);
             if (f && f.floor_name) {
               floorNamesSet.add(f.floor_name.trim());
-              const base = f.floor_name.replace(/^(?:[A-Za-z0-9]+\s*[-:]?\s*)/, '').trim();
+              const base = getBaseName(f.floor_name);
               if (base) floorNamesSet.add(base);
             }
           });
@@ -2930,7 +2968,7 @@ export class RequestsService {
         }
 
         // Level / Floor filtering (supports single or multi-level, floor IDs or floor names, across old & new DB records)
-        const levelRes = await this.resolveLevelFilters(dto.Floor_Id, dto.Room_Type);
+        const levelRes = await this.resolveLevelFilters(dto.Floor_Id, dto.Room_Type, dto.Building_Id);
         if (levelRes) {
           const { resolvedFloorIds, resolvedFloorNames, rawTerms } = levelRes;
           const allTerms = Array.from(new Set([...resolvedFloorNames, ...rawTerms]));
@@ -3478,7 +3516,7 @@ export class RequestsService {
           qb.andWhere('requests.Sub_Contractor_Id = :subContractorId', { subContractorId });
         }
         // Level / Floor filtering (supports single or multi-level, floor IDs or floor names, across old & new DB records)
-        const planLevelRes = await this.resolveLevelFilters(searchDto.Floor_Id, searchDto.Room_Type);
+        const planLevelRes = await this.resolveLevelFilters(searchDto.Floor_Id, searchDto.Room_Type, searchDto.Building_Id);
         if (planLevelRes) {
           const { resolvedFloorIds, resolvedFloorNames, rawTerms } = planLevelRes;
           const allTerms = Array.from(new Set([...resolvedFloorNames, ...rawTerms]));
