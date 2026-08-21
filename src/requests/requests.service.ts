@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Brackets, DeepPartial } from 'typeorm';
@@ -52,7 +52,7 @@ import { CreateByCountDto } from './dtos/create-by-count.dto';
 import { PlanSearchDto } from './dtos/planssearch.dto';
 
 @Injectable()
-export class RequestsService {
+export class RequestsService implements OnModuleInit {
   constructor(
     @InjectRepository(RequestEntity)
     private readonly requestRepo: Repository<RequestEntity>,
@@ -120,6 +120,14 @@ export class RequestsService {
     private readonly redisCacheService: RedisCacheService,
     private readonly notificationsService: NotificationsService,
   ) { }
+
+  async onModuleInit() {
+    try {
+      await this.requestRepo.query('ALTER TABLE requests MODIFY COLUMN Floor_Id VARCHAR(255) NULL');
+    } catch (err) {
+      // Ignored if column already modified or table not ready
+    }
+  }
 
   private areEqual(val1: any, val2: any): boolean {
     if (val1 === val2) return true;
@@ -501,7 +509,7 @@ export class RequestsService {
       assignStartDate: dto.Assign_Start_Date,
       assignEndDate: dto.Assign_End_Date,
       buildingId: dto.Building_Id,
-      floorId: dto.Floor_Id,
+      floorId: dto.Floor_Id !== undefined && dto.Floor_Id !== null ? String(dto.Floor_Id) : undefined,
       plansId: dto.Plans_Id,
       zoneId: Array.isArray(dto.Zone_Id)
         ? dto.Zone_Id.join(',')
@@ -5607,7 +5615,7 @@ export class RequestsService {
         assignEndDate: dto.Assign_End_Date ?? originalRequest.assignEndDate,
         workingDate: iterDate,
         buildingId: dto.Building_Id ?? originalRequest.buildingId,
-        floorId: dto.Floor_Id ?? originalRequest.floorId,
+        floorId: dto.Floor_Id !== undefined && dto.Floor_Id !== null ? String(dto.Floor_Id) : originalRequest.floorId,
         zoneId: resolvedZoneId,
         zone: resolvedZone,
         roomNos: dto.Room_Nos ?? originalRequest.roomNos,
