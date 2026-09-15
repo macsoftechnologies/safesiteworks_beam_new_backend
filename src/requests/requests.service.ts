@@ -2408,16 +2408,25 @@ export class RequestsService implements OnModuleInit {
   // Helper to resolve room names from ID string
   private async resolveRoomNames(roomNos?: string): Promise<string> {
     if (!roomNos) return '';
-    const ids = roomNos.split(',').map((s) => s.trim());
-    const allNumeric = ids.every((id) => /^\d+$/.test(id));
-    if (allNumeric && ids.length > 0) {
-      const roomIds = ids.map((id) => Number(id));
-      const rooms = await this.roomRepo.find({
-        where: { room_id: In(roomIds) },
-      });
-      return rooms.map((r) => r.room_name).join(', ');
+    const tokens = roomNos.split(',').map((s) => s.trim()).filter(Boolean);
+    if (tokens.length === 0) return '';
+
+    // Separate numeric IDs from string room names
+    const numericIds = tokens.filter((t) => /^\d+$/.test(t)).map(Number);
+    let roomMap = new Map<string, string>();
+
+    if (numericIds.length > 0) {
+      try {
+        const rooms = await this.roomRepo.find({
+          where: { room_id: In(numericIds) },
+        });
+        roomMap = new Map(rooms.map((r) => [String(r.room_id), r.room_name]));
+      } catch (err) {
+        // Fallback to empty map on error
+      }
     }
-    return roomNos; // Return raw value if not numeric
+
+    return tokens.map((t) => roomMap.get(t) || t).join(', ');
   }
 
   private async resolveLevelFilters(
