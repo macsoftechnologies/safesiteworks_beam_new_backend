@@ -288,13 +288,16 @@ export function generatePermitHtml(data: any): string {
     { id: 'cq_safety_signs', text: 'C&Q Safety signs are in place?' }
   ];
 
-  const renderCheckRow = (question: string, val: any) => {
+  const renderCheckRow = (question: string, val: any, extraHtml?: string) => {
     const isYes = val !== undefined && val !== null && Number(val) === 1;
     const isNo = val !== undefined && val !== null && Number(val) === 0;
     const isNa = val !== undefined && val !== null && Number(val) === 2;
     return `
       <tr>
-        <td>${question}</td>
+        <td>
+          <div>${question}</div>
+          ${extraHtml || ''}
+        </td>
         <td class="check-cell">${isYes ? '<span class="check-indicator check-yes">✓</span>' : '-'}</td>
         <td class="check-cell">${isNo ? '<span class="check-indicator check-no">✓</span>' : '-'}</td>
         <td class="check-cell">${isNa ? '<span class="check-indicator check-na">✓</span>' : '-'}</td>
@@ -2823,7 +2826,21 @@ export function generatePermitHtml(data: any): string {
               </tr>
             </thead>
             <tbody>
-              ${mechanicalQuestions.map(q => renderCheckRow(q.text, data[q.id])).join('')}
+              ${mechanicalQuestions.map(q => {
+                const val = data[q.id] !== undefined ? data[q.id] : (q.id === 'mc_approved' ? data.mcApproved : undefined);
+                const isYes = val !== undefined && val !== null && Number(val) === 1;
+                let extraHtml = '';
+                if (q.id === 'mc_approved' && isYes) {
+                  const mcNum = data.mc_number_text || data.mcNumberText || data.mc_number || data.mcNumber || '';
+                  extraHtml = `
+                    <div style="margin-top: 6px; font-size: 12px; color: #475569;">
+                      <span style="font-weight: 700; color: #334155; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;">MC NUMBER:</span>
+                      <span style="display: inline-block; margin-left: 6px; padding: 2px 8px; background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; font-weight: 600; color: #0f172a; word-break: break-all;">${mcNum || '-'}</span>
+                    </div>
+                  `;
+                }
+                return renderCheckRow(q.text, val, extraHtml);
+              }).join('')}
             </tbody>
           </table>
         </div>
