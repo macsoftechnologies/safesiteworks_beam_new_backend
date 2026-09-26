@@ -12,9 +12,12 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') ?? 5000;
-  app.enableCors({ origin: '*' });
-  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true, }),);
-  app.enableCors();
+  app.enableCors({
+    origin: '*',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type, Accept, Authorization',
+  });
+  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }));
   app.use('/subcontractors', express.static(join(process.cwd(), './uploads/subcontractors'), { redirect: false }));
   app.use('/signatures', express.static(join(process.cwd(), './uploads/signatures'), { redirect: false }));
   app.use('/incidents', express.static(join(process.cwd(), './uploads/incidents'), { redirect: false }));
@@ -41,7 +44,7 @@ async function bootstrap() {
   app.use(bodyParser.json({ limit: '100mb' }));
   app.use(bodyParser.urlencoded({ limit: '500mb', extended: true }));
   setupSwagger(app);
-  await app.listen(port, () => { console.log(`🚀 App running on port ${port} in ${process.env.NODE_ENV} mode`); });
+  await app.listen(port, '0.0.0.0', () => { console.log(`🚀 App running on port ${port} in ${process.env.NODE_ENV} mode`); });
   console.log(`Application running on: ${await app.getUrl()}`);
   console.log(`Swagger docs:           ${await app.getUrl()}/api`);
 }
