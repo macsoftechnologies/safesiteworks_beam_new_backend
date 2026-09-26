@@ -44,7 +44,7 @@ async function bootstrap() {
   app.use(bodyParser.json({ limit: '100mb' }));
   app.use(bodyParser.urlencoded({ limit: '500mb', extended: true }));
   setupSwagger(app);
-  await app.listen(port, '0.0.0.0', () => { console.log(`🚀 App running on port ${port} in ${process.env.NODE_ENV} mode`); });
+  await app.listen(port, () => { console.log(`🚀 App running on port ${port} in ${process.env.NODE_ENV} mode`); });
   console.log(`Application running on: ${await app.getUrl()}`);
   console.log(`Swagger docs:           ${await app.getUrl()}/api`);
 }
