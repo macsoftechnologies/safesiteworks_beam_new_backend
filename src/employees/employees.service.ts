@@ -2,6 +2,7 @@ import {
   HttpStatus,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, FindOptionsWhere } from 'typeorm';
@@ -50,6 +51,8 @@ const CACHE_KEYS = {
 
 @Injectable()
 export class EmployeesService {
+  private readonly logger = new Logger(EmployeesService.name);
+
   constructor(
     @InjectRepository(Employee)
     private readonly employeeRepo: Repository<Employee>,
@@ -110,6 +113,11 @@ export class EmployeesService {
     if (dto.email !== undefined) existing.email = dto.email;
     if (dto.designation !== undefined) existing.designation = dto.designation;
     if (dto.access !== undefined) existing.access = dto.access;
+    if (dto.moduleAccess !== undefined) {
+      existing.moduleAccess = Array.isArray(dto.moduleAccess)
+        ? dto.moduleAccess.join(',')
+        : dto.moduleAccess;
+    }
     if (dto.username !== undefined) existing.username = dto.username;
 
     if (dto.phonenumber !== undefined && dto.phonenumber !== null) {
@@ -691,9 +699,14 @@ export class EmployeesService {
   async createUserLog(
     dto: CreateUserLogDto,
   ): Promise<{ statusCode: HttpStatus; message: string }> {
-    const log = this.userLogRepo.create(dto);
-    await this.userLogRepo.save(log);
-    return { statusCode: HttpStatus.OK, message: 'User Log Created' };
+    try {
+      const log = this.userLogRepo.create(dto);
+      await this.userLogRepo.save(log);
+      return { statusCode: HttpStatus.OK, message: 'User Log Created' };
+    } catch (err: any) {
+      this.logger.warn(`Failed to create user log: ${err?.message || err}`);
+      return { statusCode: HttpStatus.OK, message: 'User Log processed with warning' };
+    }
   }
 
   async getUserLogs(

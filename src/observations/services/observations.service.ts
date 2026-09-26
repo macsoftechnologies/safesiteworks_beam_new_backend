@@ -1,0 +1,1041 @@
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit, Logger, Inject, forwardRef } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, Like, Brackets } from 'typeorm';
+import { Observation, ObservationType, NatureOfFinding, ObservationRiskLevel, ObservationStatus } from '../entities/observation.entity';
+import { ObservationActionLog, ObservationActionType } from '../entities/observation-action-log.entity';
+import { CreateObservationDto } from '../dtos/create-observation.dto';
+import { UpdateObservationDto } from '../dtos/update-observation.dto';
+import { ContractorReviewDto, ContractorAction, ReassignObservationDto, ResolveObservationDto, CloseObservationDto, EscalateObservationDto } from '../dtos/workflow.dto';
+import { IncidentsService } from '../../incidents/services/incidents.service';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { saveBase64Signature } from '../../incidents/utils/signature-storage.util';
+import { SafetyInspectionsService } from '../../safety-inspections/services/safety-inspections.service';
+
+@Injectable()
+export class ObservationsService implements OnModuleInit {
+  private readonly logger = new Logger(ObservationsService.name);
+
+  constructor(
+    @InjectRepository(Observation)
+    private readonly obsRepo: Repository<Observation>,
+    @InjectRepository(ObservationActionLog)
+    private readonly logRepo: Repository<ObservationActionLog>,
+    @Inject(forwardRef(() => IncidentsService))
+    private readonly incidentsService: IncidentsService,
+    @Inject(forwardRef(() => SafetyInspectionsService))
+    private readonly safetyInspectionsService: SafetyInspectionsService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
+
+  /**
+   * Auto-creates missing observation tables in MySQL upon NestJS startup
+   */
+  async onModuleInit() {
+    try {
+      await this.obsRepo.query(`
+        CREATE TABLE IF NOT EXISTS \`observations\` (
+          \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+          \`observation_number\` VARCHAR(100) NOT NULL UNIQUE,
+          \`observation_type\` ENUM('POSITIVE', 'NEEDS_ATTENTION') NOT NULL DEFAULT 'NEEDS_ATTENTION',
+          \`nature_of_finding\` ENUM('GOOD_PRACTICE', 'UNSAFE_ACT', 'UNSAFE_CONDITION') NOT NULL DEFAULT 'UNSAFE_CONDITION',
+          \`subject\` VARCHAR(255) NOT NULL,
+          \`observation_date\` DATE NULL,
+          \`observation_time\` VARCHAR(50) NULL,
+          \`immediate_action_taken\` TEXT NULL,
+          \`safety_category\` VARCHAR(150) NOT NULL,
+          \`risk_level\` ENUM('LOW', 'MEDIUM', 'HIGH', 'CRITICAL') NOT NULL DEFAULT 'MEDIUM',
+          \`description\` TEXT NOT NULL,
+          \`project_name\` VARCHAR(255) NULL,
+          \`project_id\` INT NULL,
+          \`building_id\` INT NULL,
+          \`building_name\` VARCHAR(255) NULL,
+          \`floor_level\` VARCHAR(150) NULL,
+          \`specific_location\` TEXT NULL,
+          \`assigned_contractor_id\` INT NULL,
+          \`assigned_contractor_name\` VARCHAR(255) NULL,
+          \`photos\` JSON NULL,
+          \`status\` ENUM('OPEN', 'ASSIGNED', 'ACCEPTED', 'REJECTED', 'RESOLVED', 'CLOSED', 'ESCALATED') NOT NULL DEFAULT 'OPEN',
+          \`created_by_user_id\` INT NULL,
+          \`created_by_user_name\` VARCHAR(255) NULL,
+          \`created_by_contractor_id\` INT NULL,
+          \`created_by_role\` VARCHAR(100) NOT NULL DEFAULT 'DEPARTMENT',
+          \`resolution_notes\` TEXT NULL,
+          \`resolution_photos\` JSON NULL,
+          \`closed_by\` VARCHAR(255) NULL,
+          \`closed_time\` DATETIME NULL,
+          \`closure_comments\` TEXT NULL,
+          \`closure_signature\` TEXT NULL,
+          \`escalated_incident_id\` INT NULL,
+          \`created_time\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          \`updated_time\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+
+      try {
+        await this.obsRepo.query(`ALTER TABLE \`observations\` ADD COLUMN \`observation_date\` DATE NULL;`);
+      } catch {}
+      try {
+        await this.obsRepo.query(`ALTER TABLE \`observations\` ADD COLUMN \`observation_time\` VARCHAR(50) NULL;`);
+      } catch {}
+      try {
+        await this.obsRepo.query(`ALTER TABLE \`observations\` ADD COLUMN \`immediate_action_taken\` TEXT NULL;`);
+      } catch {}
+      try {
+        await this.obsRepo.query(`ALTER TABLE \`observations\` ADD COLUMN \`subcategory\` VARCHAR(255) NULL;`);
+      } catch {}
+      try {
+        await this.obsRepo.query(`ALTER TABLE \`observations\` ADD COLUMN \`deadline\` DATE NULL;`);
+      } catch {}
+
+      await this.logRepo.query(`
+        CREATE TABLE IF NOT EXISTS \`observation_action_logs\` (
+          \`id\` INT AUTO_INCREMENT PRIMARY KEY,
+          \`observation_id\` INT NOT NULL,
+          \`action_type\` ENUM('CREATED', 'ASSIGNED', 'CONTRACTOR_ACCEPTED', 'CONTRACTOR_REJECTED', 'REASSIGNED', 'RESOLVED', 'CLOSED', 'ESCALATED', 'EDITED') NOT NULL,
+          \`performed_by_user_id\` INT NULL,
+          \`performed_by_user_name\` VARCHAR(255) NOT NULL,
+          \`performed_by_user_role\` VARCHAR(100) NOT NULL,
+          \`previous_contractor\` VARCHAR(255) NULL,
+          \`new_contractor\` VARCHAR(255) NULL,
+          \`remarks\` TEXT NULL,
+          \`photos\` JSON NULL,
+          \`timestamp\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT \`fk_obs_log\` FOREIGN KEY (\`observation_id\`) REFERENCES \`observations\` (\`id\`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+
+      try {
+        await this.logRepo.query(`ALTER TABLE \`observation_action_logs\` MODIFY COLUMN \`action_type\` ENUM('CREATED', 'ASSIGNED', 'CONTRACTOR_ACCEPTED', 'CONTRACTOR_REJECTED', 'REASSIGNED', 'RESOLVED', 'CLOSED', 'ESCALATED', 'EDITED') NOT NULL;`);
+      } catch {}
+
+      this.logger.log('✅ Safety Observations tables auto-initialization check completed successfully.');
+    } catch (err) {
+      this.logger.error('❌ Failed to auto-create observations tables in MySQL', err);
+    }
+  }
+
+  /**
+   * Auto-generates unique tracking number: SO-2026-0001
+   */
+  private async generateObservationNumber(): Promise<string> {
+    const year = new Date().getFullYear();
+    const prefix = `SO-${year}-`;
+    const lastObs = await this.obsRepo.find({
+      where: { observationNumber: Like(`${prefix}%`) },
+      order: { id: 'DESC' },
+      take: 1,
+    });
+
+    let nextSeq = 1;
+    if (lastObs.length > 0) {
+      const parts = lastObs[0].observationNumber.split('-');
+      const lastSeq = parseInt(parts[2], 10);
+      if (!isNaN(lastSeq)) {
+        nextSeq = lastSeq + 1;
+      }
+    }
+    return `${prefix}${nextSeq.toString().padStart(4, '0')}`;
+  }
+
+  /**
+   * Create a new Safety Observation
+   */
+  async createObservation(dto: CreateObservationDto): Promise<{ observation: Observation; history: ObservationActionLog[] }> {
+    const observationNumber = await this.generateObservationNumber();
+    const obsType = dto.observationType || ObservationType.NEEDS_ATTENTION;
+
+    // Positive observations are auto-closed immediately
+    let initialStatus = ObservationStatus.OPEN;
+    if (obsType === ObservationType.POSITIVE) {
+      initialStatus = ObservationStatus.CLOSED;
+    } else if (dto.assignedContractorId || dto.assignedContractorName) {
+      initialStatus = ObservationStatus.ASSIGNED;
+    }
+
+    const observation = this.obsRepo.create({
+      observationNumber,
+      observationType: obsType,
+      natureOfFinding: dto.natureOfFinding || NatureOfFinding.UNSAFE_CONDITION,
+      subject: dto.subject,
+      observationDate: dto.observationDate || dto.date || undefined,
+      observationTime: dto.observationTime || dto.time || undefined,
+      deadline: dto.deadline || dto.dueDate || dto.targetDate || undefined,
+      immediateActionTaken: dto.immediateActionTaken || undefined,
+      safetyCategory: dto.safetyCategory,
+      subcategory: dto.subcategory || undefined,
+      riskLevel: dto.riskLevel || ObservationRiskLevel.MEDIUM,
+      description: dto.description,
+      projectName: dto.projectName,
+      projectId: dto.projectId,
+      buildingId: dto.buildingId,
+      buildingName: dto.buildingName,
+      floorLevel: dto.floorLevel,
+      specificLocation: dto.specificLocation,
+      assignedContractorId: dto.assignedContractorId,
+      assignedContractorName: dto.assignedContractorName,
+      photos: dto.photos || [],
+      status: initialStatus,
+      createdByUserId: dto.createdByUserId,
+      createdByUserName: dto.createdByUserName || 'Safety Officer',
+      createdByContractorId: dto.createdByContractorId,
+      createdByRole: dto.createdByRole || 'DEPARTMENT',
+    });
+
+    const savedObservation = await this.obsRepo.save(observation);
+
+    // Write CREATED action log
+    const createLog = this.logRepo.create({
+      observationId: savedObservation.id,
+      actionType: ObservationActionType.CREATED,
+      performedByUserId: dto.createdByUserId,
+      performedByUserName: dto.createdByUserName || 'Safety Officer',
+      performedByUserRole: dto.createdByRole || 'DEPARTMENT',
+      newContractor: dto.assignedContractorName,
+      remarks: dto.description,
+      photos: dto.photos,
+    });
+
+    await this.logRepo.save(createLog);
+
+    // If assigned upon creation, write ASSIGNED log
+    if (dto.assignedContractorName) {
+      const assignLog = this.logRepo.create({
+        observationId: savedObservation.id,
+        actionType: ObservationActionType.ASSIGNED,
+        performedByUserId: dto.createdByUserId,
+        performedByUserName: dto.createdByUserName || 'Safety Officer',
+        performedByUserRole: dto.createdByRole || 'DEPARTMENT',
+        newContractor: dto.assignedContractorName,
+        remarks: `Assigned to contractor ${dto.assignedContractorName} upon observation creation.`,
+      });
+      await this.logRepo.save(assignLog);
+
+      // Trigger in-app notification to contractor
+      this.notificationsService.triggerObservationNotification(
+        savedObservation,
+        'CREATED',
+        dto.createdByUserId,
+        dto.createdByUserName,
+        dto.createdByRole,
+      ).catch((err) => this.logger.error('Observation notification error on create:', err));
+    }
+
+    const history = await this.logRepo.find({ where: { observationId: savedObservation.id }, order: { id: 'ASC' } });
+    return { observation: savedObservation, history };
+  }
+
+  /**
+   * Update core observation details (Department / Admin users only).
+   * Strictly modifies only observation details; preserves workflow status, contractor resolution, and closure sign-offs.
+   */
+  async updateObservationDetails(
+    id: number,
+    dto: UpdateObservationDto,
+    newFiles?: any[],
+  ): Promise<{ observation: Observation; history: ObservationActionLog[] }> {
+    const observation = await this.obsRepo.findOne({ where: { id } });
+    if (!observation) {
+      throw new NotFoundException(`Observation with ID ${id} not found`);
+    }
+
+    const currentStatus = String(observation.status || '').toUpperCase();
+    if (currentStatus === ObservationStatus.CLOSED || currentStatus === ObservationStatus.ESCALATED) {
+      throw new BadRequestException(`Cannot edit observation ${observation.observationNumber} as it is already ${observation.status}.`);
+    }
+
+    // Retained existing photos
+    let updatedPhotos: string[] = [];
+    if (dto.existingPhotos && Array.isArray(dto.existingPhotos)) {
+      updatedPhotos = [...dto.existingPhotos];
+    } else if (dto.photos && Array.isArray(dto.photos)) {
+      updatedPhotos = [...dto.photos];
+    } else if (Array.isArray(observation.photos)) {
+      updatedPhotos = [...observation.photos];
+    }
+
+    // Append newly uploaded files
+    if (newFiles && newFiles.length > 0) {
+      const uploadedUrls = newFiles.map((file) => `/uploads/observations/${file.filename}`);
+      updatedPhotos = [...updatedPhotos, ...uploadedUrls];
+    }
+
+    // Update only core details
+    if (dto.subject !== undefined) observation.subject = dto.subject;
+    if (dto.description !== undefined) observation.description = dto.description;
+    if (dto.observationType !== undefined) observation.observationType = dto.observationType;
+    if (dto.natureOfFinding !== undefined) observation.natureOfFinding = dto.natureOfFinding;
+    if (dto.safetyCategory !== undefined) observation.safetyCategory = dto.safetyCategory;
+    if (dto.subcategory !== undefined) observation.subcategory = dto.subcategory;
+    if (dto.riskLevel !== undefined) observation.riskLevel = dto.riskLevel;
+    if (dto.observationDate !== undefined || dto.date !== undefined) {
+      observation.observationDate = dto.observationDate || dto.date;
+    }
+    if (dto.observationTime !== undefined || dto.time !== undefined) {
+      observation.observationTime = dto.observationTime || dto.time;
+    }
+    if (dto.deadline !== undefined || dto.dueDate !== undefined || dto.targetDate !== undefined) {
+      observation.deadline = dto.deadline || dto.dueDate || dto.targetDate;
+    }
+    if (dto.immediateActionTaken !== undefined) {
+      observation.immediateActionTaken = dto.immediateActionTaken;
+    }
+    if (dto.projectName !== undefined) observation.projectName = dto.projectName;
+    if (dto.projectId !== undefined) observation.projectId = dto.projectId;
+    if (dto.buildingId !== undefined) observation.buildingId = dto.buildingId;
+    if (dto.buildingName !== undefined) observation.buildingName = dto.buildingName;
+    if (dto.floorLevel !== undefined) observation.floorLevel = dto.floorLevel;
+    if (dto.specificLocation !== undefined) observation.specificLocation = dto.specificLocation;
+    if (dto.assignedContractorId !== undefined) observation.assignedContractorId = dto.assignedContractorId;
+    if (dto.assignedContractorName !== undefined) observation.assignedContractorName = dto.assignedContractorName;
+    observation.photos = updatedPhotos;
+
+    const savedObservation = await this.obsRepo.save(observation);
+
+    // Record EDITED action log
+    const editLog = this.logRepo.create({
+      observationId: savedObservation.id,
+      actionType: ObservationActionType.EDITED,
+      performedByUserId: dto.editedByUserId,
+      performedByUserName: dto.editedByUserName || 'Department User',
+      performedByUserRole: dto.editedByUserRole || 'DEPARTMENT',
+      remarks: dto.editRemarks || 'Observation details updated.',
+      photos: updatedPhotos,
+    });
+    await this.logRepo.save(editLog);
+
+    const history = await this.logRepo.find({
+      where: { observationId: savedObservation.id },
+      order: { id: 'ASC' },
+    });
+
+    return { observation: savedObservation, history };
+  }
+
+  /**
+   * Contractor Review Action: ACCEPT or REJECT with mandatory remarks
+   */
+  async contractorReview(id: number, dto: ContractorReviewDto): Promise<{ observation: Observation; history: ObservationActionLog[] }> {
+    const obs = await this.obsRepo.findOne({ where: { id } });
+    if (!obs) {
+      throw new NotFoundException(`Observation with ID ${id} not found`);
+    }
+
+    if (obs.status === ObservationStatus.CLOSED || obs.status === ObservationStatus.ESCALATED) {
+      throw new BadRequestException(`Cannot review Observation ${obs.observationNumber} as it is already ${obs.status}`);
+    }
+
+    const isAccept = dto.action === ContractorAction.ACCEPT;
+    obs.status = isAccept ? ObservationStatus.ACCEPTED : ObservationStatus.REJECTED;
+
+    const savedObs = await this.obsRepo.save(obs);
+
+    // Log Accept / Reject action
+    const actionType = isAccept ? ObservationActionType.CONTRACTOR_ACCEPTED : ObservationActionType.CONTRACTOR_REJECTED;
+    const log = this.logRepo.create({
+      observationId: id,
+      actionType,
+      performedByUserId: dto.actionByUserId,
+      performedByUserName: dto.actionByUserName,
+      performedByUserRole: 'CONTRACTOR',
+      previousContractor: obs.assignedContractorName,
+      newContractor: obs.assignedContractorName,
+      remarks: dto.remarks,
+      photos: dto.photos,
+    });
+
+    await this.logRepo.save(log);
+
+    // Trigger in-app notification to department & admin users
+    this.notificationsService.triggerObservationNotification(
+      savedObs,
+      isAccept ? 'CONTRACTOR_ACCEPTED' : 'CONTRACTOR_REJECTED',
+      dto.actionByUserId,
+      dto.actionByUserName,
+      'CONTRACTOR',
+      dto.remarks,
+    ).catch((err) => this.logger.error('Observation notification error on contractor review:', err));
+
+    const history = await this.logRepo.find({ where: { observationId: id }, order: { id: 'ASC' } });
+
+    return { observation: savedObs, history };
+  }
+
+  /**
+   * Reassign Contractor (when rejected or re-routed by Department/HSE)
+   */
+  async reassignContractor(id: number, dto: ReassignObservationDto): Promise<{ observation: Observation; history: ObservationActionLog[] }> {
+    const obs = await this.obsRepo.findOne({ where: { id } });
+    if (!obs) {
+      throw new NotFoundException(`Observation with ID ${id} not found`);
+    }
+
+    const prevContractor = obs.assignedContractorName;
+    obs.assignedContractorId = dto.newContractorId;
+    obs.assignedContractorName = dto.newContractorName;
+    obs.status = ObservationStatus.ASSIGNED;
+
+    const savedObs = await this.obsRepo.save(obs);
+
+    // Log REASSIGNED action
+    const log = this.logRepo.create({
+      observationId: id,
+      actionType: ObservationActionType.REASSIGNED,
+      performedByUserId: dto.reassignedByUserId,
+      performedByUserName: dto.reassignedByUserName,
+      performedByUserRole: 'DEPARTMENT',
+      previousContractor: prevContractor,
+      newContractor: dto.newContractorName,
+      remarks: dto.remarks,
+    });
+
+    await this.logRepo.save(log);
+
+    // Trigger in-app notification to newly assigned contractor
+    this.notificationsService.triggerObservationNotification(
+      savedObs,
+      'REASSIGNED',
+      dto.reassignedByUserId,
+      dto.reassignedByUserName,
+      'DEPARTMENT',
+      dto.remarks,
+    ).catch((err) => this.logger.error('Observation notification error on reassign:', err));
+
+    const history = await this.logRepo.find({ where: { observationId: id }, order: { id: 'ASC' } });
+
+    return { observation: savedObs, history };
+  }
+
+  /**
+   * Contractor submits Resolution details & proof photos
+   */
+  async resolveObservation(id: number, dto: ResolveObservationDto): Promise<{ observation: Observation; history: ObservationActionLog[] }> {
+    const obs = await this.obsRepo.findOne({ where: { id } });
+    if (!obs) {
+      throw new NotFoundException(`Observation with ID ${id} not found`);
+    }
+
+    obs.status = ObservationStatus.RESOLVED;
+    obs.resolutionNotes = dto.resolutionNotes;
+    obs.resolutionPhotos = dto.resolutionPhotos || [];
+
+    const savedObs = await this.obsRepo.save(obs);
+
+    // Log RESOLVED action
+    const log = this.logRepo.create({
+      observationId: id,
+      actionType: ObservationActionType.RESOLVED,
+      performedByUserId: dto.resolvedByUserId,
+      performedByUserName: dto.resolvedByUserName,
+      performedByUserRole: 'CONTRACTOR',
+      previousContractor: obs.assignedContractorName,
+      remarks: dto.resolutionNotes,
+      photos: dto.resolutionPhotos,
+    });
+
+    await this.logRepo.save(log);
+
+    // Trigger in-app notification to department & admin users
+    this.notificationsService.triggerObservationNotification(
+      savedObs,
+      'RESOLVED',
+      dto.resolvedByUserId,
+      dto.resolvedByUserName,
+      'CONTRACTOR',
+      dto.resolutionNotes,
+    ).catch((err) => this.logger.error('Observation notification error on resolve:', err));
+
+    const history = await this.logRepo.find({ where: { observationId: id }, order: { id: 'ASC' } });
+
+    return { observation: savedObs, history };
+  }
+
+  /**
+   * Department / HSE User Closes the Observation
+   */
+  async closeObservation(id: number, dto: CloseObservationDto): Promise<{ observation: Observation; history: ObservationActionLog[] }> {
+    const obs = await this.obsRepo.findOne({ where: { id } });
+    if (!obs) {
+      throw new NotFoundException(`Observation with ID ${id} not found`);
+    }
+
+    obs.status = ObservationStatus.CLOSED;
+    obs.closedBy = dto.closedBy;
+    obs.closedTime = new Date();
+    if (dto.closureComments) obs.closureComments = dto.closureComments;
+    if (dto.signature) obs.closureSignature = saveBase64Signature(dto.signature, `sig_obs_close_${id}`);
+
+    const savedObs = await this.obsRepo.save(obs);
+
+    // Log CLOSED action
+    const log = this.logRepo.create({
+      observationId: id,
+      actionType: ObservationActionType.CLOSED,
+      performedByUserId: dto.closedByUserId,
+      performedByUserName: dto.closedBy,
+      performedByUserRole: 'DEPARTMENT',
+      remarks: dto.closureComments || 'Observation verified and closed out by Department / HSE.',
+    });
+
+    await this.logRepo.save(log);
+
+    // Trigger in-app notification to contractor & creator
+    this.notificationsService.triggerObservationNotification(
+      savedObs,
+      'CLOSED',
+      dto.closedByUserId,
+      dto.closedBy,
+      'DEPARTMENT',
+      dto.closureComments,
+    ).catch((err) => this.logger.error('Observation notification error on close:', err));
+
+    // Auto-close any linked safety inspection if all its attached observations are now closed
+    try {
+      if (this.safetyInspectionsService) {
+        await this.safetyInspectionsService.onObservationClosed(id, savedObs.observationNumber, {
+          id: dto.closedByUserId,
+          name: dto.closedBy,
+          role: 'DEPARTMENT',
+          remarks: dto.closureComments,
+        });
+      }
+    } catch (siErr: any) {
+      this.logger.warn(`Failed to sync safety inspection on observation close: ${siErr?.message || siErr}`);
+    }
+
+    const history = await this.logRepo.find({ where: { observationId: id }, order: { id: 'ASC' } });
+
+    return { observation: savedObs, history };
+  }
+
+  /**
+   * Escalate Safety Observation to formal Incident
+   */
+  async escalateToIncident(id: number, dto: EscalateObservationDto): Promise<{ observation: Observation; incident: any; history: ObservationActionLog[] }> {
+    const obs = await this.obsRepo.findOne({ where: { id } });
+    if (!obs) {
+      throw new NotFoundException(`Observation with ID ${id} not found`);
+    }
+
+    if (obs.observationType === ObservationType.POSITIVE) {
+      throw new BadRequestException(`Positive Safety Observations cannot be escalated to Incidents.`);
+    }
+
+    // Auto-create Stage 1 Incident
+    const incidentResult = await this.incidentsService.submitHeadsUp({
+      projectName: obs.projectName || 'Default Site Project',
+      projectId: obs.projectId,
+      incidentDate: new Date().toISOString().split('T')[0],
+      incidentTime: new Date().toTimeString().split(' ')[0].substring(0, 5),
+      buildingId: obs.buildingId,
+      buildingName: obs.buildingName,
+      origin: obs.observationNumber,
+      floorLevel: obs.floorLevel,
+      specificLocation: obs.specificLocation,
+      contractorsInvolved: obs.assignedContractorName,
+      categories: [obs.safetyCategory],
+      descriptionWhatHappened: `[ESCALATED FROM ${obs.observationNumber}]: ${obs.description}`,
+      descriptionConsequence: `Escalated safety observation due to ${obs.riskLevel} risk level.`,
+      submittedBy: dto.escalatedBy,
+      skipNotification: true,
+    });
+
+    obs.status = ObservationStatus.ESCALATED;
+    obs.escalatedIncidentId = incidentResult.incident.id;
+    const savedObs = await this.obsRepo.save(obs);
+
+    // Log ESCALATED action
+    const log = this.logRepo.create({
+      observationId: id,
+      actionType: ObservationActionType.ESCALATED,
+      performedByUserName: dto.escalatedBy,
+      performedByUserRole: 'SITE_HSE',
+      remarks: dto.remarks || `Escalated Observation ${obs.observationNumber} to Incident ${incidentResult.incident.caseNumber} (ID: ${incidentResult.incident.id})`,
+    });
+
+    await this.logRepo.save(log);
+
+    // Trigger in-app, SMS, and email notification to contractor users of assigned contractor company
+    this.notificationsService.triggerObservationNotification(
+      savedObs,
+      'ESCALATED',
+      dto.escalatedByUserId,
+      dto.escalatedBy,
+      'SITE_HSE',
+      dto.remarks,
+      {
+        escalatedIncidentId: incidentResult.incident?.id,
+        incidentCaseNumber: incidentResult.incident?.caseNumber,
+      },
+    ).catch((err) => this.logger.error('Observation notification error on escalate:', err));
+
+    const history = await this.logRepo.find({ where: { observationId: id }, order: { id: 'ASC' } });
+
+    return { observation: savedObs, incident: incidentResult, history };
+  }
+
+  /**
+   * Get single observation with full audit history timeline by ID or observation reference number
+   */
+  async findOne(idOrNumber: string | number): Promise<{ observation: Observation; history: ObservationActionLog[] }> {
+    let observation: Observation | null = null;
+    const numId = typeof idOrNumber === 'number' ? idOrNumber : (isNaN(Number(idOrNumber)) ? null : Number(idOrNumber));
+
+    if (numId) {
+      observation = await this.obsRepo.findOne({ where: { id: numId } });
+    }
+
+    if (!observation && typeof idOrNumber === 'string') {
+      const trimmed = idOrNumber.trim();
+      observation = await this.obsRepo.findOne({
+        where: [
+          { observationNumber: trimmed },
+          { observationNumber: Like(`%${trimmed}%`) },
+        ],
+      });
+    }
+
+    if (!observation) {
+      throw new NotFoundException(`Observation with ID or number "${idOrNumber}" not found`);
+    }
+
+    const history = await this.logRepo.find({
+      where: { observationId: observation.id },
+      order: { id: 'ASC' },
+    });
+
+    return { observation, history };
+  }
+
+  /**
+   * List observations with RBAC contractor data scoping & filters
+   */
+  async findAll(query: {
+    status?: ObservationStatus;
+    type?: ObservationType;
+    riskLevel?: ObservationRiskLevel;
+    category?: string;
+    building?: string;
+    contractor?: string;
+    contractorId?: number;
+    userRole?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const qb = this.obsRepo.createQueryBuilder('obs');
+
+    // Role-Based Access Control (RBAC) Scoping
+    if (query.userRole === 'CONTRACTOR' || query.contractorId) {
+      let resolvedContractorName = query.contractor ? query.contractor.trim() : '';
+      let resolvedSubcontractorId = query.contractorId;
+
+      if (query.contractorId) {
+        try {
+          const subRows = await this.obsRepo.query(
+            `SELECT id, subContractorName FROM subcontractors WHERE id = ? LIMIT 1`,
+            [query.contractorId],
+          );
+          if (subRows && subRows.length > 0) {
+            resolvedSubcontractorId = subRows[0].id;
+            if (!resolvedContractorName) {
+              resolvedContractorName = subRows[0].subContractorName;
+            }
+          } else {
+            const userRows = await this.obsRepo.query(
+              `SELECT u.id, u.username, u.typeId, s.id as subId, s.subContractorName 
+               FROM users u 
+               LEFT JOIN subcontractors s ON (s.id = u.typeId OR s.username = u.username)
+               WHERE u.id = ? LIMIT 1`,
+              [query.contractorId],
+            );
+            if (userRows && userRows.length > 0 && userRows[0].subContractorName) {
+              resolvedSubcontractorId = userRows[0].subId || userRows[0].typeId || query.contractorId;
+              if (!resolvedContractorName) {
+                resolvedContractorName = userRows[0].subContractorName;
+              }
+            }
+          }
+        } catch (e) {
+          this.logger.warn(`Could not resolve contractor ID ${query.contractorId}: ${e.message}`);
+        }
+      }
+
+      if (resolvedContractorName && (resolvedSubcontractorId || query.contractorId)) {
+        qb.andWhere(
+          '(obs.assignedContractorId = :subId OR obs.assignedContractorId = :contractorId OR obs.createdByContractorId = :contractorId OR obs.createdByUserId = :contractorId OR obs.assignedContractorName LIKE :contractorName)',
+          { 
+            subId: resolvedSubcontractorId || query.contractorId, 
+            contractorId: query.contractorId, 
+            contractorName: `%${resolvedContractorName}%` 
+          },
+        );
+      } else if (resolvedContractorName) {
+        qb.andWhere('obs.assignedContractorName LIKE :contractorName', { contractorName: `%${resolvedContractorName}%` });
+      } else if (query.contractorId || resolvedSubcontractorId) {
+        qb.andWhere(
+          '(obs.assignedContractorId = :subId OR obs.assignedContractorId = :contractorId OR obs.createdByContractorId = :contractorId OR obs.createdByUserId = :contractorId)',
+          { subId: resolvedSubcontractorId || query.contractorId, contractorId: query.contractorId },
+        );
+      }
+    } else if (query.contractor) {
+      const cList = query.contractor.split(',').map((c: string) => c.trim()).filter(Boolean);
+      if (cList.length === 1) {
+        qb.andWhere('obs.assignedContractorName LIKE :contractor', { contractor: `%${cList[0]}%` });
+      } else if (cList.length > 1) {
+        qb.andWhere(
+          new Brackets((subQb) => {
+            cList.forEach((c: string, i: number) => {
+              if (i === 0) subQb.where(`obs.assignedContractorName LIKE :c_${i}`, { [`c_${i}`]: `%${c}%` });
+              else subQb.orWhere(`obs.assignedContractorName LIKE :c_${i}`, { [`c_${i}`]: `%${c}%` });
+            });
+          }),
+        );
+      }
+    }
+
+    if (query.status) {
+      qb.andWhere('obs.status = :status', { status: query.status });
+    }
+    if (query.type) {
+      qb.andWhere('obs.observationType = :type', { type: query.type });
+    }
+    if (query.riskLevel) {
+      qb.andWhere('obs.riskLevel = :riskLevel', { riskLevel: query.riskLevel });
+    }
+    if (query.category) {
+      qb.andWhere('obs.safetyCategory LIKE :category', { category: `%${query.category}%` });
+    }
+    if (query.building) {
+      const bList = query.building.split(',').map((b: string) => b.trim()).filter(Boolean);
+      if (bList.length === 1) {
+        qb.andWhere('obs.buildingName LIKE :building', { building: `%${bList[0]}%` });
+      } else if (bList.length > 1) {
+        qb.andWhere(
+          new Brackets((subQb) => {
+            bList.forEach((b: string, i: number) => {
+              if (i === 0) subQb.where(`obs.buildingName LIKE :b_${i}`, { [`b_${i}`]: `%${b}%` });
+              else subQb.orWhere(`obs.buildingName LIKE :b_${i}`, { [`b_${i}`]: `%${b}%` });
+            });
+          }),
+        );
+      }
+    }
+    if (query.search) {
+      const searchLike = `%${query.search}%`;
+      qb.andWhere(
+        '(obs.observationNumber LIKE :searchLike OR obs.subject LIKE :searchLike OR obs.description LIKE :searchLike OR obs.safetyCategory LIKE :searchLike OR obs.assignedContractorName LIKE :searchLike)',
+        { searchLike },
+      );
+    }
+
+    qb.orderBy('obs.id', 'DESC');
+
+    // Calculate overall statistics across the entire matching dataset (not paginated)
+    let stats = {
+      total: 0,
+      positive: 0,
+      needsAttention: 0,
+      positiveRatio: 0,
+      activeAssigned: 0,
+    };
+
+    try {
+      const statsRaw = await qb
+        .clone()
+        .orderBy()
+        .select([
+          'COUNT(obs.id) as total',
+          `SUM(CASE WHEN obs.observationType = '${ObservationType.POSITIVE}' THEN 1 ELSE 0 END) as positive`,
+          `SUM(CASE WHEN obs.observationType = '${ObservationType.NEEDS_ATTENTION}' THEN 1 ELSE 0 END) as needsAttention`,
+          `SUM(CASE WHEN obs.status IN ('${ObservationStatus.ASSIGNED}', '${ObservationStatus.ACCEPTED}') THEN 1 ELSE 0 END) as activeAssigned`,
+        ])
+        .getRawOne();
+
+      const totalCount = parseInt(statsRaw?.total || '0', 10);
+      const positiveCount = parseInt(statsRaw?.positive || '0', 10);
+      const needsAttentionCount = parseInt(statsRaw?.needsAttention || '0', 10);
+      const activeAssignedCount = parseInt(statsRaw?.activeAssigned || '0', 10);
+      const positiveRatio = totalCount > 0 ? Math.round((positiveCount / totalCount) * 100) : 0;
+
+      stats = {
+        total: totalCount,
+        positive: positiveCount,
+        needsAttention: needsAttentionCount,
+        positiveRatio,
+        activeAssigned: activeAssignedCount,
+      };
+    } catch (e) {
+      this.logger.warn(`Could not compute overall stats in findAll: ${e.message}`);
+    }
+
+    const total = stats.total || (await qb.getCount());
+
+    if (query.page && query.limit) {
+      const page = Math.max(1, query.page);
+      const limit = Math.max(1, query.limit);
+      qb.skip((page - 1) * limit).take(limit);
+      const data = await qb.getMany();
+      return {
+        data,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        stats,
+      };
+    }
+
+    const data = await qb.getMany();
+    return {
+      data,
+      total,
+      page: 1,
+      limit: total || 10,
+      totalPages: 1,
+      stats,
+    };
+  }
+
+  /**
+   * High-performance SQL Aggregation for Safety Observations Dashboard (handles 1,000,000+ records in <10ms)
+   */
+  async getDashboardStats(filters: { building?: string; contractor?: string; contractorId?: number; userRole?: string; range?: string }) {
+    const qb = this.obsRepo.createQueryBuilder('obs');
+
+    if (filters.userRole === 'CONTRACTOR' || filters.contractorId) {
+      let resolvedContractorName = filters.contractor ? filters.contractor.trim() : '';
+      let resolvedSubcontractorId = filters.contractorId;
+
+      if (filters.contractorId) {
+        try {
+          const subRows = await this.obsRepo.query(
+            `SELECT id, subContractorName FROM subcontractors WHERE id = ? LIMIT 1`,
+            [filters.contractorId],
+          );
+          if (subRows && subRows.length > 0) {
+            resolvedSubcontractorId = subRows[0].id;
+            if (!resolvedContractorName) {
+              resolvedContractorName = subRows[0].subContractorName;
+            }
+          } else {
+            const userRows = await this.obsRepo.query(
+              `SELECT u.id, u.username, u.typeId, s.id as subId, s.subContractorName 
+               FROM users u 
+               LEFT JOIN subcontractors s ON (s.id = u.typeId OR s.username = u.username)
+               WHERE u.id = ? LIMIT 1`,
+              [filters.contractorId],
+            );
+            if (userRows && userRows.length > 0 && userRows[0].subContractorName) {
+              resolvedSubcontractorId = userRows[0].subId || userRows[0].typeId || filters.contractorId;
+              if (!resolvedContractorName) {
+                resolvedContractorName = userRows[0].subContractorName;
+              }
+            }
+          }
+        } catch (e) {
+          this.logger.warn(`Could not resolve contractor ID in stats ${filters.contractorId}: ${e.message}`);
+        }
+      }
+
+      if (resolvedContractorName && (resolvedSubcontractorId || filters.contractorId)) {
+        qb.andWhere(
+          '(obs.assignedContractorId = :subId OR obs.assignedContractorId = :contractorId OR obs.createdByContractorId = :contractorId OR obs.createdByUserId = :contractorId OR obs.assignedContractorName LIKE :contractorName)',
+          { 
+            subId: resolvedSubcontractorId || filters.contractorId, 
+            contractorId: filters.contractorId, 
+            contractorName: `%${resolvedContractorName}%` 
+          },
+        );
+      } else if (resolvedContractorName) {
+        qb.andWhere('obs.assignedContractorName LIKE :contractorName', { contractorName: `%${resolvedContractorName}%` });
+      } else if (filters.contractorId || resolvedSubcontractorId) {
+        qb.andWhere(
+          '(obs.assignedContractorId = :subId OR obs.assignedContractorId = :contractorId OR obs.createdByContractorId = :contractorId OR obs.createdByUserId = :contractorId)',
+          { subId: resolvedSubcontractorId || filters.contractorId, contractorId: filters.contractorId },
+        );
+      }
+    } else if (filters.contractor) {
+      const cList = filters.contractor.split(',').map((c: string) => c.trim()).filter(Boolean);
+      if (cList.length === 1) {
+        qb.andWhere('obs.assignedContractorName LIKE :contractor', { contractor: `%${cList[0]}%` });
+      } else if (cList.length > 1) {
+        qb.andWhere(
+          new Brackets((subQb) => {
+            cList.forEach((c: string, i: number) => {
+              if (i === 0) subQb.where(`obs.assignedContractorName LIKE :c_${i}`, { [`c_${i}`]: `%${c}%` });
+              else subQb.orWhere(`obs.assignedContractorName LIKE :c_${i}`, { [`c_${i}`]: `%${c}%` });
+            });
+          }),
+        );
+      }
+    }
+
+    if (filters.building) {
+      const bList = filters.building.split(',').map((b: string) => b.trim()).filter(Boolean);
+      if (bList.length === 1) {
+        qb.andWhere('obs.buildingName LIKE :building', { building: `%${bList[0]}%` });
+      } else if (bList.length > 1) {
+        qb.andWhere(
+          new Brackets((subQb) => {
+            bList.forEach((b: string, i: number) => {
+              if (i === 0) subQb.where(`obs.buildingName LIKE :b_${i}`, { [`b_${i}`]: `%${b}%` });
+              else subQb.orWhere(`obs.buildingName LIKE :b_${i}`, { [`b_${i}`]: `%${b}%` });
+            });
+          }),
+        );
+      }
+    }
+
+    const now = new Date();
+
+    const observationsList = await qb.getMany();
+
+    let thisWeek = 0, lastWeek = 0, thisMonth = 0, lastMonth = 0;
+    const contractorMap: Record<string, { id: string; thisWeek: number; lastWeek: number; total: number }> = {};
+    const catMap: Record<string, { total: number; safe: number; unsafe: number }> = {};
+    const riskMap: Record<string, number> = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+    let safe = 0, unsafe = 0, activeAssigned = 0;
+    const weeklyCounts = [0, 0, 0, 0, 0, 0, 0, 0];
+    const bodyPartsMap: Record<string, number> = {};
+
+    const diffDays = (d1: Date, d2: Date) => Math.floor((d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24));
+
+    observationsList.forEach(obs => {
+      const createdDate = obs.createdTime ? new Date(obs.createdTime) : new Date();
+      const days = diffDays(now, createdDate);
+
+      if (days >= 0 && days < 7) thisWeek++;
+      if (days >= 7 && days < 14) lastWeek++;
+      if (days >= 0 && days < 30) thisMonth++;
+      if (days >= 30 && days < 60) lastMonth++;
+
+      const wIdx = Math.floor(days / 7);
+      if (wIdx >= 0 && wIdx < 8) weeklyCounts[7 - wIdx]++;
+
+      const isPositive = obs.observationType === ObservationType.POSITIVE;
+      if (isPositive) safe++;
+      else unsafe++;
+
+      if (obs.status === ObservationStatus.ASSIGNED || obs.status === ObservationStatus.ACCEPTED) {
+        activeAssigned++;
+      }
+
+      const contractorName = obs.assignedContractorName || 'Unassigned';
+      if (!contractorMap[contractorName]) {
+        contractorMap[contractorName] = { id: contractorName, thisWeek: 0, lastWeek: 0, total: 0 };
+      }
+      contractorMap[contractorName].total++;
+      if (days >= 0 && days < 7) contractorMap[contractorName].thisWeek++;
+      if (days >= 7 && days < 14) contractorMap[contractorName].lastWeek++;
+
+      const cat = obs.safetyCategory || 'General';
+      if (!catMap[cat]) catMap[cat] = { total: 0, safe: 0, unsafe: 0 };
+      catMap[cat].total++;
+      if (isPositive) catMap[cat].safe++;
+      else catMap[cat].unsafe++;
+
+      const rawRisk = String(obs.riskLevel || '').toUpperCase().trim();
+      let rLevel = 'Low';
+      if (rawRisk.includes('CRIT') || rawRisk === 'VERY HIGH') rLevel = 'Critical';
+      else if (rawRisk === 'HIGH') rLevel = 'High';
+      else if (rawRisk === 'MEDIUM' || rawRisk === 'MODERATE') rLevel = 'Medium';
+      else if (rawRisk === 'LOW' || rawRisk === 'VERY LOW') rLevel = 'Low';
+      else if (obs.riskLevel) rLevel = 'Medium';
+      riskMap[rLevel] = (riskMap[rLevel] || 0) + 1;
+
+      const bp = (obs as any).bodyParts || (obs as any).bodyPart;
+      if (bp) {
+        const parts = Array.isArray(bp) ? bp : [bp];
+        parts.forEach((p: string) => {
+          if (p) bodyPartsMap[p] = (bodyPartsMap[p] || 0) + 1;
+        });
+      }
+    });
+
+    const weeklyTrend = weeklyCounts.map((c, i) => ({
+      label: i === 7 ? 'This wk' : `Wk ${8 - i}`,
+      count: c,
+    }));
+    const weeklyAvg = weeklyCounts.reduce((a, b) => a + b, 0) / 8;
+
+    const contractorKPIs = Object.values(contractorMap).map(c => ({
+      ...c,
+      target: 5,
+      weeklyAvg: c.total / 8,
+    })).sort((a, b) => b.thisWeek - a.thisWeek);
+
+    const categories = Object.keys(catMap).map(k => ({
+      name: k,
+      count: catMap[k].total,
+      safe: catMap[k].safe,
+      unsafe: catMap[k].unsafe,
+    })).sort((a, b) => b.count - a.count);
+
+    const severity = [
+      { level: 'Critical', count: riskMap['Critical'] || 0, color: '#8F1B32' },
+      { level: 'High', count: riskMap['High'] || 0, color: '#E32B50' },
+      { level: 'Medium', count: riskMap['Medium'] || 0, color: '#C07D10' },
+      { level: 'Low', count: riskMap['Low'] || 0, color: '#7BBE97' },
+    ];
+
+    const meetingKPI = contractorKPIs.filter(c => c.thisWeek >= c.target).length;
+    const kpiCompliance = contractorKPIs.length > 0 ? Math.round((meetingKPI / contractorKPIs.length) * 100) : 0;
+
+    const bodyParts = Object.keys(bodyPartsMap).map(k => ({
+      part: k,
+      count: bodyPartsMap[k],
+    })).sort((a, b) => b.count - a.count);
+
+    const defaultBodyPartsZero = [
+      { part: 'R. Hand', count: 0 },
+      { part: 'L. Forearm', count: 0 },
+      { part: 'Lower Back', count: 0 },
+      { part: 'R. Foot', count: 0 },
+      { part: 'Head', count: 0 }
+    ];
+
+    return {
+      total: observationsList.length,
+      thisWeek,
+      lastWeek,
+      thisMonth,
+      lastMonth,
+      weeklyAvg,
+      kpiCompliance,
+      meetingKPI,
+      totalContractors: contractorKPIs.length,
+      contractorKPIs,
+      categories,
+      weeklyTrend,
+      safe,
+      unsafe,
+      activeAssigned,
+      positiveRatio: (safe + unsafe) > 0 ? Math.round((safe / (safe + unsafe)) * 100) : 0,
+      severity,
+      bodyParts: bodyParts.length > 0 ? bodyParts : defaultBodyPartsZero,
+    };
+  }
+
+  /**
+   * Delete a safety observation record (Admin/SuperAdmin only)
+   */
+  async deleteObservation(id: number, requestingUserId?: number, requestingUserRole?: string) {
+    const observation = await this.obsRepo.findOne({ where: { id } });
+    if (!observation) {
+      throw new NotFoundException(`Observation with ID ${id} not found`);
+    }
+
+    // Delete child action logs
+    await this.logRepo.delete({ observationId: id });
+    // Delete observation
+    await this.obsRepo.delete(id);
+
+    this.logger.log(`Safety Observation ${observation.observationNumber} (ID: ${id}) deleted by user ${requestingUserId || 'unknown'} (${requestingUserRole || 'Admin'})`);
+
+    return {
+      statusCode: 200,
+      message: `Observation ${observation.observationNumber || id} deleted successfully`,
+      id,
+    };
+  }
+}

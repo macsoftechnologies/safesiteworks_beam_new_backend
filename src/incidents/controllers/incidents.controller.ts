@@ -1,0 +1,405 @@
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Res, ParseIntPipe, UseInterceptors, UploadedFiles, UploadedFile, BadRequestException } from '@nestjs/common';
+import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
+import 'multer';
+import type { Response } from 'express';
+import { IncidentsService } from '../services/incidents.service';
+import { IncidentPdfService } from '../services/incident-pdf.service';
+import { CreateHeadsUpDto } from '../dtos/create-headsup.dto';
+import { CreateInitialReportDto } from '../dtos/create-initial-report.dto';
+import { UpdateInvestigationDto } from '../dtos/update-investigation.dto';
+import { StageApprovalDto, ReviewInvestigationDto, CloseIncidentDto, ReturnForRevisionDto } from '../dtos/stage-approval.dto';
+import { CreateActionItemDto, UpdateActionItemDto } from '../dtos/action-item.dto';
+import { IncidentStage, InvestigationLevel } from '../entities/incident.entity';
+import { incidentMulterConfig } from '../config/multer.config';
+
+@Controller('incidents')
+export class IncidentsController {
+  constructor(
+    private readonly incidentsService: IncidentsService,
+    private readonly incidentPdfService: IncidentPdfService,
+  ) {}
+
+  /**
+   * Upload multiple incident photos/images via Multer into uploads/incidents/
+   * POST /incidents/upload-images
+   */
+  @Post('upload-images')
+  @UseInterceptors(FilesInterceptor('files', 10, incidentMulterConfig))
+  uploadMultipleImages(@UploadedFiles() files: any[]) {
+    if (!files || files.length === 0) {
+      throw new BadRequestException('No image files were provided for upload.');
+    }
+    const urls = files.map((file) => `/incidents/${file.filename}`);
+    return {
+      statusCode: 200,
+      message: `${files.length} image(s) uploaded successfully`,
+      urls,
+    };
+  }
+
+  /**
+   * Upload single incident photo/image via Multer into uploads/incidents/
+   * POST /incidents/upload-image
+   */
+  @Post('upload-image')
+  @UseInterceptors(FileInterceptor('file', incidentMulterConfig))
+  uploadSingleImage(@UploadedFile() file: any) {
+    if (!file) {
+      throw new BadRequestException('No image file was provided for upload.');
+    }
+    const url = `/incidents/${file.filename}`;
+    return {
+      statusCode: 200,
+      message: 'Image uploaded successfully',
+      url,
+      fileName: file.originalname,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+    };
+  }
+
+  /**
+   * Upload mandatory attachment document/file (PDF, Doc, Image) via Multer into uploads/incidents/
+   * POST /incidents/upload-attachment
+   */
+  @Post('upload-attachment')
+  @UseInterceptors(FileInterceptor('file', incidentMulterConfig))
+  uploadAttachment(@UploadedFile() file: any) {
+    if (!file) {
+      throw new BadRequestException('No attachment file was provided for upload.');
+    }
+    const url = `/incidents/${file.filename}`;
+    return {
+      statusCode: 200,
+      message: 'Attachment uploaded successfully',
+      url,
+      fileName: file.originalname,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+    };
+  }
+
+  /**
+   * Stage 1: Submit Heads-Up Notification (within 2 hours)
+   * POST /incidents/headsup
+   */
+  @Post('headsup')
+  async submitHeadsUp(@Body() dto: CreateHeadsUpDto) {
+    return await this.incidentsService.submitHeadsUp(dto);
+  }
+
+  /**
+   * Stage 1: Update Heads-Up Notification (when submitted and not yet approved)
+   * PUT /incidents/:id/headsup
+   */
+  @Put(':id/headsup')
+  async updateHeadsUp(@Param('id', ParseIntPipe) id: number, @Body() dto: any) {
+    return await this.incidentsService.updateHeadsUp(id, dto);
+  }
+
+  /**
+   * Stage 1 Approval
+   * POST /incidents/:id/headsup/approve
+   */
+  @Post(':id/headsup/approve')
+  async approveHeadsUp(@Param('id', ParseIntPipe) id: number, @Body() dto: StageApprovalDto) {
+    return await this.incidentsService.approveHeadsUp(id, dto);
+  }
+
+  /**
+   * Stage 2: Submit Initial Incident Report (within 24 hours)
+   * POST /incidents/:id/initial-report
+   * Supports BOTH JSON payload (with image URLs) AND direct multipart/form-data photo uploads!
+   */
+  @Post(':id/initial-report')
+  @UseInterceptors(FilesInterceptor('photos', 10, incidentMulterConfig))
+  async submitInitialReport(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateInitialReportDto,
+    @UploadedFiles() files?: any[],
+  ) {
+    let photosList: string[] = [];
+
+    if (dto.photos) {
+      const existing = Array.isArray(dto.photos) ? dto.photos : [dto.photos];
+      photosList.push(...existing);
+    }
+    if ((dto as any).existingPhotos) {
+      try {
+        const ep = typeof (dto as any).existingPhotos === 'string'
+          ? JSON.parse((dto as any).existingPhotos)
+          : (dto as any).existingPhotos;
+        if (Array.isArray(ep)) photosList.push(...ep);
+        else photosList.push(ep);
+      } catch {
+        photosList.push((dto as any).existingPhotos);
+      }
+    }
+
+    // Append URLs of any direct file uploads in this request
+    if (files && files.length > 0) {
+      const uploadedUrls = files.map((file) => `/incidents/${file.filename}`);
+      photosList = [...photosList, ...uploadedUrls];
+    }
+
+    dto.photos = photosList;
+
+    return await this.incidentsService.submitInitialReport(id, dto);
+  }
+
+  /**
+   * Stage 2 Approval
+   * POST /incidents/:id/initial-report/approve
+   */
+  @Post(':id/initial-report/approve')
+  async approveInitialReport(@Param('id', ParseIntPipe) id: number, @Body() dto: StageApprovalDto) {
+    return await this.incidentsService.approveInitialReport(id, dto);
+  }
+
+  /**
+   * Stage 3: Save / Update Incident Investigation (within 7 days)
+   * PUT /incidents/:id/investigation
+   */
+  @Put(':id/investigation')
+  async saveInvestigation(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateInvestigationDto) {
+    return await this.incidentsService.saveInvestigation(id, dto);
+  }
+
+  /**
+   * Stage 3 Review
+   * POST /incidents/:id/investigation/review
+   */
+  @Post(':id/investigation/review')
+  async reviewInvestigation(@Param('id', ParseIntPipe) id: number, @Body() dto: ReviewInvestigationDto) {
+    return await this.incidentsService.reviewInvestigation(id, dto);
+  }
+
+  /**
+   * Return Incident Stage for Revision
+   * POST /incidents/:id/return-revision
+   */
+  @Post(':id/return-revision')
+  async returnForRevision(@Param('id', ParseIntPipe) id: number, @Body() dto: ReturnForRevisionDto) {
+    return await this.incidentsService.returnForRevision(id, dto);
+  }
+
+  /**
+   * Close Incident Investigation
+   * PUT /incidents/:id/close
+   */
+  @Put(':id/close')
+  async closeIncident(@Param('id', ParseIntPipe) id: number, @Body() dto?: CloseIncidentDto) {
+    return await this.incidentsService.closeIncident(id, dto);
+  }
+
+  /**
+   * Add Action Item to an Incident
+   * POST /incidents/:id/action-items
+   */
+  @Post(':id/action-items')
+  async addActionItem(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateActionItemDto) {
+    return await this.incidentsService.addActionItem(id, dto);
+  }
+
+  /**
+   * Get all Action Items for an Incident
+   * GET /incidents/:id/action-items
+   */
+  @Get(':id/action-items')
+  async getActionItems(@Param('id', ParseIntPipe) id: number) {
+    return await this.incidentsService.getActionItems(id);
+  }
+
+  /**
+   * Update an Action Item
+   * PUT /incidents/:id/action-items/:actionId
+   */
+  @Put(':id/action-items/:actionId')
+  async updateActionItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('actionId', ParseIntPipe) actionId: number,
+    @Body() dto: UpdateActionItemDto,
+  ) {
+    return await this.incidentsService.updateActionItem(id, actionId, dto);
+  }
+
+  /**
+   * Delete an Action Item
+   * DELETE /incidents/:id/action-items/:actionId
+   */
+  @Delete(':id/action-items/:actionId')
+  async deleteActionItem(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('actionId', ParseIntPipe) actionId: number,
+  ) {
+    return await this.incidentsService.deleteActionItem(id, actionId);
+  }
+
+  /**
+   * Delete an Incident and all its associated reports (Admin/SuperAdmin only)
+   * DELETE /incidents/:id
+   */
+  @Delete(':id')
+  async deleteIncident(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('userId') userId?: string,
+    @Query('userRole') userRole?: string,
+  ) {
+    return await this.incidentsService.deleteIncident(id, userId ? parseInt(userId, 10) : undefined, userRole);
+  }
+
+  /**
+   * Export 3-in-1 Official Incident Forms as PDF (Heads-up, Initial Report, Investigation)
+   * GET /incidents/:id/export-pdf
+   */
+  @Get(':id/export-pdf')
+  async exportIncidentPdf(
+    @Param('id') id: string,
+    @Query('form') form: string,
+    @Query('stage') stage: string,
+    @Query('includeWitnesses') includeWitnessesQuery: string,
+    @Query('includeAttachments') includeAttachmentsQuery: string,
+    @Res() res: Response,
+  ) {
+    let details: any;
+    const numericId = parseInt(id, 10);
+
+    if (!isNaN(numericId)) {
+      try {
+        details = await this.incidentsService.getIncidentDetails(numericId);
+      } catch {
+        // Fallback search
+      }
+    }
+
+    if (!details) {
+      const inc = await this.incidentsService.findByCaseNumber(id);
+      if (inc) {
+        details = await this.incidentsService.getIncidentDetails(inc.id);
+      }
+    }
+
+    if (!details) {
+      details = {
+        incident: {
+          id: id,
+          caseNumber: id,
+          projectName: 'M3SOUTH',
+          incidentDate: new Date().toISOString().split('T')[0],
+          incidentTime: '07:30',
+          buildingName: 'Main Site Road',
+          specificLocation: 'Entry Point',
+          contractorsInvolved: 'Give Steel / ATEA',
+          categories: ['Near Miss'],
+          descriptionWhatHappened: 'Vehicle pedestrian near miss at site entry.',
+        },
+      };
+    }
+
+    const requestedForm = form || stage || 'all';
+    const includeWitnesses = includeWitnessesQuery === 'true' || includeWitnessesQuery === '1';
+    const includeAttachments = includeAttachmentsQuery === undefined ? true : (includeAttachmentsQuery === 'true' || includeAttachmentsQuery === '1');
+    const pdfBuffer = await this.incidentPdfService.generate3In1Pdf(details, requestedForm, { includeWitnesses, includeAttachments });
+    const caseName = details.incident?.caseNumber || details.incident?.id || id;
+    const formSuffix = requestedForm === 'headsUp' || requestedForm === '1' ? '_Form1_HeadsUp'
+      : requestedForm === 'initialReport' || requestedForm === '2' ? '_Form2_InitialReport'
+      : requestedForm === 'investigation' || requestedForm === '3' ? '_Form3_Investigation'
+      : '_All_Forms_Report';
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${caseName}${formSuffix}.pdf"`);
+    res.end(pdfBuffer);
+  }
+
+  /**
+   * Get aggregated dashboard statistics (KPIs, pipeline, severity, body parts)
+   * GET /incidents/stats
+   */
+  @Get('stats')
+  async getDashboardStats(
+    @Query('building') building?: string,
+    @Query('contractor') contractor?: string,
+    @Query('contractorId') contractorId?: string,
+    @Query('userRole') userRole?: string,
+    @Query('dateRange') dateRange?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const cId = contractorId ? parseInt(contractorId, 10) : undefined;
+    return await this.incidentsService.getDashboardStats({
+      building,
+      contractor,
+      contractorId: cId,
+      userRole,
+      dateRange,
+      startDate,
+      endDate,
+    });
+  }
+
+  /**
+   * Get complete details of a single incident across all stages
+   * GET /incidents/:id
+   */
+  @Get(':id')
+  async getIncidentDetails(@Param('id', ParseIntPipe) id: number) {
+    return await this.incidentsService.getIncidentDetails(id);
+  }
+
+  /**
+   * List incidents with filters matching all UI table dropdown columns + pagination
+   * GET /incidents
+   */
+  @Get()
+  async findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('statusChip') statusChip?: string,
+    @Query('stage') stage?: IncidentStage,
+    @Query('isHipo') isHipo?: string,
+    @Query('category') category?: string,
+    @Query('building') building?: string,
+    @Query('buildingId') buildingId?: string,
+    @Query('actualSeverity') actualSeverity?: string,
+    @Query('potentialSeverity') potentialSeverity?: string,
+    @Query('investigationLevel') investigationLevel?: InvestigationLevel,
+    @Query('contractor') contractor?: string,
+    @Query('contractorId') contractorId?: string,
+    @Query('userRole') userRole?: string,
+    @Query('origin') origin?: string,
+    @Query('search') search?: string,
+    @Query('dateRange') dateRange?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const hipoBool = isHipo !== undefined ? isHipo === 'true' : undefined;
+    const bId = buildingId ? parseInt(buildingId, 10) : undefined;
+    const actSev = actualSeverity ? parseInt(actualSeverity, 10) : undefined;
+    const potSev = potentialSeverity ? parseInt(potentialSeverity, 10) : undefined;
+    const cId = contractorId ? parseInt(contractorId, 10) : undefined;
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? (limit.toLowerCase() === 'all' ? 0 : parseInt(limit, 10)) : 10;
+
+    return await this.incidentsService.findAll({
+      page: pageNum,
+      limit: limitNum,
+      statusChip,
+      stage,
+      isHipo: hipoBool,
+      category,
+      building,
+      buildingId: bId,
+      actualSeverity: actSev,
+      potentialSeverity: potSev,
+      investigationLevel,
+      contractor,
+      contractorId: cId,
+      userRole,
+      origin,
+      search,
+      dateRange,
+      startDate,
+      endDate,
+    });
+  }
+}

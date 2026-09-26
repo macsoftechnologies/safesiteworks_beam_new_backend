@@ -56,6 +56,22 @@ import {
   RequestPressureTesting,
 } from './requests/entities/request-subtables.entity';
 import { RamsFile, RequestNote, UploadImage, RequestLog, RequestLogData } from './requests/entities/supporting.entity';
+import { IncidentNotificationGroupMember } from './notifications/entities/incident-notification-group-member.entity';
+import { Incident } from './incidents/entities/incident.entity';
+import { IncidentHeadsUp } from './incidents/entities/incident-headsup.entity';
+import { IncidentInitialReport } from './incidents/entities/incident-initial-report.entity';
+import { IncidentInvestigation } from './incidents/entities/incident-investigation.entity';
+import { IncidentActionItem } from './incidents/entities/incident-action-item.entity';
+import { IncidentsModule } from './incidents/incidents.module';
+import { Observation } from './observations/entities/observation.entity';
+import { ObservationActionLog } from './observations/entities/observation-action-log.entity';
+import { ObservationsModule } from './observations/observations.module';
+import { SafetyInspection } from './safety-inspections/entities/safety-inspection.entity';
+import { SafetyInspectionItem } from './safety-inspections/entities/safety-inspection-item.entity';
+import { SafetyInspectionActionLog } from './safety-inspections/entities/safety-inspection-action-log.entity';
+import { SafetyInspectionsModule } from './safety-inspections/safety-inspections.module';
+import { SpotCheck } from './spot-checks/entities/spot-check.entity';
+import { SpotChecksModule } from './spot-checks/spot-checks.module';
 
 @Module({
   imports: [
@@ -70,6 +86,7 @@ import { RamsFile, RequestNote, UploadImage, RequestLog, RequestLogData } from '
       username: process.env.DB_USER,
       password: process.env.DB_PASS,
       database: process.env.DB_NAME,
+      timezone: 'Z',
       entities: [
         User,
         Department,
@@ -106,6 +123,18 @@ import { RamsFile, RequestNote, UploadImage, RequestLog, RequestLogData } from '
         Role,
         Notification,
         NotificationSetting,
+        IncidentNotificationGroupMember,
+        Incident,
+        IncidentHeadsUp,
+        IncidentInitialReport,
+        IncidentInvestigation,
+        IncidentActionItem,
+        Observation,
+        ObservationActionLog,
+        SafetyInspection,
+        SafetyInspectionItem,
+        SafetyInspectionActionLog,
+        SpotCheck,
       ],
       synchronize: false,
     }),
@@ -126,6 +155,10 @@ import { RamsFile, RequestNote, UploadImage, RequestLog, RequestLogData } from '
     RequestsModule,
     RoleModule,
     NotificationsModule,
+    IncidentsModule,
+    ObservationsModule,
+    SafetyInspectionsModule,
+    SpotChecksModule,
   ],
   controllers: [HealthController],
 })
