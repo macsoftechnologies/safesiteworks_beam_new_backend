@@ -23,6 +23,7 @@ async function bootstrap() {
   app.use('/incidents', express.static(join(process.cwd(), './uploads/incidents'), { redirect: false }));
   app.use('/observations', express.static(join(process.cwd(), './uploads/observations'), { redirect: false }));
   app.use('/safety-inspections', express.static(join(process.cwd(), './uploads/safety-inspections'), { redirect: false }));
+  app.use('/location-maps', express.static(join(process.cwd(), './uploads/location-maps'), { redirect: false }));
   app.use('/uploads', express.static(join(process.cwd(), './uploads'), { redirect: false }));
 
   // Also support requests routed with /development/m3infrastructure prefix
@@ -31,6 +32,7 @@ async function bootstrap() {
   app.use('/development/m3infrastructure/incidents', express.static(join(process.cwd(), './uploads/incidents'), { redirect: false }));
   app.use('/development/m3infrastructure/observations', express.static(join(process.cwd(), './uploads/observations'), { redirect: false }));
   app.use('/development/m3infrastructure/safety-inspections', express.static(join(process.cwd(), './uploads/safety-inspections'), { redirect: false }));
+  app.use('/development/m3infrastructure/location-maps', express.static(join(process.cwd(), './uploads/location-maps'), { redirect: false }));
   app.use('/development/m3infrastructure/uploads', express.static(join(process.cwd(), './uploads'), { redirect: false }));
 
   // Also support requests routed with /m3infrastructure prefix
@@ -39,6 +41,7 @@ async function bootstrap() {
   app.use('/m3infrastructure/incidents', express.static(join(process.cwd(), './uploads/incidents'), { redirect: false }));
   app.use('/m3infrastructure/observations', express.static(join(process.cwd(), './uploads/observations'), { redirect: false }));
   app.use('/m3infrastructure/safety-inspections', express.static(join(process.cwd(), './uploads/safety-inspections'), { redirect: false }));
+  app.use('/m3infrastructure/location-maps', express.static(join(process.cwd(), './uploads/location-maps'), { redirect: false }));
   app.use('/m3infrastructure/uploads', express.static(join(process.cwd(), './uploads'), { redirect: false }));
 
   app.use(bodyParser.json({ limit: '100mb' }));

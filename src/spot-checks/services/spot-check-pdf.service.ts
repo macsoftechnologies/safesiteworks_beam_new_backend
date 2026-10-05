@@ -41,7 +41,7 @@ export class SpotCheckPdfService {
                 headless: true,
                 args: launchArgs,
               });
-            } catch (e3) {}
+            } catch (e3) { }
           }
         }
         throw e1;
@@ -81,96 +81,96 @@ export class SpotCheckPdfService {
         const attachmentsList = this.parseJsonField<any[]>(spotCheck.attachments, []);
         const pdfAttachments: { fileName: string; bytes: Buffer }[] = [];
 
-      for (const att of attachmentsList) {
-        if (!att) continue;
-        const fileType = String(att.fileType || '').toLowerCase();
-        const fileName = String(att.fileName || '').toLowerCase();
-        const previewUrl = String(att.previewUrl || att.fileUrl || att.url || '').trim();
+        for (const att of attachmentsList) {
+          if (!att) continue;
+          const fileType = String(att.fileType || '').toLowerCase();
+          const fileName = String(att.fileName || '').toLowerCase();
+          const previewUrl = String(att.previewUrl || att.fileUrl || att.url || '').trim();
 
-        const isPdf = fileType === 'application/pdf' || fileName.endsWith('.pdf') || previewUrl.startsWith('data:application/pdf') || previewUrl.toLowerCase().endsWith('.pdf');
-        if (!isPdf) continue;
+          const isPdf = fileType === 'application/pdf' || fileName.endsWith('.pdf') || previewUrl.startsWith('data:application/pdf') || previewUrl.toLowerCase().endsWith('.pdf');
+          if (!isPdf) continue;
 
-        let pdfBytes: Buffer | null = null;
+          let pdfBytes: Buffer | null = null;
 
-        // Case 1: Base64 Data URI
-        if (previewUrl.startsWith('data:application/pdf') || previewUrl.startsWith('data:;base64,') || (previewUrl.startsWith('data:') && previewUrl.includes('base64,'))) {
-          try {
-            const base64Content = previewUrl.split('base64,')[1];
-            if (base64Content) {
-              pdfBytes = Buffer.from(base64Content, 'base64');
+          // Case 1: Base64 Data URI
+          if (previewUrl.startsWith('data:application/pdf') || previewUrl.startsWith('data:;base64,') || (previewUrl.startsWith('data:') && previewUrl.includes('base64,'))) {
+            try {
+              const base64Content = previewUrl.split('base64,')[1];
+              if (base64Content) {
+                pdfBytes = Buffer.from(base64Content, 'base64');
+              }
+            } catch (e) {
+              this.logger.warn(`Could not parse base64 PDF attachment: ${att.fileName}`, e);
             }
-          } catch (e) {
-            this.logger.warn(`Could not parse base64 PDF attachment: ${att.fileName}`, e);
-          }
-        }
-
-        // Case 2: File on disk
-        if (!pdfBytes && previewUrl && !previewUrl.startsWith('http://') && !previewUrl.startsWith('https://')) {
-          let cleanPath = previewUrl;
-          let filename = cleanPath;
-          if (cleanPath.includes('/uploads/')) {
-            filename = cleanPath.split('/uploads/').pop() || cleanPath;
           }
 
-          const candidatePaths = [
-            filename,
-            join(process.cwd(), 'uploads', 'spot-checks', filename),
-            join(process.cwd(), 'uploads', filename),
-            join(process.cwd(), cleanPath),
-            join(process.cwd(), cleanPath.replace(/^\/+/, '')),
-          ];
+          // Case 2: File on disk
+          if (!pdfBytes && previewUrl && !previewUrl.startsWith('http://') && !previewUrl.startsWith('https://')) {
+            let cleanPath = previewUrl;
+            let filename = cleanPath;
+            if (cleanPath.includes('/uploads/')) {
+              filename = cleanPath.split('/uploads/').pop() || cleanPath;
+            }
 
-          for (const p of candidatePaths) {
-            if (existsSync(p) && statSync(p).isFile()) {
-              try {
-                pdfBytes = readFileSync(p);
-                break;
-              } catch (e) {
-                this.logger.warn(`Failed reading PDF file at ${p}:`, e);
+            const candidatePaths = [
+              filename,
+              join(process.cwd(), 'uploads', 'spot-checks', filename),
+              join(process.cwd(), 'uploads', filename),
+              join(process.cwd(), cleanPath),
+              join(process.cwd(), cleanPath.replace(/^\/+/, '')),
+            ];
+
+            for (const p of candidatePaths) {
+              if (existsSync(p) && statSync(p).isFile()) {
+                try {
+                  pdfBytes = readFileSync(p);
+                  break;
+                } catch (e) {
+                  this.logger.warn(`Failed reading PDF file at ${p}:`, e);
+                }
               }
             }
           }
-        }
 
-        // Case 3: Remote URL
-        if (!pdfBytes && (previewUrl.startsWith('http://') || previewUrl.startsWith('https://'))) {
-          try {
-            const res = await fetch(previewUrl);
-            if (res.ok) {
-              const arrayBuf = await res.arrayBuffer();
-              pdfBytes = Buffer.from(arrayBuf);
+          // Case 3: Remote URL
+          if (!pdfBytes && (previewUrl.startsWith('http://') || previewUrl.startsWith('https://'))) {
+            try {
+              const res = await fetch(previewUrl);
+              if (res.ok) {
+                const arrayBuf = await res.arrayBuffer();
+                pdfBytes = Buffer.from(arrayBuf);
+              }
+            } catch (e) {
+              this.logger.warn(`Could not fetch remote PDF attachment at ${previewUrl}:`, e);
             }
-          } catch (e) {
-            this.logger.warn(`Could not fetch remote PDF attachment at ${previewUrl}:`, e);
+          }
+
+          if (pdfBytes && pdfBytes.length > 0) {
+            pdfAttachments.push({ fileName: att.fileName || 'Attachment.pdf', bytes: pdfBytes });
           }
         }
 
-        if (pdfBytes && pdfBytes.length > 0) {
-          pdfAttachments.push({ fileName: att.fileName || 'Attachment.pdf', bytes: pdfBytes });
-        }
-      }
+        if (pdfAttachments.length > 0) {
+          const mergedDoc = await PDFDocument.load(basePdfBuffer);
 
-      if (pdfAttachments.length > 0) {
-        const mergedDoc = await PDFDocument.load(basePdfBuffer);
-
-        for (const item of pdfAttachments) {
-          try {
-            const donorDoc = await PDFDocument.load(item.bytes, { ignoreEncryption: true });
-            const pageIndices = donorDoc.getPageIndices();
-            const copiedPages = await mergedDoc.copyPages(donorDoc, pageIndices);
-            copiedPages.forEach((cp) => mergedDoc.addPage(cp));
-            this.logger.log(`Merged attached PDF "${item.fileName}" (${pageIndices.length} page(s)) into Spot Check export.`);
-          } catch (donorErr) {
-            this.logger.warn(`Could not merge PDF attachment "${item.fileName}":`, donorErr);
+          for (const item of pdfAttachments) {
+            try {
+              const donorDoc = await PDFDocument.load(item.bytes, { ignoreEncryption: true });
+              const pageIndices = donorDoc.getPageIndices();
+              const copiedPages = await mergedDoc.copyPages(donorDoc, pageIndices);
+              copiedPages.forEach((cp) => mergedDoc.addPage(cp));
+              this.logger.log(`Merged attached PDF "${item.fileName}" (${pageIndices.length} page(s)) into Spot Check export.`);
+            } catch (donorErr) {
+              this.logger.warn(`Could not merge PDF attachment "${item.fileName}":`, donorErr);
+            }
           }
-        }
 
-        const finalMergedBytes = await mergedDoc.save();
-        return Buffer.from(finalMergedBytes);
+          const finalMergedBytes = await mergedDoc.save();
+          return Buffer.from(finalMergedBytes);
+        }
+      } catch (mergeErr) {
+        this.logger.warn('Error during Spot Check PDF attachment merging, falling back to base form PDF:', mergeErr);
       }
-    } catch (mergeErr) {
-      this.logger.warn('Error during Spot Check PDF attachment merging, falling back to base form PDF:', mergeErr);
-    }
     }
 
     return basePdfBuffer;
@@ -231,6 +231,7 @@ export class SpotCheckPdfService {
 
         const candidatePaths = [
           filename,
+          join(process.cwd(), 'uploads', 'location-maps', filename),
           join(process.cwd(), 'uploads', 'spot-checks', filename),
           join(process.cwd(), 'uploads', filename),
           join(process.cwd(), cleanPath),
@@ -301,6 +302,7 @@ export class SpotCheckPdfService {
     const dateFormatted = this.formatDate(sc.date || sc.createdTime);
     const timeFormatted = sc.time || '';
     const locFormatted = sc.location || (sc.buildingName ? `${sc.buildingName} ${sc.floorLevel || ''}` : '');
+    const locationMapBase64 = sc.locationMapImage ? resolveImageDataUri(sc.locationMapImage) : null;
 
     // Header component
     const renderPageHeader = () => `
@@ -506,7 +508,7 @@ export class SpotCheckPdfService {
             <tbody>
               <tr>
                 <td class="lbl" style="width: 18%;">Project Name</td>
-                <td class="val" style="width: 32%;">${sc.projectName || sc.workPackage || 'M3SOUTH'}</td>
+                <td class="val" style="width: 32%;">${sc.projectName || sc.workPackage || 'M3INFRASTRUCTURE'}</td>
                 <td class="lbl" style="width: 18%;">Spot check ref.</td>
                 <td class="val" style="width: 32%;"><b>${refNo}</b></td>
               </tr>
@@ -534,6 +536,21 @@ export class SpotCheckPdfService {
               </tr>
             </tbody>
           </table>
+
+          ${locationMapBase64 ? `
+          <div style="margin-top: 5px; margin-bottom: 5px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; background: #f8fafc; page-break-inside: avoid; break-inside: avoid;">
+            <div style="font-size: 8px; font-weight: 700; color: #1e293b; display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; padding: 0 2px;">
+              <span style="display: flex; align-items: center; gap: 4px;">
+                <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #16a34a;"></span>
+                Location Floor Map &bull; ${sc.buildingName || 'Building'} ${sc.floorLevel ? `(${sc.floorLevel})` : ''}
+              </span>
+              <span style="font-size: 7.5px; color: #64748b; font-weight: 600;">Work Area Layout</span>
+            </div>
+            <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 3px; overflow: hidden; width: 100%;">
+              <img src="${locationMapBase64}" style="width: 100%; height: auto; display: block;" alt="Location Map" />
+            </div>
+          </div>
+          ` : ''}
 
           <div class="instructions-text">
             Instructions: Tick one response for each checkpoint. Use N/A only when the checkpoint does not apply. Record relevant facts in the comments field.
@@ -802,9 +819,9 @@ export class SpotCheckPdfService {
             </thead>
             <tbody>
               ${attachmentsList && attachmentsList.length > 0 ? (
-                attachmentsList.map((att, idx) => {
-                  const isAttached = att.attached === 'Yes' || Boolean(att.fileName) || Boolean(att.previewUrl);
-                  return `
+        attachmentsList.map((att, idx) => {
+          const isAttached = att.attached === 'Yes' || Boolean(att.fileName) || Boolean(att.previewUrl);
+          return `
                     <tr>
                       <td class="lbl" style="text-align: center;"><b>${idx + 1}</b></td>
                       <td>
@@ -817,8 +834,8 @@ export class SpotCheckPdfService {
                       </td>
                     </tr>
                   `;
-                }).join('')
-              ) : `
+        }).join('')
+      ) : `
                 <tr>
                   <td class="lbl" style="text-align: center;"><b>1</b></td>
                   <td>&nbsp;</td>
@@ -840,22 +857,22 @@ export class SpotCheckPdfService {
 
           <!-- Photo Gallery if base64/image attachments exist -->
           ${(() => {
-            const photosWithImage = attachmentsList.filter(a => a.previewUrl && (a.fileType?.startsWith('image/') || a.previewUrl.startsWith('data:image')));
-            if (photosWithImage.length === 0) return '';
-            return `
+        const photosWithImage = attachmentsList.filter(a => a.previewUrl && (a.fileType?.startsWith('image/') || a.previewUrl.startsWith('data:image')));
+        if (photosWithImage.length === 0) return '';
+        return `
               <div style="margin-top: 10px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 8px; background: #f8fafc;">
                 <div style="font-weight: 700; font-size: 9px; color: #0f172a; margin-bottom: 6px;">Attached Photographs Evidence:</div>
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                   ${photosWithImage.map((p, i) => `
                     <div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; background: #ffffff; text-align: center;">
-                      <img src="${p.previewUrl}" style="width: 140px; height: 95px; object-fit: cover; border-radius: 3px;" alt="Photo ${i+1}" />
-                      <div style="font-size: 8px; font-weight: 600; color: #334155; margin-top: 3px;">${p.desc || p.fileName || `Photo ${i+1}`}</div>
+                      <img src="${p.previewUrl}" style="width: 140px; height: 95px; object-fit: cover; border-radius: 3px;" alt="Photo ${i + 1}" />
+                      <div style="font-size: 8px; font-weight: 600; color: #334155; margin-top: 3px;">${p.desc || p.fileName || `Photo ${i + 1}`}</div>
                     </div>
                   `).join('')}
                 </div>
               </div>
             `;
-          })()}
+      })()}
 
           <div style="font-weight: 700; font-size: 9.5px; margin: 12px 0 4px 0;">Spot check performed by</div>
           <table class="sc-grid">

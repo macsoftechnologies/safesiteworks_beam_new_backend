@@ -7,6 +7,7 @@ import { SafetyInspectionActionLog, InspectionActionType } from '../entities/saf
 import { Observation } from '../../observations/entities/observation.entity';
 import { CreateSafetyInspectionDto } from '../dtos/create-safety-inspection.dto';
 import { UpdateSafetyInspectionDto } from '../dtos/update-safety-inspection.dto';
+import { saveBase64LocationMap } from '../../incidents/utils/location-map-storage.util';
 
 const STANDARD_CATEGORIES = [
   '1. Access / Exit',
@@ -44,7 +45,7 @@ export class SafetyInspectionsService implements OnModuleInit {
     private readonly actionLogRepo: Repository<SafetyInspectionActionLog>,
     @InjectRepository(Observation)
     private readonly obsRepo: Repository<Observation>,
-  ) {}
+  ) { }
 
   /**
    * Auto-creates missing safety inspections tables in MySQL upon NestJS application startup
@@ -85,6 +86,10 @@ export class SafetyInspectionsService implements OnModuleInit {
         ALTER TABLE \`safety_inspections\` 
         MODIFY COLUMN \`status\` ENUM('DRAFT', 'IN_PROGRESS', 'CLOSED', 'COMPLETED', 'FAILED') NOT NULL DEFAULT 'IN_PROGRESS';
       `);
+
+      try {
+        await this.inspectionRepo.query(`ALTER TABLE \`safety_inspections\` ADD COLUMN \`location_map_image\` TEXT NULL;`);
+      } catch { }
 
       await this.itemRepo.query(`
         CREATE TABLE IF NOT EXISTS \`safety_inspection_items\` (
@@ -488,7 +493,7 @@ export class SafetyInspectionsService implements OnModuleInit {
 
     const inspection = this.inspectionRepo.create({
       inspectionNumber,
-      projectName: dto.projectName || 'M3SOUTH',
+      projectName: dto.projectName || 'M3INFRASTRUCTURE',
       projectId: dto.projectId || 1,
       projectNo: dto.projectNo || '063205-010',
       buildingId: dto.buildingId,
@@ -497,6 +502,7 @@ export class SafetyInspectionsService implements OnModuleInit {
       specificLocation: dto.specificLocation,
       selectedRooms,
       selectedZones,
+      locationMapImage: dto.locationMapImage ? saveBase64LocationMap(dto.locationMapImage, `si_map_${inspectionNumber}`) : undefined,
       inspectionDate: dto.inspectionDate || new Date().toISOString().split('T')[0],
       performedBy,
       participants,
@@ -735,6 +741,9 @@ export class SafetyInspectionsService implements OnModuleInit {
     if (dto.buildingName !== undefined) inspection.buildingName = dto.buildingName;
     if (dto.floorLevel !== undefined) inspection.floorLevel = dto.floorLevel;
     if (dto.specificLocation !== undefined) inspection.specificLocation = dto.specificLocation;
+    if (dto.locationMapImage !== undefined) {
+      inspection.locationMapImage = dto.locationMapImage ? saveBase64LocationMap(dto.locationMapImage, `si_map_${inspection.inspectionNumber || id}`) : inspection.locationMapImage;
+    }
     if (dto.inspectionDate !== undefined) inspection.inspectionDate = dto.inspectionDate;
     if (dto.score !== undefined) inspection.score = dto.score;
 
@@ -887,7 +896,7 @@ export class SafetyInspectionsService implements OnModuleInit {
               hasOpenSO = false;
             }
           }
-        } catch {}
+        } catch { }
 
         if (hasOpenSO) {
           inspection.status = SafetyInspectionStatus.IN_PROGRESS;
@@ -943,8 +952,8 @@ export class SafetyInspectionsService implements OnModuleInit {
             actionType === InspectionActionType.REOPENED
               ? 'Safety inspection reopened'
               : actionType === InspectionActionType.CLOSED
-              ? 'Safety inspection marked as closed'
-              : 'Safety inspection details updated'
+                ? 'Safety inspection marked as closed'
+                : 'Safety inspection details updated'
           ),
         });
         await this.actionLogRepo.save(log);

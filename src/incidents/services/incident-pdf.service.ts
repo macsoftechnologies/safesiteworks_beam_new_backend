@@ -41,7 +41,7 @@ export class IncidentPdfService {
                 headless: true,
                 args: launchArgs,
               });
-            } catch (e3) {}
+            } catch (e3) { }
           }
         }
         throw e1;
@@ -65,13 +65,13 @@ export class IncidentPdfService {
     const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext);
     const mimeType = isPdf ? 'application/pdf'
       : ext === 'png' ? 'image/png'
-      : ext === 'svg' ? 'image/svg+xml'
-      : ext === 'webp' ? 'image/webp'
-      : ext === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      : ext === 'doc' ? 'application/msword'
-      : ext === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      : isImage ? 'image/jpeg'
-      : 'application/octet-stream';
+        : ext === 'svg' ? 'image/svg+xml'
+          : ext === 'webp' ? 'image/webp'
+            : ext === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+              : ext === 'doc' ? 'application/msword'
+                : ext === 'xlsx' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                  : isImage ? 'image/jpeg'
+                    : 'application/octet-stream';
 
     // 2. Check local disk candidate paths
     const candidatePaths = [
@@ -79,7 +79,7 @@ export class IncidentPdfService {
       join(process.cwd(), 'uploads', filename),
       join(process.cwd(), 'uploads', 'signatures', filename),
       join(process.cwd(), cleanUrl.replace(/^\/+/, '')),
-      join(process.cwd(), cleanUrl.replace(/^\/?development\/m3south\//, '').replace(/^\/+/, '')),
+      join(process.cwd(), cleanUrl.replace(/^\/?m3infrastructure\//, '').replace(/^\/+/, '')),
       join(process.cwd(), filename),
     ];
 
@@ -88,7 +88,7 @@ export class IncidentPdfService {
         try {
           const buffer = readFileSync(p);
           return { buffer, filename, mimeType, isPdf, isImage };
-        } catch (e) {}
+        } catch (e) { }
       }
     }
 
@@ -97,9 +97,9 @@ export class IncidentPdfService {
     if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
       remoteCandidates.push(cleanUrl);
     }
-    remoteCandidates.push(`https://api.beam.safesiteworks.com/development/m3south/incidents/${filename}`);
-    remoteCandidates.push(`https://api.beam.safesiteworks.com/development/m3south/uploads/incidents/${filename}`);
-    remoteCandidates.push(`https://api.beam.safesiteworks.com/development/m3south/signatures/${filename}`);
+    remoteCandidates.push(`https://api.beam.safesiteworks.com/m3infrastructure/incidents/${filename}`);
+    remoteCandidates.push(`https://api.beam.safesiteworks.com/m3infrastructure/uploads/incidents/${filename}`);
+    remoteCandidates.push(`https://api.beam.safesiteworks.com/m3infrastructure/signatures/${filename}`);
 
     for (const rUrl of remoteCandidates) {
       try {
@@ -111,10 +111,10 @@ export class IncidentPdfService {
             const cacheDir = join(process.cwd(), 'uploads', 'incidents');
             if (!existsSync(cacheDir)) mkdirSync(cacheDir, { recursive: true });
             writeFileSync(join(cacheDir, filename), buffer);
-          } catch (writeErr) {}
+          } catch (writeErr) { }
           return { buffer, filename, mimeType, isPdf, isImage };
         }
-      } catch (netErr) {}
+      } catch (netErr) { }
     }
 
     return null;
@@ -124,7 +124,7 @@ export class IncidentPdfService {
     const inv = details.investigation || details.incident_investigation || {};
     let att = inv.mandatoryAttachments || inv.mandatory_attachments || inv.attachments || details.mandatoryAttachments || {};
     if (typeof att === 'string') {
-      try { att = JSON.parse(att); } catch (e) {}
+      try { att = JSON.parse(att); } catch (e) { }
     }
 
     const urlsToFetch = new Set<string>();
@@ -169,7 +169,7 @@ export class IncidentPdfService {
       Array.from(urlsToFetch).map(async (u) => {
         try {
           await this.fetchAttachmentBuffer(u);
-        } catch (e) {}
+        } catch (e) { }
       })
     );
   }
@@ -209,12 +209,12 @@ export class IncidentPdfService {
           const headsUp = details.headsUp || {};
           const initial = details.initialReport || {};
           const inc = details.incident || details;
-          const project = inc.projectName || 'M3 South';
+          const project = inc.projectName || 'M3 Infrastructure';
           const caseNo = inc.caseNumber || inc.id || 'INC-Report';
 
           let att = inv.mandatoryAttachments || inv.mandatory_attachments || inv.attachments || details.mandatoryAttachments || {};
           if (typeof att === 'string') {
-            try { att = JSON.parse(att); } catch (e) {}
+            try { att = JSON.parse(att); } catch (e) { }
           }
 
           const attachmentsToMerge: { label: string; fileUrl: string; fileName?: string; mimeType?: string }[] = [];
@@ -553,7 +553,7 @@ export class IncidentPdfService {
     const actions = details.actionItems || [];
 
     const caseNo = inc.caseNumber || inc.id || 'INC-2026-0001';
-    const project = inc.projectName || 'M3SOUTH';
+    const project = inc.projectName || 'M3INFRASTRUCTURE';
     const title = headsUp.title || inc.title || 'Safety Incident Report';
     const date = inc.incidentDate || inc.date || new Date().toISOString().split('T')[0];
     const time = inc.incidentTime || inc.time || '07:30';
@@ -689,6 +689,7 @@ export class IncidentPdfService {
 
         const candidatePaths = [
           sigFilename,
+          join(process.cwd(), 'uploads', 'location-maps', sigFilename),
           join(process.cwd(), 'uploads', 'incidents', sigFilename),
           join(process.cwd(), 'uploads', 'signatures', sigFilename),
           join(process.cwd(), 'uploads', cleanPath),
@@ -712,15 +713,18 @@ export class IncidentPdfService {
         // Live server public fallback URL if file on disk was not directly matched
         if (sigFilename && (sigFilename.endsWith('.png') || sigFilename.endsWith('.jpg') || sigFilename.endsWith('.jpeg') || sigFilename.startsWith('sig_'))) {
           if (cleanPath.includes('incidents')) {
-            return `https://api.beam.safesiteworks.com/development/m3south/incidents/${sigFilename}`;
+            return `https://api.beam.safesiteworks.com/m3infrastructure/incidents/${sigFilename}`;
           }
-          return `https://api.beam.safesiteworks.com/development/m3south/signatures/${sigFilename}`;
+          return `https://api.beam.safesiteworks.com/m3infrastructure/signatures/${sigFilename}`;
         }
       } catch (err) {
         this.logger.warn(`Could not load image at path: ${pathOrBase64}`);
       }
       return null;
     };
+
+    const rawMapImage = inc.locationMapImage || details.locationMapImage || (headsUp && headsUp.locationMapImage);
+    const locationMapBase64 = rawMapImage ? resolveImageDataUri(rawMapImage) : null;
 
     // Helper to render signature images
     const renderSignature = (sigData: string | null | undefined, name: string) => {
@@ -777,8 +781,8 @@ export class IncidentPdfService {
           <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px;">
             ${resolvedPhotos.map((imgUri, i) => `
               <div style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; background: #fff; text-align: center;">
-                <img src="${imgUri}" style="width: 145px; height: 95px; object-fit: cover; border-radius: 3px;" alt="Incident Photo ${i+1}" />
-                <div style="font-size: 8px; font-weight: 600; color: #334155; margin-top: 3px;">Photo ${i+1}: Incident Location Evidence</div>
+                <img src="${imgUri}" style="width: 145px; height: 95px; object-fit: cover; border-radius: 3px;" alt="Incident Photo ${i + 1}" />
+                <div style="font-size: 8px; font-weight: 600; color: #334155; margin-top: 3px;">Photo ${i + 1}: Incident Location Evidence</div>
               </div>
             `).join('')}
           </div>
@@ -804,7 +808,7 @@ export class IncidentPdfService {
       if (typeof historyData === 'string') {
         try {
           historyList = JSON.parse(historyData);
-        } catch (e) {}
+        } catch (e) { }
       } else if (Array.isArray(historyData)) {
         historyList = historyData;
       }
@@ -836,7 +840,7 @@ export class IncidentPdfService {
     const renderEditAndRevisionHistory = (historyData: any, stageTitle: string = 'Stage') => {
       let historyList: any[] = [];
       if (typeof historyData === 'string') {
-        try { historyList = JSON.parse(historyData); } catch (e) {}
+        try { historyList = JSON.parse(historyData); } catch (e) { }
       } else if (Array.isArray(historyData)) {
         historyList = historyData;
       }
@@ -868,16 +872,16 @@ export class IncidentPdfService {
             </thead>
             <tbody>
               ${historyList.map((item: any, idx: number) => {
-                const isReturned = item.status === 'RETURNED_FOR_REVISION' || (item.action && String(item.action).toLowerCase().includes('return'));
-                const badgeColor = isReturned ? '#b91c1c' : '#1d4ed8';
-                const badgeBg = isReturned ? '#fee2e2' : '#dbeafe';
-                const actionText = isReturned ? 'Returned for Revision' : (item.action || 'Updated / Revised');
-                const byText = item.returnedBy || item.editedBy || item.name || 'User';
-                const roleText = item.role ? ` (${item.role})` : '';
-                const reasonText = item.reason || item.changes || '—';
-                const timeText = formatDt(item.returnedTime || item.editedTime || item.timestamp || item.date);
+        const isReturned = item.status === 'RETURNED_FOR_REVISION' || (item.action && String(item.action).toLowerCase().includes('return'));
+        const badgeColor = isReturned ? '#b91c1c' : '#1d4ed8';
+        const badgeBg = isReturned ? '#fee2e2' : '#dbeafe';
+        const actionText = isReturned ? 'Returned for Revision' : (item.action || 'Updated / Revised');
+        const byText = item.returnedBy || item.editedBy || item.name || 'User';
+        const roleText = item.role ? ` (${item.role})` : '';
+        const reasonText = item.reason || item.changes || '—';
+        const timeText = formatDt(item.returnedTime || item.editedTime || item.timestamp || item.date);
 
-                return `
+        return `
                   <tr style="border-bottom: ${idx < historyList.length - 1 ? '1px solid #e2e8f0' : 'none'}; background: ${idx % 2 === 0 ? '#ffffff' : '#fafafa'};">
                     <td style="padding: 4px 6px;">
                       <span style="display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 7.5px; font-weight: 700; background: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${badgeColor}33;">
@@ -889,7 +893,7 @@ export class IncidentPdfService {
                     <td style="padding: 4px 6px; color: #64748b;">${timeText}</td>
                   </tr>
                 `;
-              }).join('')}
+      }).join('')}
             </tbody>
           </table>
         </div>
@@ -901,14 +905,14 @@ export class IncidentPdfService {
       const list: any[] = [];
       let huActs = headsUp.immediateActions;
       if (typeof huActs === 'string') {
-        try { huActs = JSON.parse(huActs); } catch (e) {}
+        try { huActs = JSON.parse(huActs); } catch (e) { }
       }
       if (huActs && Array.isArray(huActs)) {
         list.push(...huActs);
       }
       let incActs = inc.immediateActions;
       if (typeof incActs === 'string') {
-        try { incActs = JSON.parse(incActs); } catch (e) {}
+        try { incActs = JSON.parse(incActs); } catch (e) { }
       }
       if (incActs && Array.isArray(incActs)) {
         incActs.forEach((act: any) => {
@@ -919,7 +923,7 @@ export class IncidentPdfService {
       }
       let irActs = initial.immediateActions;
       if (typeof irActs === 'string') {
-        try { irActs = JSON.parse(irActs); } catch (e) {}
+        try { irActs = JSON.parse(irActs); } catch (e) { }
       }
       if (irActs && Array.isArray(irActs)) {
         irActs.forEach((act: any) => {
@@ -1096,7 +1100,7 @@ export class IncidentPdfService {
       if (!catName) return false;
       let accCats = initial.accidentCategories || [];
       if (typeof accCats === 'string') {
-        try { accCats = JSON.parse(accCats); } catch (e) {}
+        try { accCats = JSON.parse(accCats); } catch (e) { }
       }
       if (!Array.isArray(accCats)) accCats = [accCats];
       const target = catName.toLowerCase().trim();
@@ -1141,7 +1145,7 @@ export class IncidentPdfService {
       if (!type) return false;
       let types = initial.injuryTypes || [];
       if (typeof types === 'string') {
-        try { types = JSON.parse(types); } catch (e) {}
+        try { types = JSON.parse(types); } catch (e) { }
       }
       if (!Array.isArray(types)) types = [types];
       const target = type.toLowerCase().trim();
@@ -1190,7 +1194,7 @@ export class IncidentPdfService {
       if (!initial.bodyPartsInjured) return [];
       let bp = initial.bodyPartsInjured;
       if (typeof bp === 'string') {
-        try { bp = JSON.parse(bp); } catch (e) {}
+        try { bp = JSON.parse(bp); } catch (e) { }
       }
       if (Array.isArray(bp)) return bp.map((x: any) => typeof x === 'string' ? x : `${x.part || x.name}${x.side ? ` (${x.side})` : ''}`);
       if (bp && bp.selections && Array.isArray(bp.selections)) {
@@ -1224,7 +1228,7 @@ export class IncidentPdfService {
         if (!side) return matchesPart;
         const sideLower = side.toLowerCase();
         const hasSide = lowerItem.includes(`(${sideLower})`) || lowerItem.includes(` ${sideLower}`) || lowerItem.includes(`_${sideLower}`);
-        
+
         // If the DB item didn't specify side (e.g. "Hand" or "Wrist"), light up both sides
         const itemHasNoSide = !lowerItem.includes('(l)') && !lowerItem.includes('(r)') && !lowerItem.includes(' left') && !lowerItem.includes(' right');
 
@@ -1249,7 +1253,7 @@ export class IncidentPdfService {
 
       let rawData = inv.fishboneData || inv.fishbone_data || details.fishboneData || inc.fishboneData;
       if (typeof rawData === 'string') {
-        try { rawData = JSON.parse(rawData); } catch (e) {}
+        try { rawData = JSON.parse(rawData); } catch (e) { }
       }
 
       if (Array.isArray(rawData)) {
@@ -1415,7 +1419,7 @@ export class IncidentPdfService {
     const renderFiveWhysRows = (): string => {
       let whysList: any[] = inv.fiveWhysData || inv.five_whys_data || details.fiveWhysData || inc.fiveWhysData || [];
       if (typeof whysList === 'string') {
-        try { whysList = JSON.parse(whysList); } catch (e) {}
+        try { whysList = JSON.parse(whysList); } catch (e) { }
       }
 
       if (Array.isArray(whysList) && whysList.length > 0) {
@@ -1474,7 +1478,7 @@ export class IncidentPdfService {
     const renderInvTeamRows = (): string => {
       let team: any[] = inv.investigationTeam || inv.teamMembers || inv.team || [];
       if (typeof team === 'string') {
-        try { team = JSON.parse(team); } catch (e) {}
+        try { team = JSON.parse(team); } catch (e) { }
       }
       if (Array.isArray(team) && team.length > 0) {
         return team.map((m, i) => `
@@ -1499,12 +1503,12 @@ export class IncidentPdfService {
     const renderWitnessRows = (): string => {
       let witnesses: any[] = inv.witnessStatements || inv.witnesses || [];
       if (typeof witnesses === 'string') {
-        try { witnesses = JSON.parse(witnesses); } catch (e) {}
+        try { witnesses = JSON.parse(witnesses); } catch (e) { }
       }
       if (Array.isArray(witnesses) && witnesses.length > 0) {
         return witnesses.map((w, i) => `
           <tr>
-            <td style="font-weight: 700;">${w.name || `Witness ${i+1}`}</td>
+            <td style="font-weight: 700;">${w.name || `Witness ${i + 1}`}</td>
             <td>${w.badge || w.badgeNo || 'N/A'}</td>
             <td>${w.employer || w.company || 'N/A'}</td>
             <td>${w.occupation || w.role || 'N/A'}</td>
@@ -1524,7 +1528,7 @@ export class IncidentPdfService {
     const renderRootCausesRows = (): string => {
       let rcs: any[] = inv.rootCauses || inv.root_causes || [];
       if (typeof rcs === 'string') {
-        try { rcs = JSON.parse(rcs); } catch (e) {}
+        try { rcs = JSON.parse(rcs); } catch (e) { }
       }
       if (!Array.isArray(rcs) || rcs.length === 0) {
         const fallbackRc = inc.rootCause || initial.initialRootCause || 'Investigation root cause analysis recorded.';
@@ -1540,7 +1544,7 @@ export class IncidentPdfService {
     const renderFactorsRows = (): string => {
       let factors: any[] = inv.contributingFactors || inv.contributing_factors || [];
       if (typeof factors === 'string') {
-        try { factors = JSON.parse(factors); } catch (e) {}
+        try { factors = JSON.parse(factors); } catch (e) { }
       }
       if (!Array.isArray(factors) || factors.length === 0) {
         factors = ['Human Factor: Operational awareness', 'Environmental Factor: Lighting / Site access'];
@@ -1589,7 +1593,7 @@ export class IncidentPdfService {
     const renderMandatoryAttachmentsTable = (): string => {
       let att = inv.mandatoryAttachments || inv.mandatory_attachments || inv.attachments || {};
       if (typeof att === 'string') {
-        try { att = JSON.parse(att); } catch (e) {}
+        try { att = JSON.parse(att); } catch (e) { }
       }
 
       const getAttachmentInfo = (keys: string[], labelMatch?: string, legacyIdx?: number) => {
@@ -1604,8 +1608,8 @@ export class IncidentPdfService {
           val = att[legacyIdx];
         }
         if (!val && Array.isArray(att.items)) {
-          val = att.items.find((it: any) => 
-            (it.key && keys.includes(it.key)) || 
+          val = att.items.find((it: any) =>
+            (it.key && keys.includes(it.key)) ||
             (labelMatch && it.label && it.label.toLowerCase().includes(labelMatch.toLowerCase())) ||
             (it.key && labelMatch && labelMatch.toLowerCase().includes(it.key.toLowerCase()))
           );
@@ -1981,10 +1985,10 @@ export class IncidentPdfService {
         ================================================================== -->
         <div class="form-page">
           ${renderPageHeader(
-            'Heads-up Notification',
-            `Project: ${project} &nbsp;|&nbsp; Location: ${building} &nbsp;|&nbsp; System No: ${caseNo} &nbsp;|&nbsp; Must be completed within 2 hours of occurrence`,
-            'Form 1 / Stage 1 · Controlled EHS Form'
-          )}
+      'Heads-up Notification',
+      `Project: ${project} &nbsp;|&nbsp; Location: ${building} &nbsp;|&nbsp; System No: ${caseNo} &nbsp;|&nbsp; Must be completed within 2 hours of occurrence`,
+      'Form 1 / Stage 1 · Controlled EHS Form'
+    )}
 
           <div class="section-hdr">1. Project Details & Location</div>
           <table class="sc-grid">
@@ -2032,6 +2036,21 @@ export class IncidentPdfService {
             </tbody>
           </table>
 
+          ${locationMapBase64 ? `
+          <div style="margin-top: 6px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; background: #f8fafc; page-break-inside: avoid; break-inside: avoid;">
+            <div style="font-size: 8px; font-weight: 700; color: #1e293b; display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; padding: 0 2px;">
+              <span style="display: flex; align-items: center; gap: 4px;">
+                <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #16a34a;"></span>
+                Location Floor Map &bull; ${building} ${inc.floorLevel ? `(${inc.floorLevel})` : ''}
+              </span>
+              <span style="font-size: 7.5px; color: #64748b; font-weight: 600;">Zone / Specific Work Area</span>
+            </div>
+            <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 3px; overflow: hidden; width: 100%;">
+              <img src="${locationMapBase64}" style="width: 100%; height: auto; display: block;" alt="Location Map" />
+            </div>
+          </div>
+          ` : ''}
+
           <div class="section-hdr">2. Incident Records & Classification</div>
           <div class="sub-hdr-bar">Select all that apply. Categorisation may change following the investigation.</div>
           <table class="sc-grid">
@@ -2076,10 +2095,9 @@ export class IncidentPdfService {
             <tbody>
               <tr>
                 <td class="lbl" style="width: 22%;">Type of Spillage:</td>
-                <td class="val" style="width: 28%;"><strong>${
-                  Array.isArray(headsUp.spillType) ? headsUp.spillType.join(', ') :
-                  (headsUp.spillType || '-')
-                }</strong></td>
+                <td class="val" style="width: 28%;"><strong>${Array.isArray(headsUp.spillType) ? headsUp.spillType.join(', ') :
+            (headsUp.spillType || '-')
+          }</strong></td>
                 <td class="lbl" style="width: 22%;">Substance Spilled:</td>
                 <td class="val" style="width: 28%;"><strong>${headsUp.spillSubstance || '-'}</strong></td>
               </tr>
@@ -2091,10 +2109,9 @@ export class IncidentPdfService {
               </tr>
               <tr>
                 <td class="lbl">System / Media Entered:</td>
-                <td class="val" colspan="3">${
-                  Array.isArray(headsUp.spillSystemEntered) ? headsUp.spillSystemEntered.join(', ') :
-                  (headsUp.spillSystemEntered || '-')
-                }</td>
+                <td class="val" colspan="3">${Array.isArray(headsUp.spillSystemEntered) ? headsUp.spillSystemEntered.join(', ') :
+            (headsUp.spillSystemEntered || '-')
+          }</td>
               </tr>
               <tr>
                 <td class="lbl">Gatekeeper Informed?</td>

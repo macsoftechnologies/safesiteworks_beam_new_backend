@@ -26,7 +26,7 @@ function findFileOnDisk(filename: string): string | null {
     join(__dirname, '..', '..', '..', 'uploads'),
     '/www/wwwroot/api.beam.safesiteworks.com/beam_2.0_south_backend/uploads/safety-inspections',
     '/www/wwwroot/api.beam.safesiteworks.com/beam_2.0_north_backend/uploads/safety-inspections',
-    '/www/wwwroot/api.beam.safesiteworks.com/development/m3south/observations',
+    '/www/wwwroot/api.beam.safesiteworks.com/m3infrastructure/observations',
     '/www/wwwroot/api.beam.safesiteworks.com/uploads/safety-inspections',
   ];
 
@@ -51,7 +51,7 @@ export class SafetyInspectionsController implements OnModuleInit {
   constructor(
     private readonly siService: SafetyInspectionsService,
     private readonly siPdfService: SafetyInspectionPdfService,
-  ) {}
+  ) { }
 
   onModuleInit() {
     try {

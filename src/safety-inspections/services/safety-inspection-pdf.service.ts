@@ -38,7 +38,7 @@ export class SafetyInspectionPdfService {
   constructor(
     @InjectRepository(Observation)
     private readonly obsRepo: Repository<Observation>,
-  ) {}
+  ) { }
 
   private async launchBrowser(): Promise<any> {
     const launchArgs = [
@@ -89,7 +89,7 @@ export class SafetyInspectionPdfService {
                   headless: true,
                   args: launchArgs,
                 });
-              } catch (e4) {}
+              } catch (e4) { }
             }
           }
           throw e1;
@@ -211,8 +211,9 @@ export class SafetyInspectionPdfService {
 
     const candidatePaths = [
       join(process.cwd(), cleanUrl),
-      join(process.cwd(), cleanUrl.replace(/^development\/m3south\//, '')),
+      join(process.cwd(), cleanUrl.replace(/^m3infrastructure\//, '')),
       join(process.cwd(), 'uploads', filename),
+      join(process.cwd(), 'uploads', 'location-maps', filename),
       join(process.cwd(), 'uploads', 'safety-inspections', filename),
       join(process.cwd(), 'uploads', 'observations', filename),
       join(process.cwd(), 'uploads', 'incidents', filename),
@@ -561,7 +562,7 @@ export class SafetyInspectionPdfService {
               </tr>
               <tr>
                 <td class="lbl">Project Name:</td>
-                <td class="val">${inspection.projectName || 'M3SOUTH'}</td>
+                <td class="val">${inspection.projectName || 'M3INFRASTRUCTURE'}</td>
                 <td class="lbl">Project No:</td>
                 <td class="val">${inspection.projectNo || '063205-010'}</td>
               </tr>
@@ -586,6 +587,21 @@ export class SafetyInspectionPdfService {
                 </td>
               </tr>
             </table>
+
+            ${inspection.locationMapImage ? `
+            <div style="margin-top: 5px; margin-bottom: 6px; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; background: #f8fafc; page-break-inside: avoid; break-inside: avoid;">
+              <div style="font-size: 8px; font-weight: 700; color: #1e293b; display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; padding: 0 2px;">
+                <span style="display: flex; align-items: center; gap: 4px;">
+                  <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #16a34a;"></span>
+                  Location Floor Map &bull; ${inspection.buildingName || 'Building'} ${inspection.floorLevel ? `(${inspection.floorLevel})` : ''}
+                </span>
+                <span style="font-size: 7.5px; color: #64748b; font-weight: 600;">Zone &amp; Work Area</span>
+              </div>
+              <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 3px; overflow: hidden; width: 100%;">
+                <img src="${this.resolveImageSrc(inspection.locationMapImage)}" style="width: 100%; height: auto; display: block;" alt="Location Map" />
+              </div>
+            </div>
+            ` : ''}
 
             <!-- KPI Summary Grid (4 Metrics matching Spot Check grid) -->
             <table class="sc-grid" style="margin-top: 4px; margin-bottom: 8px; text-align: center;">
@@ -682,7 +698,7 @@ export class SafetyInspectionPdfService {
               </tr>
               <tr>
                 <td class="lbl">Project / Location:</td>
-                <td class="val" colspan="3">${inspection.projectName || 'M3SOUTH'} &bull; ${inspection.buildingName || 'Main Building'} ${inspection.floorLevel ? `&bull; ${inspection.floorLevel}` : ''}</td>
+                <td class="val" colspan="3">${inspection.projectName || 'M3INFRASTRUCTURE'} &bull; ${inspection.buildingName || 'Main Building'} ${inspection.floorLevel ? `&bull; ${inspection.floorLevel}` : ''}</td>
               </tr>
               <tr>
                 <td class="lbl">Auditor Verification:</td>

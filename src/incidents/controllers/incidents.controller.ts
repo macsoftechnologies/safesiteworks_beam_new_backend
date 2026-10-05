@@ -17,7 +17,7 @@ export class IncidentsController {
   constructor(
     private readonly incidentsService: IncidentsService,
     private readonly incidentPdfService: IncidentPdfService,
-  ) {}
+  ) { }
 
   /**
    * Upload multiple incident photos/images via Multer into uploads/incidents/
@@ -284,7 +284,7 @@ export class IncidentsController {
         incident: {
           id: id,
           caseNumber: id,
-          projectName: 'M3SOUTH',
+          projectName: 'M3INFRASTRUCTURE',
           incidentDate: new Date().toISOString().split('T')[0],
           incidentTime: '07:30',
           buildingName: 'Main Site Road',
@@ -303,8 +303,8 @@ export class IncidentsController {
     const caseName = details.incident?.caseNumber || details.incident?.id || id;
     const formSuffix = requestedForm === 'headsUp' || requestedForm === '1' ? '_Form1_HeadsUp'
       : requestedForm === 'initialReport' || requestedForm === '2' ? '_Form2_InitialReport'
-      : requestedForm === 'investigation' || requestedForm === '3' ? '_Form3_Investigation'
-      : '_All_Forms_Report';
+        : requestedForm === 'investigation' || requestedForm === '3' ? '_Form3_Investigation'
+          : '_All_Forms_Report';
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${caseName}${formSuffix}.pdf"`);
