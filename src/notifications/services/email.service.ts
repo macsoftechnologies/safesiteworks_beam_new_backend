@@ -34,7 +34,7 @@ export class EmailService {
         this.logger.warn(`[EmailService] Failed to initialize SMTP transporter: ${err.message}`);
       }
     } else {
-      this.logger.warn(`[EmailService] SMTP credentials not fully configured in .env (host=${host ? 'yes' : 'no'}, user=${user ? 'yes' : 'no'}, pass=${pass ? 'yes' : 'no'}). Emails will be logged to console in development.`);
+      this.logger.warn(`[EmailService] SMTP credentials not fully configured in .env (host=${host ? 'yes' : 'no'}, user=${user ? 'yes' : 'no'}, pass=${pass ? 'yes' : 'no'}). Emails will be logged to console.`);
     }
   }
 
