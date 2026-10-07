@@ -234,14 +234,10 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // OTP validation bypassed for development - allows any random OTP to log in
-    // const staticOtp = process.env.DEV_STATIC_OTP;
-    // const isStaticOtpMatch = staticOtp && otp === staticOtp;
-    // if (!isStaticOtpMatch) {
-    //   if (!user.otp || user.otp !== otp) {
-    //     throw new UnauthorizedException('Invalid OTP. Please check the code sent to your phone.');
-    //   }
-    // }
+    // Strictly verify OTP sent via SMS or Email
+    if (!user.otp || String(user.otp).trim() !== String(otp).trim()) {
+      throw new UnauthorizedException('Invalid OTP. Please enter the verification code sent to your registered email or phone.');
+    }
 
     // Clear OTP after successful verification
     await this.usersService.clearOtp(user.id);
@@ -395,14 +391,10 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    // OTP validation bypassed for development - allows any random OTP
-    // const staticOtp = process.env.DEV_STATIC_OTP;
-    // const isStaticOtpMatch = staticOtp && otp === staticOtp;
-    // if (!isStaticOtpMatch) {
-    //   if (!user.otp || user.otp !== otp) {
-    //     throw new UnauthorizedException('Invalid OTP. Please check the code sent to your phone.');
-    //   }
-    // }
+    // Strictly verify OTP sent via SMS or Email
+    if (!user.otp || String(user.otp).trim() !== String(otp).trim()) {
+      throw new UnauthorizedException('Invalid OTP. Please enter the verification code sent to your registered email or phone.');
+    }
 
     // Clear OTP
     await this.usersService.clearOtp(user.id);
@@ -547,6 +539,11 @@ export class AuthService {
     const user = await this.usersService.findById(id);
     if (!user) {
       throw new UnauthorizedException('User not found');
+    }
+
+    // Strictly verify OTP sent via SMS or Email
+    if (!user.otp || String(user.otp).trim() !== String(otp).trim()) {
+      throw new UnauthorizedException('Invalid OTP. Please enter the verification code sent to your registered email or phone.');
     }
 
     // Clear OTP after verification
@@ -698,7 +695,8 @@ export class AuthService {
     // Match superadmin email/username against local users table
     let user: any = null;
     try {
-      user = await this.usersService.findByUsername('south_admin')
+      user = await this.usersService.findByUsername('infra_admin') 
+        || await this.usersService.findByUsername('south_admin')
         || await this.usersService.findByUsername('admin');
 
       if (!user && introspectionData && introspectionData.email) {
