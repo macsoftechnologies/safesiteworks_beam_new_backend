@@ -500,7 +500,7 @@ export class IncidentPdfService {
                               <tr><td class="lbl">File Format / Extension:</td><td class="val">${ext.toUpperCase()} File (${fileData.mimeType})</td></tr>
                               <tr><td class="lbl">Recorded File Size:</td><td class="val">${sizeKb} KB</td></tr>
                               <tr><td class="lbl">Vault Reference Path:</td><td class="val"><code style="color: #2563eb;">${item.fileUrl}</code></td></tr>
-                              <tr><td class="lbl">Verification Status:</td><td class="val"><span style="color: #16a34a; font-weight: 700;">✓ Document Verified & Permanently Attached to Incident Record</span></td></tr>
+                              <tr><td class="lbl">Verification Status:</td><td class="val"><span style="color: #16a34a; font-weight: 700;">âœ“ Document Verified & Permanently Attached to Incident Record</span></td></tr>
                             </tbody>
                           </table>
                         </div>
@@ -818,7 +818,7 @@ export class IncidentPdfService {
       const historyItems = historyList.map((h: any) => {
         const statusVal = h.status || 'UPDATED';
         const userVal = h.updatedBy || h.user || 'User';
-        const remarksVal = h.remarks ? ` — <em>${h.remarks}</em>` : '';
+        const remarksVal = h.remarks ? ` â€” <em>${h.remarks}</em>` : '';
         const timeVal = h.timestamp ? new Date(h.timestamp).toLocaleString('en-GB', { timeZone: 'Europe/Copenhagen', dateStyle: 'short', timeStyle: 'short', hour12: false }) : '';
 
         return `
@@ -847,7 +847,7 @@ export class IncidentPdfService {
       if (!historyList || historyList.length === 0) return '';
 
       const formatDt = (dStr: string) => {
-        if (!dStr) return '—';
+        if (!dStr) return 'â€”';
         try {
           const d = new Date(dStr);
           if (isNaN(d.getTime())) return dStr.replace('T', ' ');
@@ -858,7 +858,7 @@ export class IncidentPdfService {
       return `
         <div style="margin-top: 10px; border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden; page-break-inside: avoid; break-inside: avoid;">
           <div style="background: #f1f5f9; padding: 4px 8px; font-size: 8.5px; font-weight: 700; color: #1e293b; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #cbd5e1;">
-            <span>${stageTitle} — Revision & Return for Revision Audit Log</span>
+            <span>${stageTitle} â€” Revision & Return for Revision Audit Log</span>
             <span style="font-size: 8px; font-weight: 600; color: #64748b;">${historyList.length} Event${historyList.length === 1 ? '' : 's'}</span>
           </div>
           <table style="width: 100%; border-collapse: collapse; font-size: 8px;">
@@ -878,7 +878,7 @@ export class IncidentPdfService {
         const actionText = isReturned ? 'Returned for Revision' : (item.action || 'Updated / Revised');
         const byText = item.returnedBy || item.editedBy || item.name || 'User';
         const roleText = item.role ? ` (${item.role})` : '';
-        const reasonText = item.reason || item.changes || '—';
+        const reasonText = item.reason || item.changes || 'â€”';
         const timeText = formatDt(item.returnedTime || item.editedTime || item.timestamp || item.date);
 
         return `
@@ -894,6 +894,127 @@ export class IncidentPdfService {
                   </tr>
                 `;
       }).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    };
+
+    const renderReopenAndClosureLifecycleLogs = () => {
+      let reopenList: any[] = [];
+      let closureList: any[] = [];
+
+      if (typeof inc.reopenLogs === 'string') {
+        try { reopenList = JSON.parse(inc.reopenLogs); } catch (e) { }
+      } else if (Array.isArray(inc.reopenLogs)) {
+        reopenList = inc.reopenLogs;
+      }
+
+      if (typeof inc.closureHistory === 'string') {
+        try { closureList = JSON.parse(inc.closureHistory); } catch (e) { }
+      } else if (Array.isArray(inc.closureHistory)) {
+        closureList = inc.closureHistory;
+      }
+
+      // If there are closure details on incident not yet in closureHistory, synthesize it
+      if (inc.closedBy || inc.closedTime) {
+        const hasMatchingClosure = closureList.some(
+          (c) => c.closedTime && inc.closedTime && new Date(c.closedTime).getTime() === new Date(inc.closedTime).getTime()
+        );
+        if (!hasMatchingClosure) {
+          closureList.push({
+            action: 'Closed',
+            status: 'CLOSED',
+            closedBy: inc.closedBy || 'Site HSE Lead / Admin',
+            closedTime: inc.closedTime || inc.updatedTime,
+            closureComments: inc.closureComments || '',
+            signature: inc.closureSignature || null,
+            timestamp: inc.closedTime || inc.updatedTime,
+          });
+        }
+      }
+
+      if (reopenList.length === 0 && closureList.length === 0) return '';
+
+      // Combine and order all lifecycle events chronologically
+      const allEvents: any[] = [
+        ...reopenList.map((r, idx) => ({
+          eventType: 'REOPENED',
+          actionText: 'Incident Reopened',
+          badgeBg: '#fef3c7',
+          badgeColor: '#b45309',
+          userName: r.reopenedBy || 'Department User',
+          role: r.role || 'Department User / HSE',
+          remarks: r.reason || 'Reopened for investigation & corrective actions',
+          timestamp: r.reopenedTime || r.timestamp || r.date,
+          signature: r.signature,
+          cycle: r.cycle || (idx + 1),
+        })),
+        ...closureList.map((c, idx) => ({
+          eventType: 'CLOSED',
+          actionText: 'Incident Closed',
+          badgeBg: '#dcfce7',
+          badgeColor: '#15803d',
+          userName: c.closedBy || 'Site HSE Lead / Admin',
+          role: 'Incident Closer / Sign-off',
+          remarks: c.closureComments || 'All corrective actions completed and investigation signed off.',
+          timestamp: c.closedTime || c.timestamp || c.date,
+          signature: c.signature,
+          cycle: c.cycle || (idx + 1),
+        })),
+      ].sort((a, b) => {
+        const tA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const tB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return tA - tB;
+      });
+
+      const formatDt = (dStr: string) => {
+        if (!dStr) return 'â€”';
+        try {
+          const d = new Date(dStr);
+          if (isNaN(d.getTime())) return dStr.replace('T', ' ');
+          return d.toLocaleString('en-GB', { timeZone: 'Europe/Copenhagen', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
+        } catch (e) { return dStr; }
+      };
+
+      return `
+        <div style="margin-top: 10px; border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden; page-break-inside: avoid; break-inside: avoid;">
+          <div style="background: #f1f5f9; padding: 4px 8px; font-size: 8.5px; font-weight: 700; color: #1e293b; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #cbd5e1;">
+            <span>Incident Closure &amp; Reopen Lifecycle Audit Trail</span>
+            <span style="font-size: 8px; font-weight: 600; color: #64748b;">${allEvents.length} Lifecycle Event${allEvents.length === 1 ? '' : 's'}</span>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; font-size: 8px;">
+            <thead>
+              <tr style="background: #f8fafc; border-bottom: 1px solid #cbd5e1; color: #475569;">
+                <th style="padding: 4px 6px; text-align: left; width: 20%; font-weight: 700;">Lifecycle Event</th>
+                <th style="padding: 4px 6px; text-align: left; width: 22%; font-weight: 700;">Performed By (Role)</th>
+                <th style="padding: 4px 6px; text-align: left; width: 30%; font-weight: 700;">Reason / Closure Remarks</th>
+                <th style="padding: 4px 6px; text-align: left; width: 14%; font-weight: 700;">Date &amp; Time</th>
+                <th style="padding: 4px 6px; text-align: left; width: 14%; font-weight: 700;">Signature</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${allEvents.map((item, idx) => `
+                <tr style="border-bottom: ${idx < allEvents.length - 1 ? '1px solid #e2e8f0' : 'none'}; background: ${idx % 2 === 0 ? '#ffffff' : '#fafafa'};">
+                  <td style="padding: 4px 6px;">
+                    <span style="display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 7.5px; font-weight: 700; background: ${item.badgeBg}; color: ${item.badgeColor}; border: 1px solid ${item.badgeColor}33;">
+                      ${item.actionText}
+                    </span>
+                  </td>
+                  <td style="padding: 4px 6px; color: #0f172a; font-weight: 600;">
+                    ${item.userName}
+                    <div style="font-size: 7.5px; color: #64748b; font-weight: normal;">${item.role}</div>
+                  </td>
+                  <td style="padding: 4px 6px; color: #334155;">${item.remarks}</td>
+                  <td style="padding: 4px 6px; color: #64748b;">${formatDt(item.timestamp)}</td>
+                  <td style="padding: 4px 6px;">
+                    ${item.eventType === 'REOPENED'
+          ? (item.signature ? renderSignature(item.signature, item.userName) : '<span style="font-size: 7.5px; color: #94a3b8; font-style: italic;">No signature</span>')
+          : '<span style="font-size: 7.5px; color: #94a3b8; font-style: italic;">â€”</span>'
+        }
+                  </td>
+                </tr>
+              `).join('')}
             </tbody>
           </table>
         </div>
@@ -950,7 +1071,7 @@ export class IncidentPdfService {
     const headsUpApprName = headsUp.approvedBy || headsUp.approved_by || 'Site HSE Manager';
 
     const formatActionDate = (dVal: any): string => {
-      if (!dVal) return date || '—';
+      if (!dVal) return date || 'â€”';
       try {
         const s = String(dVal).trim();
         if (s.match(/^\d{4}-\d{2}-\d{2}$/)) return s;
@@ -959,7 +1080,7 @@ export class IncidentPdfService {
         if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
         return s;
       } catch (e) {
-        return date || '—';
+        return date || 'â€”';
       }
     };
 
@@ -1086,8 +1207,8 @@ export class IncidentPdfService {
 
     // Accident Categories helper & list matching Frontend Section H
     const accidentCategoriesList = [
-      'Contact with an object or equipment', 'Electrocution – electrical injury', 'Malfunctioning/Defective tools and equipment',
-      'Tool accidents', 'Scaffolding accidents', 'Asphyxiation – Confined space',
+      'Contact with an object or equipment', 'Electrocution â€“ electrical injury', 'Malfunctioning/Defective tools and equipment',
+      'Tool accidents', 'Scaffolding accidents', 'Asphyxiation â€“ Confined space',
       'Cuts', 'Accidents involving cranes and other equipment/Machinery', 'Biological',
       'Slip, Trip and fall accidents', 'Fire and explosions', 'Psychological',
       'Falls from heights', 'Exposure to hazardous materials and chemicals', 'Extreme Temperature',
@@ -1108,8 +1229,8 @@ export class IncidentPdfService {
         if (!c) return false;
         const cLower = String(c).toLowerCase().trim();
         if (cLower === target || cLower.includes(target) || target.includes(cLower)) return true;
-        const targetWords = target.split(/[\s,\/–-]+/).filter(w => w.length > 3);
-        const cWords = cLower.split(/[\s,\/–-]+/).filter(w => w.length > 3);
+        const targetWords = target.split(/[\s,\/â€“-]+/).filter(w => w.length > 3);
+        const cWords = cLower.split(/[\s,\/â€“-]+/).filter(w => w.length > 3);
         return targetWords.length > 0 && targetWords.some(tw => cWords.includes(tw));
       });
     };
@@ -1153,8 +1274,8 @@ export class IncidentPdfService {
         if (!t) return false;
         const tLower = String(t).toLowerCase().trim();
         if (tLower === target || tLower.includes(target) || target.includes(tLower)) return true;
-        const targetWords = target.split(/[\s,\/–-]+/).filter(w => w.length > 3);
-        const tWords = tLower.split(/[\s,\/–-]+/).filter(w => w.length > 3);
+        const targetWords = target.split(/[\s,\/â€“-]+/).filter(w => w.length > 3);
+        const tWords = tLower.split(/[\s,\/â€“-]+/).filter(w => w.length > 3);
         return targetWords.length > 0 && targetWords.some(tw => tWords.includes(tw));
       });
     };
@@ -1379,7 +1500,7 @@ export class IncidentPdfService {
 
       return `
         <div style="border: 1px solid #cbd5e1; border-radius: 8px; background: #f8fafc; padding: 12px; margin-top: 6px; margin-bottom: 12px; page-break-inside: avoid; break-inside: avoid;">
-          <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 6px;">Fishbone Analysis – Cause and Effect</div>
+          <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 6px;">Fishbone Analysis â€“ Cause and Effect</div>
           <svg viewBox="0 0 ${W} ${H}" style="display: block; width: 100%; height: auto;">
             <defs>
               <marker id="fbArrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
@@ -1551,7 +1672,7 @@ export class IncidentPdfService {
       }
       return factors.map((f, i) => `
         <div style="font-size: 8.5px; color: #334155; margin-bottom: 3px; padding-left: 8px; border-left: 2px solid #0f172a;">
-          • ${typeof f === 'string' ? f : (f.factor || f.text || JSON.stringify(f))}
+          â€¢ ${typeof f === 'string' ? f : (f.factor || f.text || JSON.stringify(f))}
         </div>
       `).join('');
     };
@@ -1566,15 +1687,15 @@ export class IncidentPdfService {
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 6px;">
           <div style="border: 1px solid #fca5a5; background: #fff1f2; padding: 6px 10px; border-radius: 4px;">
             <div style="font-size: 8px; font-weight: 700; color: #991b1b; text-transform: uppercase;">Severity Before Corrective Actions</div>
-            <div style="font-size: 13px; font-weight: 800; color: #dc2626; margin-top: 2px;">Level ${preSev} — ${preLabel}</div>
+            <div style="font-size: 13px; font-weight: 800; color: #dc2626; margin-top: 2px;">Level ${preSev} â€” ${preLabel}</div>
           </div>
           <div style="border: 1px solid #86efac; background: #f0fdf4; padding: 6px 10px; border-radius: 4px;">
             <div style="font-size: 8px; font-weight: 700; color: #166534; text-transform: uppercase;">Severity After Corrective Actions</div>
-            <div style="font-size: 13px; font-weight: 800; color: #16a34a; margin-top: 2px;">Level ${postSev} — ${postLabel}</div>
+            <div style="font-size: 13px; font-weight: 800; color: #16a34a; margin-top: 2px;">Level ${postSev} â€” ${postLabel}</div>
           </div>
         </div>
         <div style="font-size: 8px; font-weight: 700; color: #15803d; background: #dcfce7; padding: 4px 8px; border-radius: 3px; border: 1px solid #86efac;">
-          Severity Reduction Achieved: Level ${preSev} (${preLabel}) → Level ${postSev} (${postLabel})
+          Severity Reduction Achieved: Level ${preSev} (${preLabel}) â†’ Level ${postSev} (${postLabel})
         </div>
       `;
     };
@@ -1648,10 +1769,10 @@ export class IncidentPdfService {
         <tr>
           <td style="width: 70%; font-weight: 600;">
             ${item.label}
-            ${displayFileName ? `<div style="font-size: 8px; color: #2563eb; font-weight: normal; margin-top: 2px;">📎 Attached: <strong>${displayFileName}</strong></div>` : ''}
+            ${displayFileName ? `<div style="font-size: 8px; color: #2563eb; font-weight: normal; margin-top: 2px;">ðŸ“Ž Attached: <strong>${displayFileName}</strong></div>` : ''}
           </td>
           <td style="text-align: center; width: 30%;">
-            <span style="font-weight: 800; color: ${isAttached ? '#16a34a' : '#dc2626'};">${isAttached ? '✓ Attached' : '✗ Pending / N/A'}</span>
+            <span style="font-weight: 800; color: ${isAttached ? '#16a34a' : '#dc2626'};">${isAttached ? 'âœ“ Attached' : 'âœ— Pending / N/A'}</span>
           </td>
         </tr>
       `}).join('');
@@ -1697,7 +1818,7 @@ export class IncidentPdfService {
 
     const renderCheckbox = (checked: boolean, label: string) => `
       <span class="chk-item">
-        <span class="chk-box ${checked ? 'checked' : ''}">${checked ? '✓' : ''}</span>
+        <span class="chk-box ${checked ? 'checked' : ''}">${checked ? 'âœ“' : ''}</span>
         <span class="chk-label">${label}</span>
       </span>
     `;
@@ -1772,7 +1893,7 @@ export class IncidentPdfService {
             ${projectLogoBase64 ? `<img src="${projectLogoBase64}" style="height: 38px; object-fit: contain;" alt="Novo Nordisk" />` : `<div style="font-weight: 800; font-size: 14px; color: #0f172a;">Novo Nordisk</div>`}
           </div>
           <div class="logo-right">
-            ${nneLogoBase64 ? `<img src="${nneLogoBase64}" style="height: 32px; object-fit: contain;" alt="NNE" />` : `<div style="font-size: 22px; font-weight: 900; color: #002868;">nne®</div>`}
+            ${nneLogoBase64 ? `<img src="${nneLogoBase64}" style="height: 32px; object-fit: contain;" alt="NNE" />` : `<div style="font-size: 22px; font-weight: 900; color: #002868;">nneÂ®</div>`}
           </div>
         </div>
 
@@ -1788,7 +1909,7 @@ export class IncidentPdfService {
 
     const renderPageFooter = (pageNo: number) => `
       <div class="page-footer-note">
-        Template: TPL-138/NNE Project Template - Word/ 1.0 &nbsp;|&nbsp; Doc No: DPT-00049 &nbsp;|&nbsp; © NNE A/S &nbsp;|&nbsp; Case: ${caseNo} &nbsp;|&nbsp; Form ${pageNo} of ${totalPages}
+        Template: TPL-138/NNE Project Template - Word/ 1.0 &nbsp;|&nbsp; Doc No: DPT-00049 &nbsp;|&nbsp; Â© NNE A/S &nbsp;|&nbsp; Case: ${caseNo} &nbsp;|&nbsp; Form ${pageNo} of ${totalPages}
       </div>
     `;
 
@@ -1801,8 +1922,8 @@ export class IncidentPdfService {
         4: { label: 'Critical', bg: '#fee2e2', color: '#991b1b' },
         5: { label: 'Catastrophic', bg: '#ffe4e6', color: '#881337' },
       };
-      const m = meta[num] || { label: 'Level ' + (level || '—'), bg: '#f1f5f9', color: '#475569' };
-      return `<span style="display: inline-block; padding: 2px 7px; border-radius: 3px; font-weight: 700; font-size: 8.5px; background: ${m.bg}; color: ${m.color}; border: 1px solid ${m.color}33;">Level ${num || level || 1} — ${m.label}</span>`;
+      const m = meta[num] || { label: 'Level ' + (level || 'â€”'), bg: '#f1f5f9', color: '#475569' };
+      return `<span style="display: inline-block; padding: 2px 7px; border-radius: 3px; font-weight: 700; font-size: 8.5px; background: ${m.bg}; color: ${m.color}; border: 1px solid ${m.color}33;">Level ${num || level || 1} â€” ${m.label}</span>`;
     };
 
     return `
@@ -1987,7 +2108,7 @@ export class IncidentPdfService {
           ${renderPageHeader(
       'Heads-up Notification',
       `Project: ${project} &nbsp;|&nbsp; Location: ${building} &nbsp;|&nbsp; System No: ${caseNo} &nbsp;|&nbsp; Must be completed within 2 hours of occurrence`,
-      'Form 1 / Stage 1 · Controlled EHS Form'
+      'Form 1 / Stage 1 Â· Controlled EHS Form'
     )}
 
           <div class="section-hdr">1. Project Details & Location</div>
@@ -2076,7 +2197,7 @@ export class IncidentPdfService {
               <tr>
                 <td colspan="4" style="background: #f8fafc; padding: 4px 8px;">
                   <span class="chk-label" style="color: #475569; font-size: 8.5px; font-weight: 700; margin-right: 6px;">Hazard / Observation Category:</span>
-                  ${otherCustomCats.map(c => `<span class="chk-item" style="margin-right: 10px;"><span class="chk-box checked">✓</span> <span class="chk-label" style="font-weight: 700;">${c}</span></span>`).join('')}
+                  ${otherCustomCats.map(c => `<span class="chk-item" style="margin-right: 10px;"><span class="chk-box checked">âœ“</span> <span class="chk-label" style="font-weight: 700;">${c}</span></span>`).join('')}
                 </td>
               </tr>
               ` : ''}
@@ -2187,6 +2308,7 @@ export class IncidentPdfService {
           </table>
 
           ${renderEditAndRevisionHistory(headsUp.editHistory, 'Form 1: Heads-Up Notification')}
+          ${!includeForm2 && !includeForm3 ? renderReopenAndClosureLifecycleLogs() : ''}
 
           ${renderPageFooter(p1)}
         </div>
@@ -2200,7 +2322,7 @@ export class IncidentPdfService {
           ${renderPageHeader(
             'Initial Incident Report',
             `Project: ${project} &nbsp;|&nbsp; Location: ${building} &nbsp;|&nbsp; System No: ${caseNo} &nbsp;|&nbsp; Must be completed within 24 hours of occurrence`,
-            'Form 2 / Stage 2 · Controlled EHS Form'
+            'Form 2 / Stage 2 Â· Controlled EHS Form'
           )}
 
           <div class="section-hdr">Project Details & Incident Overview</div>
@@ -2277,7 +2399,7 @@ export class IncidentPdfService {
               <tr>
                 <td colspan="4" style="background: #f8fafc; padding: 4px 8px;">
                   <span class="chk-label" style="color: #475569; font-size: 8.5px; font-weight: 700; margin-right: 6px;">Other Categories:</span>
-                  ${otherCustomCats.map(c => `<span class="chk-item" style="margin-right: 10px;"><span class="chk-box checked">✓</span> <span class="chk-label" style="font-weight: 700;">${c}</span></span>`).join('')}
+                  ${otherCustomCats.map(c => `<span class="chk-item" style="margin-right: 10px;"><span class="chk-box checked">âœ“</span> <span class="chk-label" style="font-weight: 700;">${c}</span></span>`).join('')}
                 </td>
               </tr>
               ` : ''}
@@ -2296,7 +2418,7 @@ export class IncidentPdfService {
               </tr>
               <tr>
                 <td class="lbl">Approx. Quantity Spilled:</td>
-                <td class="val">${envDetails.spillQuantity || headsUp.envQuantity || '—'}</td>
+                <td class="val">${envDetails.spillQuantity || headsUp.envQuantity || 'â€”'}</td>
                 <td class="lbl">Cause of Spillage:</td>
                 <td class="val">${envDetails.spillCause || headsUp.envCause || 'Line rupture / Valve failure'}</td>
               </tr>
@@ -2543,6 +2665,7 @@ export class IncidentPdfService {
           </table>
 
           ${renderEditAndRevisionHistory(initial.editHistory, 'Form 2: Initial Incident Report')}
+          ${!includeForm3 ? renderReopenAndClosureLifecycleLogs() : ''}
 
           ${renderPageFooter(p2)}
         </div>
@@ -2556,7 +2679,7 @@ export class IncidentPdfService {
           ${renderPageHeader(
             'Final Incident Investigation Report',
             `Project: ${project} &nbsp;|&nbsp; Location: ${building} &nbsp;|&nbsp; System No: ${caseNo} &nbsp;|&nbsp; Must be completed within 7 days of occurrence`,
-            'Form 3 / Stage 3 · Controlled EHS Form'
+            'Form 3 / Stage 3 Â· Controlled EHS Form'
           )}
 
           <div class="section-hdr">Project Details & Incident Overview</div>
@@ -2632,7 +2755,7 @@ export class IncidentPdfService {
           </table>
           ` : ''}
 
-          <div class="section-hdr">4. Fishbone Analysis – Cause and Effect</div>
+          <div class="section-hdr">4. Fishbone Analysis â€“ Cause and Effect</div>
           <div class="sub-hdr-bar">Interactive Ishikawa diagram covering People, Machine, Method, Materials, Environment, and Measurement.</div>
           ${renderFishboneSvg()}
 
@@ -2758,6 +2881,7 @@ export class IncidentPdfService {
           </table>
 
           ${renderEditAndRevisionHistory(inv.editHistory, 'Form 3: Incident Investigation Report')}
+          ${renderReopenAndClosureLifecycleLogs()}
 
           ${renderPageFooter(p3)}
         </div>
